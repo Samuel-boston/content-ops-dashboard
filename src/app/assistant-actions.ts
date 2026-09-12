@@ -594,116 +594,45 @@ export async function assistantQueryAction(question: string): Promise<AssistantR
 
 export type StageTaskKey = "ideation" | "scripting" | "ready_to_film" | "in_review" | "ready_to_post";
 
-export interface StageTask {
-  key: StageTaskKey;
-  label: string;
-  count: number;
-  href: string;
-  note: string;
-}
-
-export interface OverviewOpener {
-  opener: string;
-  tasks: StageTask[];
-}
-
-const STAGE_META: Record<StageTaskKey, { label: string; unit: string; href: string; fallbackNote: string }> = {
-  ideation: { label: "Idea generation", unit: "idea", href: "/ideation", fallbackNote: "Sitting in the idea shelf." },
-  scripting: { label: "Scripting", unit: "idea ready to script", href: "/scripting", fallbackNote: "Waiting to be written." },
-  ready_to_film: { label: "Filming", unit: "video ready to film", href: "/filming", fallbackNote: "Scripted and waiting on you." },
-  in_review: { label: "Reviewing", unit: "video to review", href: "/review", fallbackNote: "A cut is waiting on your notes." },
-  ready_to_post: { label: "Scheduling", unit: "video ready to post", href: "/review#post", fallbackNote: "Approved, just needs a slot." },
-};
-
-// Priority when the model has nothing useful to say (no key, or every count is
+// Order when the model has nothing useful to say (no key, or every count is
 // zero) — client-blocking stages first, then the stages only the client can move.
 const FALLBACK_ORDER: StageTaskKey[] = ["in_review", "ready_to_post", "ready_to_film", "scripting", "ideation"];
 
-const OPENER_POOL = [
-  "Okay, what should we prioritise today?",
-  "Here's where things stand.",
-  "Let's see what needs attention.",
-  "Here's what's on deck.",
-];
-
-function fallbackOpener(hasAny: boolean): string {
-  if (!hasAny) return "You're all caught up — nothing needs you right now.";
-  return OPENER_POOL[Math.floor(Math.random() * OPENER_POOL.length)];
-}
-
-function labelFor(key: StageTaskKey, count: number): string {
-  const { unit } = STAGE_META[key];
-  return count === 1 ? unit : unit.replace(/^idea/, "ideas").replace(/^video/, "videos");
-}
-
-function fallbackTasks(counts: Record<StageTaskKey, number>): StageTask[] {
-  return FALLBACK_ORDER.filter((k) => counts[k] > 0).map((k) => ({
-    key: k,
-    label: STAGE_META[k].label,
-    count: counts[k],
-    href: STAGE_META[k].href,
-    note: STAGE_META[k].fallbackNote,
-  }));
-}
-
 /**
- * The top of the Overview report — Andreas opens with one short line, then
- * orders the five pipeline stages by which actually needs attention first
- * (not just the biggest number — a healthy pile of ideas isn't a bottleneck,
- * two stuck reviews might be), each with a one-line reason. The model only
- * ever reorders and annotates counts it was actually given — it never
- * invents a count, so a wrong ranking is the worst case, not a wrong number.
+ * Which of the five pipeline stages to tackle first — ranked by which
+ * actually looks like a bottleneck, not just the biggest number (a big idea
+ * shelf is healthy; two reviews stuck for days is not). Titles, counts, and
+ * descriptions are all fixed client-side; this only ever returns an order,
+ * so a bad ranking is the worst case, never a wrong or invented number.
  */
-export async function overviewOpenerAction(input: {
-  firstName: string;
+export async function rankStagesAction(input: {
   counts: Record<StageTaskKey, number>;
   poolRunningDry: boolean;
   activity: { title: string; summary: string }[];
-}): Promise<OverviewOpener> {
+}): Promise<StageTaskKey[]> {
   await requireRole("owner", "admin");
 
   const present = (Object.keys(input.counts) as StageTaskKey[]).filter((k) => input.counts[k] > 0);
-  if (!present.length) {
-    return { opener: fallbackOpener(false), tasks: [] };
-  }
+  if (!present.length) return [];
 
-  const countLines = present
-    .map((k) => `- ${k} ("${STAGE_META[k].label}"): ${input.counts[k]} ${labelFor(k, input.counts[k])}`)
-    .join("\n");
+  const countLines = present.map((k) => `- ${k}: ${input.counts[k]}`).join("\n");
   const activityLines = input.activity.map((a) => `- ${a.title}: ${a.summary}`).join("\n");
 
-  const raw = await chatJSON<{ opener: string; ranked: { key: StageTaskKey; note: string }[] }>(
-    `You are Andreas, the assistant inside a video content-ops dashboard, speaking directly to the person who ` +
-      `just opened it — casual, like a colleague checking in, not a formal report. Write ONE short opener line ` +
-      `(max 8 words, no greeting — e.g. "What should we prioritise today?"). Then rank the pipeline stages below ` +
-      `by which most needs attention right now — a bottleneck, not just the biggest number (a big idea shelf is ` +
-      `healthy; two reviews stuck for days is not). For each, write a short reason (max 10 words). Only ever use ` +
-      `the exact stage keys given — never invent one, never change a count.`,
-    `${input.firstName ? `Their name: ${input.firstName}.\n` : ""}` +
-      `Stages with something in them:\n${countLines}\n` +
+  const raw = await chatJSON<{ order: StageTaskKey[] }>(
+    `You rank pipeline stages in a video content-ops dashboard by which most needs attention right now — a ` +
+      `bottleneck, not just the biggest number (a big idea shelf is healthy; two reviews stuck for days is not). ` +
+      `Stage keys, in order: ideation (idea shelf) -> scripting (ideas being written) -> ready_to_film -> ` +
+      `in_review (client waiting to review a cut) -> ready_to_post (approved, needs scheduling). Only ever use ` +
+      `the exact stage keys given, each exactly once — never invent one, never drop one.`,
+    `Stages with a count > 0:\n${countLines}\n` +
       `${input.poolRunningDry ? "The editors' pool is about to run dry — more needs to be filmed.\n" : ""}` +
       `Recent activity:\n${activityLines || "nothing new since they were last here"}\n\n` +
-      `Respond as JSON: {"opener": "...", "ranked": [{"key": "...", "note": "..."}]}`
+      `Respond as JSON: {"order": ["...", ...]}`
   );
 
   const seen = new Set(present);
-  const ranked = raw?.ranked?.filter((r) => seen.has(r.key));
-  if (raw?.opener && ranked?.length) {
-    const tasks = ranked.map((r) => ({
-      key: r.key,
-      label: STAGE_META[r.key].label,
-      count: input.counts[r.key],
-      href: STAGE_META[r.key].href,
-      note: r.note || STAGE_META[r.key].fallbackNote,
-    }));
-    // Any present stage the model dropped still gets shown, just last.
-    for (const k of present) {
-      if (!tasks.some((t) => t.key === k)) {
-        tasks.push({ key: k, label: STAGE_META[k].label, count: input.counts[k], href: STAGE_META[k].href, note: STAGE_META[k].fallbackNote });
-      }
-    }
-    return { opener: raw.opener, tasks };
-  }
+  const order = [...new Set((raw?.order ?? []).filter((k) => seen.has(k)))];
+  for (const k of present) if (!order.includes(k)) order.push(k);
 
-  return { opener: fallbackOpener(true), tasks: fallbackTasks(input.counts) };
+  return order.length === present.length ? order : FALLBACK_ORDER.filter((k) => seen.has(k));
 }
