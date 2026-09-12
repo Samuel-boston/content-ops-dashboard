@@ -1,0 +1,264 @@
+import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { STATUS_LABELS, type VideoStatus } from "@/lib/types";
+
+export interface DigestData {
+  weekOf: string;
+  posted: { title: string; date: string | null }[];
+  postingNext: { title: string; date: string }[];
+  waitingOnYou: { title: string; why: string }[];
+  withEditors: { title: string; editor: string; eta: string | null }[];
+  runwayDays: number | null;
+  ideas: number;
+  scripts: number;
+  toFilm: number;
+}
+
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/** Fixed month names — this string is built on the server and mailed, never hydrated. */
+function short(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+}
+
+/**
+ * Everything the client's Monday email says.
+ *
+ * Built from the same rows the Overview reads, so the email and the dashboard
+ * can never disagree — the most corrosive thing a digest can do is describe a
+ * state that isn't there when the person clicks through.
+ */
+export async function buildDigest(db: SupabaseClient): Promise<DigestData> {
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const weekAgo = new Date(now.getTime() - 7 * 864e5).toISOString();
+  const weekAhead = new Date(now.getTime() + 7 * 864e5).toISOString().slice(0, 10);
+
+  const { data } = await db
+    .from("videos")
+    .select(
+      "id, title, status, post_date, posted_at, eta_at, assigned_editor_id, " +
+        "assigned_editor:profiles!videos_assigned_editor_id_fkey (full_name, email)"
+    )
+    .is("parked_at", null);
+
+  type Row = {
+    title: string;
+    status: VideoStatus;
+    post_date: string | null;
+    posted_at: string | null;
+    eta_at: string | null;
+    assigned_editor: { full_name: string | null; email: string } | null;
+  };
+  const rows = (data as unknown as Row[]) ?? [];
+
+  const unposted = rows.filter((v) => v.status !== "posted");
+
+  const waitingOnYou: DigestData["waitingOnYou"] = [
+    ...rows
+      .filter((v) => v.status === "in_review")
+      .map((v) => ({ title: v.title, why: "a new cut needs your notes" })),
+    ...rows
+      .filter((v) => v.status === "final_review")
+      .map((v) => ({ title: v.title, why: "hook variants are in — last look" })),
+    ...rows
+      .filter((v) => v.status === "ready_to_post")
+      .map((v) => ({ title: v.title, why: "approved, needs a date" })),
+    ...rows
+      .filter((v) => v.status === "ready_to_film")
+      .map((v) => ({ title: v.title, why: "scripted, waiting to be shot" })),
+  ];
+
+  const scheduled = unposted
+    .filter((v) => v.post_date && v.post_date >= today)
+    .map((v) => v.post_date as string)
+    .sort();
+  const lastDate = scheduled.at(-1) ?? null;
+
+  return {
+    weekOf: short(today),
+    posted: rows
+      .filter((v) => v.status === "posted" && v.posted_at && v.posted_at >= weekAgo)
+      .map((v) => ({ title: v.title, date: v.posted_at })),
+    postingNext: unposted
+      .filter((v) => v.post_date && v.post_date >= today && v.post_date <= weekAhead)
+      .sort((a, b) => (a.post_date ?? "").localeCompare(b.post_date ?? ""))
+      .map((v) => ({ title: v.title, date: v.post_date as string })),
+    waitingOnYou,
+    withEditors: rows
+      .filter((v) => (v.status === "in_progress" || v.status === "revisions") && v.assigned_editor)
+      .map((v) => ({
+        title: v.title,
+        editor: v.assigned_editor?.full_name || v.assigned_editor?.email || "an editor",
+        eta: v.eta_at,
+      })),
+    runwayDays: lastDate
+      ? Math.round(
+          (new Date(`${lastDate}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) /
+            864e5
+        )
+      : null,
+    ideas: unposted.filter((v) => v.status === "ideation").length,
+    scripts: unposted.filter((v) => v.status === "scripting").length,
+    toFilm: unposted.filter((v) => v.status === "ready_to_film").length,
+  };
+}
+
+/* ------------------------------------------------------------------ email -- */
+
+const esc = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+function section(title: string, body: string): string {
+  return `<tr><td style="padding:0 0 22px">
+    <p style="margin:0 0 8px;font:600 11px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#8a8598">${esc(title)}</p>
+    ${body}
+  </td></tr>`;
+}
+
+function list(items: string[]): string {
+  if (!items.length) {
+    return `<p style="margin:0;font:400 14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#8a8598">Nothing this week.</p>`;
+  }
+  return items
+    .map(
+      (i) =>
+        `<p style="margin:0 0 6px;font:400 14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#17141f">${i}</p>`
+    )
+    .join("");
+}
+
+/**
+ * The digest as HTML.
+ *
+ * Table-based and fully inline-styled because that is still what mail clients
+ * render reliably; Outlook has no grid and Gmail strips <style> blocks. Light
+ * palette only — a dark email on a light client reads as broken, and the
+ * inverse is a bearable compromise.
+ */
+export function digestHtml(d: DigestData, appUrl: string, name: string): string {
+  const runway =
+    d.runwayDays === null
+      ? `<span style="color:#c0304a">Nothing is scheduled.</span>`
+      : d.runwayDays <= 3
+        ? `<span style="color:#c0304a">${d.runwayDays} days of posts left — worth booking a shoot.</span>`
+        : d.runwayDays <= 10
+          ? `<span style="color:#a96a00">${d.runwayDays} days of posts scheduled.</span>`
+          : `<span style="color:#0f8a5f">${d.runwayDays} days of posts scheduled.</span>`;
+
+  return `<!doctype html><html><body style="margin:0;padding:24px 12px;background:#f4f2f8">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#fff;border-radius:14px;border:1px solid #e6e3ee">
+<tr><td style="padding:28px 28px 20px">
+  <p style="margin:0 0 2px;font:600 19px/1.3 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#17141f">Your week, ${esc(name)}</p>
+  <p style="margin:0;font:400 13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#8a8598">Week of ${esc(d.weekOf)} · ${runway}</p>
+</td></tr>
+<tr><td style="padding:0 28px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+
+${section(
+  `Waiting on you (${d.waitingOnYou.length})`,
+  list(d.waitingOnYou.slice(0, 8).map((w) => `${esc(w.title)} <span style="color:#8a8598">— ${esc(w.why)}</span>`))
+)}
+
+${section(
+  `Went out this week (${d.posted.length})`,
+  list(d.posted.map((p) => `${esc(p.title)} <span style="color:#8a8598">${esc(short(p.date))}</span>`))
+)}
+
+${section(
+  `Posting next 7 days (${d.postingNext.length})`,
+  list(d.postingNext.map((p) => `${esc(p.title)} <span style="color:#8a8598">${esc(short(p.date))}</span>`))
+)}
+
+${section(
+  `With the editors (${d.withEditors.length})`,
+  list(
+    d.withEditors
+      .slice(0, 8)
+      .map(
+        (w) =>
+          `${esc(w.title)} <span style="color:#8a8598">— ${esc(w.editor)}${w.eta ? `, due ${esc(short(w.eta))}` : ""}</span>`
+      )
+  )
+)}
+
+${section(
+  "In the pipeline",
+  `<p style="margin:0;font:400 14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#17141f">
+    ${d.ideas} idea${d.ideas === 1 ? "" : "s"} · ${d.scripts} being written · ${d.toFilm} to film
+  </p>`
+)}
+
+<tr><td style="padding:4px 0 8px">
+  <a href="${esc(appUrl)}" style="display:inline-block;padding:11px 20px;border-radius:9px;background:#5b3fd6;font:600 14px/1 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#fff;text-decoration:none">Open the dashboard</a>
+</td></tr>
+</table>
+</td></tr>
+<tr><td style="padding:8px 28px 24px;border-top:1px solid #e6e3ee">
+  <p style="margin:0;font:400 11px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#8a8598">
+    Sent every Monday. Change how often you hear from us in the dashboard under Notifications.
+  </p>
+</td></tr>
+</table></body></html>`;
+}
+
+/** Plain-text fallback. Some clients only ever show this. */
+export function digestText(d: DigestData, appUrl: string, name: string): string {
+  const lines = [
+    `Your week, ${name} — week of ${d.weekOf}`,
+    d.runwayDays === null
+      ? "Nothing is scheduled."
+      : `${d.runwayDays} days of posts scheduled.`,
+    "",
+    `WAITING ON YOU (${d.waitingOnYou.length})`,
+    ...(d.waitingOnYou.length
+      ? d.waitingOnYou.slice(0, 8).map((w) => `- ${w.title} — ${w.why}`)
+      : ["- nothing"]),
+    "",
+    `WENT OUT THIS WEEK (${d.posted.length})`,
+    ...(d.posted.length ? d.posted.map((p) => `- ${p.title} ${short(p.date)}`) : ["- nothing"]),
+    "",
+    `POSTING NEXT 7 DAYS (${d.postingNext.length})`,
+    ...(d.postingNext.length
+      ? d.postingNext.map((p) => `- ${p.title} ${short(p.date)}`)
+      : ["- nothing"]),
+    "",
+    `WITH THE EDITORS (${d.withEditors.length})`,
+    ...(d.withEditors.length
+      ? d.withEditors
+          .slice(0, 8)
+          .map((w) => `- ${w.title} — ${w.editor}${w.eta ? `, due ${short(w.eta)}` : ""}`)
+      : ["- nothing"]),
+    "",
+    `PIPELINE: ${d.ideas} ideas, ${d.scripts} being written, ${d.toFilm} to film`,
+    "",
+    appUrl,
+  ];
+  return lines.join("\n");
+}
+
+/** For the Telegram version — same content, Telegram's own HTML subset. */
+export function digestTelegram(d: DigestData): string {
+  const lines = [
+    `<b>📊 Your week</b> — week of ${d.weekOf}`,
+    d.runwayDays === null
+      ? "⚠️ Nothing is scheduled."
+      : `${d.runwayDays <= 3 ? "⚠️ " : ""}${d.runwayDays} days of posts scheduled.`,
+    "",
+    `<b>Waiting on you (${d.waitingOnYou.length})</b>`,
+    ...(d.waitingOnYou.length
+      ? d.waitingOnYou.slice(0, 6).map((w) => `→ ${w.title} — ${w.why}`)
+      : ["→ nothing"]),
+    "",
+    `<b>Went out</b>: ${d.posted.length} · <b>Posting next 7 days</b>: ${d.postingNext.length}`,
+    `<b>Pipeline</b>: ${d.ideas} ideas · ${d.scripts} scripting · ${d.toFilm} to film`,
+  ];
+  return lines.join("\n");
+}
+
+export { short as shortDigestDate, STATUS_LABELS };

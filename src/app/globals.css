@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+/* ===========================================================================
+   Design tokens
+   A violet-accented near-black. Surfaces step up in lightness as they come
+   forward (app -> panel -> card -> raised), which is what gives the dense
+   three-pane workspace its depth without needing heavy borders.
+   =========================================================================== */
+@theme {
+  /* Surfaces, back to front */
+  --color-app: #0a0a0d;
+  --color-panel: #101014;
+  --color-card: #16161c;
+  --color-raised: #1d1d25;
+  --color-hover: #23232c;
+
+  /* Hairlines */
+  --color-line: #26262f;
+  --color-line-strong: #33333f;
+
+  /* Text */
+  --color-ink: #ededf2;
+  --color-ink-2: #a1a1ad;
+  --color-ink-3: #6e6e7b;
+
+  /* Brand */
+  --color-accent: #7c5cff;
+  --color-accent-hi: #9277ff;
+  --color-accent-lo: #5b3fd6;
+  --color-accent-ghost: #7c5cff1f;
+
+  /* Stage / semantic colours — used by the board column rails and pills */
+  --color-stage-ideation: #a78bfa;
+  --color-stage-scripting: #38bdf8;
+  --color-stage-film: #fb7185;
+  --color-stage-brief: #fcd34d;
+  --color-stage-ready: #64748b;
+  --color-stage-progress: #7c5cff;
+  --color-stage-review: #22d3ee;
+  --color-stage-revisions: #f97316;
+  --color-stage-approved: #fbbf24;
+  --color-stage-variants: #f472b6;
+  --color-stage-final: #c084fc;
+  --color-stage-ready-post: #4ade80;
+  --color-stage-posted: #34d399;
+
+  --color-danger: #f4515f;
+  --color-warn: #f59e0b;
+  --color-ok: #34d399;
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-app);
+  color: var(--color-ink);
+  /* The workspace manages its own scrolling regions. */
+  overscroll-behavior: none;
+}
+
+/* Thin scrollbars for the dense board / comment columns. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3a3a46 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #3a3a46;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Focus ring that reads on every surface. */
+:where(button, a, input, textarea, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* A card being dragged by dnd-kit. */
+@utility dragging {
+  cursor: grabbing;
+  opacity: 0.35;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility animate-rise {
+  animation: rise 0.16s ease-out;
+}
+
+/* Recording pulse on the mic button. */
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 #f4515f66;
+  }
+  70% {
+    box-shadow: 0 0 0 8px #f4515f00;
+  }
+  100% {
+    box-shadow: 0 0 0 0 #f4515f00;
+  }
+}
+
+@utility recording {
+  animation: pulse-ring 1.4s infinite;
+}
