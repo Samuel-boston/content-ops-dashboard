@@ -232,6 +232,7 @@ export function ReviewMode({
             comments={cutComments}
             viewer={viewer}
             activeId={activeId}
+            videoId={video.id}
             onSelect={selectComment}
             onReply={(c) => {
               setReplyTo(c);

@@ -2,7 +2,7 @@
 
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth";
-import { chatJSON, aiErrorMessage } from "@/lib/integrations/ai";
+import { chatJSON, chatText, aiErrorMessage } from "@/lib/integrations/ai";
 import { generateCaptionAction } from "@/app/ai-actions";
 import { CONTENT_PILLARS, FORMATS, PLATFORMS } from "@/lib/taxonomy";
 import { PUBLISH_CHANNELS, STATUS_LABELS, type PublishChannel, type VideoStatus } from "@/lib/types";
@@ -35,6 +35,7 @@ interface Intent {
     | "schedule_post"
     | "create_idea"
     | "report_now"
+    | "how_to"
     | "unknown";
   searchText: string | null;
   daysBack: number | null;
@@ -108,6 +109,38 @@ export interface AssistantReply {
 
 const STATUS_VALUES = Object.keys(STATUS_LABELS) as VideoStatus[];
 
+/**
+ * What Andreas is told about the dashboard itself, for "how do I..." questions.
+ * Kept as one flat block, not pulled from the schema/routes — deliberately a
+ * human-written summary of what a user actually sees, so it reads like a
+ * teammate explaining the tool rather than a database dump. Update this when
+ * a page's purpose materially changes, not on every UI tweak.
+ */
+const HOW_TO_KNOWLEDGE = `
+Pipeline, in order a video moves through it: Ideation -> Scripting -> Ready to Film -> Editor Brief -> Ready to Edit -> Editing (assigning an editor is what moves it here) -> In Review -> Revisions (if changes are asked for, back to editing) -> Approved (never sits here, routes on instantly) -> Awaiting Variants (only if the script had more than one hook) -> Final Review -> Ready to Post -> Posted.
+
+Ideation and Scripting are private to the owner/admin — editors never see them. Everything from Ready to Edit onward is what editors work in.
+
+Pages:
+- Overview (home): Andreas's opener with the pipeline stages that most need attention, "what's new" since you were last here, performance and runway panels, the pipeline strip, and the team snapshot.
+- Ideation: the private idea shelf. Add ideas manually, capture one by voice, or use "Suggest ideas" (AI, grounded either in your best-performing past videos or a prompt you give it) to generate options you can add straight in. Each idea has a brief, references (paste any link), and pillar/format/platform tags. "Script it" moves it to Scripting.
+- Scripting: where the brief becomes a script — hooks, body, CTA. "Draft with AI" opens a prompt box first. Select text to Rephrase it. "Suggest 10 hooks" generates hook options. More than one hook in the script means it'll route through Awaiting Variants later. "Send to editors" moves it to Ready to Film.
+- Ready to Film / Editor Brief: gives the script, a teleprompter view, priority, and a place to tag music from the library and add screen-recording references for the editor.
+- Ready to Edit (the board editors see): brief, raw footage link, music, priority — nothing else, on purpose.
+- Review: the client's approval queue — cuts, hook variants, comments (pinned to a timestamp, with voice notes and drawings), Approve or send back to Revisions.
+- Revisions: sent back with open notes; "Summarize" turns scattered comments into a short punch list for the editor.
+- Awaiting Variants / Final Review / Ready to Post / Posted: last steps before and after a video goes out; Ready to Post is where scheduling/publishing happens.
+- Board: the full pipeline in one kanban view.
+- Calendar: everything by post date.
+- Team: who's assigned what, workload, editor rates/payments.
+- Analytics / Report: performance by video, pillar, format, platform.
+- Library: shared music tracks, brand/screen-recording references, and SOP docs.
+- Series, Archive, Parked ("Later"), Publishing: series groupings, posted history, ideas/videos shelved for later, and the publishing queue.
+- Ask Andreas (this chat): finds videos, lists them by filter, pulls top performers, and — with a confirm click — moves a stage, tags a teammate, reassigns an editor, sets an ETA, drafts a caption, schedules a post, or logs a new idea.
+- Connect your AI assistant (in the account menu): generate a token to let an external AI (Claude, ChatGPT, etc. — whichever you already use) read and write the dashboard directly from its own chat, with the same permissions you have here.
+- Settings (owner only): integration credentials — Cloudflare Stream, Google Drive, Instagram, Telegram, and which AI engine (Groq/Claude/OpenAI) powers the in-app AI features.
+`.trim();
+
 async function classify(question: string, people: string[]): Promise<Intent | null> {
   const today = new Date();
   const todayISO = today.toISOString().slice(0, 10);
@@ -136,6 +169,7 @@ async function classify(question: string, people: string[]): Promise<Intent | nu
       `- "schedule_post": asking to schedule/post/publish a specific video (e.g. "schedule the pricing video for today", "post the testimonial to instagram and tiktok tomorrow"). searchText is the video, channels is whichever known channels were named (null if none named), scheduledISO is the resolved date/time (null if "now"/unspecified), note is any caption style instruction.\n` +
       `- "create_idea": asking to add/log/capture a new idea (not about an existing video). ideaTitle is a short working title, note is any extra detail given.\n` +
       `- "report_now": asking for a status report / summary of where things stand right now (e.g. "give me this week's rundown", "what's the state of things").\n` +
+      `- "how_to": asking how to USE the dashboard itself — a feature, a page, a workflow, "where do I find X", "what does X do" — not asking about a specific video's data.\n` +
       `- "unknown": anything else (general chat, out of scope).\n\n` +
       `format/platform/pillar must be exact matches from the known lists above, or null if not mentioned or not a match. status must be one of the exact status values above, or null. limit defaults to 10 if a count wasn't specified. channels must only contain exact values from the known channels list.\n` +
       `Respond as JSON: {"intent": "...", "searchText": "..." | null, "daysBack": 0 | null, "status": "..." | null, "format": "..." | null, "platform": "..." | null, "pillar": "..." | null, "toStatus": "..." | null, "limit": 0 | null, "personName": "..." | null, "note": "..." | null, "etaISO": "..." | null, "ideaTitle": "..." | null, "channels": ["..."] | null, "scheduledISO": "..." | null}`
@@ -537,6 +571,18 @@ export async function assistantQueryAction(question: string): Promise<AssistantR
     return { ok: true, text: bits.join(". ") + "." };
   }
 
+  if (parsed.intent === "how_to") {
+    const text = await chatText(
+      `You are Andreas, the assistant inside a video content-ops dashboard. Answer the question about how to use ` +
+        `the dashboard itself, plainly and briefly (2-4 sentences, or a short numbered list if it's a set of ` +
+        `steps) — like a teammate explaining it, not a manual. Only answer from what's given below; if the ` +
+        `question is about something not covered, say you're not sure and suggest the closest page it'd live on.`,
+      `What the dashboard has:\n${HOW_TO_KNOWLEDGE}\n\nQuestion: "${question}"`
+    );
+    if (!text) return { ok: false, text: await aiErrorMessage() };
+    return { ok: true, text };
+  }
+
   return {
     ok: true,
     text:
@@ -546,103 +592,118 @@ export async function assistantQueryAction(question: string): Promise<AssistantR
   };
 }
 
-export interface OverviewPick {
-  id: string;
-  title: string;
-  status: VideoStatus;
+export type StageTaskKey = "ideation" | "scripting" | "ready_to_film" | "in_review" | "ready_to_post";
+
+export interface StageTask {
+  key: StageTaskKey;
   label: string;
+  count: number;
   href: string;
+  note: string;
 }
 
 export interface OverviewOpener {
   opener: string;
-  picks: OverviewPick[];
+  tasks: StageTask[];
 }
 
-export interface OverviewItemInput {
-  id: string;
-  title: string;
-  status: VideoStatus;
-  kind: "final_review" | "review" | "ready_to_post" | "to_film";
-}
-
-const KIND_LABEL: Record<OverviewItemInput["kind"], string> = {
-  final_review: "Needs your final review",
-  review: "Waiting on your review",
-  ready_to_post: "Ready to post",
-  to_film: "Scripted, ready to film",
+const STAGE_META: Record<StageTaskKey, { label: string; unit: string; href: string; fallbackNote: string }> = {
+  ideation: { label: "Idea generation", unit: "idea", href: "/ideation", fallbackNote: "Sitting in the idea shelf." },
+  scripting: { label: "Scripting", unit: "idea ready to script", href: "/scripting", fallbackNote: "Waiting to be written." },
+  ready_to_film: { label: "Filming", unit: "video ready to film", href: "/filming", fallbackNote: "Scripted and waiting on you." },
+  in_review: { label: "Reviewing", unit: "video to review", href: "/review", fallbackNote: "A cut is waiting on your notes." },
+  ready_to_post: { label: "Scheduling", unit: "video ready to post", href: "/review#post", fallbackNote: "Approved, just needs a slot." },
 };
 
-const KIND_PRIORITY: OverviewItemInput["kind"][] = ["final_review", "review", "ready_to_post", "to_film"];
+// Priority when the model has nothing useful to say (no key, or every count is
+// zero) — client-blocking stages first, then the stages only the client can move.
+const FALLBACK_ORDER: StageTaskKey[] = ["in_review", "ready_to_post", "ready_to_film", "scripting", "ideation"];
 
 const OPENER_POOL = [
-  "Okay, what are we working on?",
+  "Okay, what should we prioritise today?",
   "Here's where things stand.",
-  "Let's see what needs you.",
+  "Let's see what needs attention.",
   "Here's what's on deck.",
 ];
 
-function fallbackOpener(hasItems: boolean): string {
-  if (!hasItems) return "You're all caught up — nothing needs you right now.";
+function fallbackOpener(hasAny: boolean): string {
+  if (!hasAny) return "You're all caught up — nothing needs you right now.";
   return OPENER_POOL[Math.floor(Math.random() * OPENER_POOL.length)];
 }
 
-function fallbackPicks(items: OverviewItemInput[]): OverviewPick[] {
-  return [...items]
-    .sort((a, b) => KIND_PRIORITY.indexOf(a.kind) - KIND_PRIORITY.indexOf(b.kind))
-    .slice(0, 4)
-    .map((it) => ({ id: it.id, title: it.title, status: it.status, label: KIND_LABEL[it.kind], href: `/videos/${it.id}` }));
+function labelFor(key: StageTaskKey, count: number): string {
+  const { unit } = STAGE_META[key];
+  return count === 1 ? unit : unit.replace(/^idea/, "ideas").replace(/^video/, "videos");
+}
+
+function fallbackTasks(counts: Record<StageTaskKey, number>): StageTask[] {
+  return FALLBACK_ORDER.filter((k) => counts[k] > 0).map((k) => ({
+    key: k,
+    label: STAGE_META[k].label,
+    count: counts[k],
+    href: STAGE_META[k].href,
+    note: STAGE_META[k].fallbackNote,
+  }));
 }
 
 /**
  * The top of the Overview report — Andreas opens with one short line, then
- * picks a handful of real items worth looking at first, each a clickable
- * link, instead of a paragraph to read. The model only ever chooses among
- * and labels the exact items handed to it; every returned id is checked
- * against that same list before it's allowed to become a link, so a
- * hallucinated id can never reach the page — it just falls out of the list.
+ * orders the five pipeline stages by which actually needs attention first
+ * (not just the biggest number — a healthy pile of ideas isn't a bottleneck,
+ * two stuck reviews might be), each with a one-line reason. The model only
+ * ever reorders and annotates counts it was actually given — it never
+ * invents a count, so a wrong ranking is the worst case, not a wrong number.
  */
 export async function overviewOpenerAction(input: {
   firstName: string;
-  items: OverviewItemInput[];
+  counts: Record<StageTaskKey, number>;
   poolRunningDry: boolean;
   activity: { title: string; summary: string }[];
 }): Promise<OverviewOpener> {
   await requireRole("owner", "admin");
 
-  const byId = new Map(input.items.map((it) => [it.id, it]));
-
-  if (!input.items.length) {
-    return { opener: fallbackOpener(false), picks: [] };
+  const present = (Object.keys(input.counts) as StageTaskKey[]).filter((k) => input.counts[k] > 0);
+  if (!present.length) {
+    return { opener: fallbackOpener(false), tasks: [] };
   }
 
-  const itemLines = input.items.map((it) => `- id:${it.id} | "${it.title}" | ${KIND_LABEL[it.kind]}`).join("\n");
+  const countLines = present
+    .map((k) => `- ${k} ("${STAGE_META[k].label}"): ${input.counts[k]} ${labelFor(k, input.counts[k])}`)
+    .join("\n");
   const activityLines = input.activity.map((a) => `- ${a.title}: ${a.summary}`).join("\n");
 
-  const raw = await chatJSON<{ opener: string; picks: { id: string; label: string }[] }>(
+  const raw = await chatJSON<{ opener: string; ranked: { key: StageTaskKey; note: string }[] }>(
     `You are Andreas, the assistant inside a video content-ops dashboard, speaking directly to the person who ` +
       `just opened it — casual, like a colleague checking in, not a formal report. Write ONE short opener line ` +
-      `(max 8 words, no greeting — that's handled elsewhere, e.g. "Okay, what are we working on?") and then pick ` +
-      `up to 4 of the items below that matter most right now, each with a short punchy label (max 8 words) saying ` +
-      `why it matters. Only ever use the exact "id" values given — never invent one, never invent a title or ` +
-      `detail that isn't given to you.`,
+      `(max 8 words, no greeting — e.g. "What should we prioritise today?"). Then rank the pipeline stages below ` +
+      `by which most needs attention right now — a bottleneck, not just the biggest number (a big idea shelf is ` +
+      `healthy; two reviews stuck for days is not). For each, write a short reason (max 10 words). Only ever use ` +
+      `the exact stage keys given — never invent one, never change a count.`,
     `${input.firstName ? `Their name: ${input.firstName}.\n` : ""}` +
-      `Items needing their input:\n${itemLines}\n` +
+      `Stages with something in them:\n${countLines}\n` +
       `${input.poolRunningDry ? "The editors' pool is about to run dry — more needs to be filmed.\n" : ""}` +
       `Recent activity:\n${activityLines || "nothing new since they were last here"}\n\n` +
-      `Respond as JSON: {"opener": "...", "picks": [{"id": "...", "label": "..."}]}`
+      `Respond as JSON: {"opener": "...", "ranked": [{"key": "...", "note": "..."}]}`
   );
 
-  const picks = raw?.picks
-    ?.filter((p) => byId.has(p.id))
-    .slice(0, 4)
-    .map((p) => {
-      const it = byId.get(p.id)!;
-      return { id: it.id, title: it.title, status: it.status, label: p.label || KIND_LABEL[it.kind], href: `/videos/${it.id}` };
-    });
-
-  if (raw?.opener && picks?.length) {
-    return { opener: raw.opener, picks };
+  const seen = new Set(present);
+  const ranked = raw?.ranked?.filter((r) => seen.has(r.key));
+  if (raw?.opener && ranked?.length) {
+    const tasks = ranked.map((r) => ({
+      key: r.key,
+      label: STAGE_META[r.key].label,
+      count: input.counts[r.key],
+      href: STAGE_META[r.key].href,
+      note: r.note || STAGE_META[r.key].fallbackNote,
+    }));
+    // Any present stage the model dropped still gets shown, just last.
+    for (const k of present) {
+      if (!tasks.some((t) => t.key === k)) {
+        tasks.push({ key: k, label: STAGE_META[k].label, count: input.counts[k], href: STAGE_META[k].href, note: STAGE_META[k].fallbackNote });
+      }
+    }
+    return { opener: raw.opener, tasks };
   }
-  return { opener: fallbackOpener(true), picks: fallbackPicks(input.items) };
+
+  return { opener: fallbackOpener(true), tasks: fallbackTasks(input.counts) };
 }

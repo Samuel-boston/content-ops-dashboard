@@ -6,7 +6,7 @@ import { requireRole, requireUser } from "@/lib/auth";
 import { chatJSON, chatText, aiErrorMessage } from "@/lib/integrations/ai";
 import { transcribeAudio } from "@/lib/integrations/whisper";
 import { briefVoiceUrl } from "@/app/script-actions";
-import { CONTENT_PILLARS, FORMATS, PLATFORMS } from "@/lib/taxonomy";
+import { CONTENT_PILLARS } from "@/lib/taxonomy";
 
 // ---------------------------------------------------------------------------
 // AI in scripting. Every action here returns a suggestion for the caller to
@@ -326,46 +326,6 @@ export async function generateCaptionAction(videoId: string, prompt?: string) {
   );
   if (!text) return { error: await aiErrorMessage() };
   return { ok: true as const, caption: text };
-}
-
-/**
- * Suggested pillar/format/platform tags from whatever's already written (the
- * brief or idea notes) — a starting point to confirm or edit, never saved
- * directly. Picks only from the real preset lists; the model is never given
- * room to invent a new tag.
- */
-export async function suggestTagsAction(videoId: string) {
-  await requireRole("owner", "admin");
-  const v = await videoContext(videoId);
-  if (!v) return { error: "Video not found." };
-
-  const source = [v.brief, v.idea_notes].filter(Boolean).join("\n\n");
-  if (!source.trim()) {
-    return { error: "Add a brief or idea notes first — there's nothing to tag from yet." };
-  }
-
-  const out = await chatJSON<{ pillars: string[]; formats: string[]; platforms: string[] }>(
-    `You tag videos for a content agency's tracker. Choose ONLY from the exact lists given — never invent a ` +
-      `new value, never guess one that isn't clearly supported by the text.`,
-    `Title: ${v.title}\n${v.brief ? `Brief: ${v.brief}\n` : ""}${v.idea_notes ? `Idea notes: ${v.idea_notes}\n` : ""}\n` +
-      `Content pillars available: ${CONTENT_PILLARS.join(", ")}\n` +
-      `Formats available: ${FORMATS.join(", ")}\n` +
-      `Platforms available: ${PLATFORMS.join(", ")}\n\n` +
-      `Pick which apply to THIS video — usually 1-2 pillars, 1-2 formats, 1 or more platforms. Leave a list empty ` +
-      `rather than force a guess if nothing clearly fits. ` +
-      `Respond as JSON: {"pillars": ["..."], "formats": ["..."], "platforms": ["..."]}`
-  );
-  if (!out) return { error: await aiErrorMessage() };
-
-  const clean = (arr: string[] | undefined, allowed: readonly string[]) =>
-    [...new Set((arr ?? []).filter((x) => allowed.includes(x)))];
-
-  return {
-    ok: true as const,
-    pillars: clean(out.pillars, CONTENT_PILLARS),
-    formats: clean(out.formats, FORMATS),
-    platforms: clean(out.platforms, PLATFORMS),
-  };
 }
 
 /**

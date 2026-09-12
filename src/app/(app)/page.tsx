@@ -2,12 +2,11 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { listEditors, listTaxonomyCustoms, stageCounts } from "@/app/actions";
-import { clientActions, teamSnapshots } from "@/app/team-actions";
+import { teamSnapshots } from "@/app/team-actions";
 import { getWorkspaceSettings } from "@/lib/workspace";
 import { ACTIVE_STATUSES, STATUS_COLOR, STATUS_LABELS } from "@/lib/types";
 import { OverviewReport } from "@/components/overview/OverviewReport";
 import { timeGreeting } from "@/lib/greeting";
-import type { OverviewItemInput } from "@/app/assistant-actions";
 import { TeamStrip } from "@/components/overview/TeamStrip";
 import { PerformancePanel, RunwayPanel } from "@/components/overview/Pulse";
 import {
@@ -22,10 +21,9 @@ export default async function OverviewPage() {
   const viewer = await requireUser();
   if (viewer.role === "editor") redirect("/my-work");
 
-  const [counts, actions, team, editors, customs, settings, perf, runway, news] =
+  const [counts, team, editors, customs, settings, perf, runway, news] =
     await Promise.all([
       stageCounts(),
-      clientActions(),
       teamSnapshots(),
       listEditors(),
       listTaxonomyCustoms(),
@@ -48,12 +46,9 @@ export default async function OverviewPage() {
   const totalActive = ACTIVE_STATUSES.reduce((n, s) => n + (counts[s] ?? 0), 0);
   const firstName = viewer.full_name?.split(" ")[0] || "";
 
-  const items: OverviewItemInput[] = [
-    ...actions.toFinalReview.map((v) => ({ id: v.id, title: v.title, status: v.status, kind: "final_review" as const })),
-    ...actions.toReview.map((v) => ({ id: v.id, title: v.title, status: v.status, kind: "review" as const })),
-    ...actions.readyToPost.map((v) => ({ id: v.id, title: v.title, status: v.status, kind: "ready_to_post" as const })),
-    ...actions.toFilm.map((v) => ({ id: v.id, title: v.title, status: v.status, kind: "to_film" as const })),
-  ];
+  // Three is roughly a week of work for a small team; below that the client
+  // needs to be filming, not waiting to be told the pool hit zero.
+  const poolRunningDry = (counts.ready_to_edit ?? 0) < 3;
 
   return (
     <div className="space-y-7">
@@ -70,16 +65,17 @@ export default async function OverviewPage() {
         <CreateVideoButton editors={editors} customs={customsBy} viewerId={viewer.id} />
       </div>
 
-      {/* 1 — the merged report: Andreas's opener + real clickable picks, then what's blocked on the client, then what moved without them. Stalled/overdue videos live in the nav's caution icon instead — a different kind of alert than this. */}
+      {/* 1 — Andreas's opener, the pipeline stages ranked by what needs attention, then what's new. Stalled/overdue videos live in the nav's caution icon instead — a different kind of alert than this. */}
       <OverviewReport
         firstName={firstName}
-        items={items}
-        toReview={actions.toReview.length}
-        toFinalReview={actions.toFinalReview.length}
-        readyToPost={actions.readyToPost.length}
-        toFilm={actions.toFilm.length}
-        poolCount={actions.poolCount}
-        poolRunningDry={actions.poolRunningDry}
+        counts={{
+          ideation: counts.ideation ?? 0,
+          scripting: counts.scripting ?? 0,
+          ready_to_film: counts.ready_to_film ?? 0,
+          in_review: counts.in_review ?? 0,
+          ready_to_post: counts.ready_to_post ?? 0,
+        }}
+        poolRunningDry={poolRunningDry}
         news={news}
       />
 

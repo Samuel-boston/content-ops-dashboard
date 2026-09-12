@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { CommentCard } from "@/components/workspace/CommentCard";
-import { IconComment } from "@/components/ui/icons";
+import { IconComment, IconSparkles } from "@/components/ui/icons";
+import { useToast } from "@/components/ui/Toast";
+import { summarizeRevisionsAction } from "@/app/ai-actions";
 import type { CutComment, Profile } from "@/lib/types";
 
 type Filter = "all" | "open" | "resolved";
@@ -16,6 +18,7 @@ export function CommentsTab({
   onToggleResolved,
   onDelete,
   onVoiceTime,
+  videoId,
 }: {
   comments: CutComment[];
   viewer: Profile;
@@ -25,8 +28,14 @@ export function CommentsTab({
   onToggleResolved: (c: CutComment) => void;
   onDelete: (c: CutComment) => void;
   onVoiceTime?: (comment: CutComment, t: number) => void;
+  /** When given, an open comment count over 1 shows a "Summarize" button. */
+  videoId?: string;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
+  const toast = useToast();
+  const [, startTransition] = useTransition();
+  const [summarizing, setSummarizing] = useState(false);
+  const [summary, setSummary] = useState<string | null>(null);
 
   const { roots, repliesByParent, counts } = useMemo(() => {
     const roots = comments.filter((c) => !c.parent_comment_id);
@@ -58,30 +67,57 @@ export function CommentsTab({
     <div className="flex h-full flex-col">
       {/* Filter pills */}
       <div className="shrink-0 px-3 pb-2 pt-3">
-        <div className="flex items-center gap-1 rounded-lg bg-panel p-1">
-          {(
-            [
-              ["all", "All", counts.all],
-              ["open", "Open", counts.open],
-              ["resolved", "Resolved", counts.resolved],
-            ] as const
-          ).map(([key, label, n]) => (
+        <div className="flex items-center gap-2">
+          <div className="flex flex-1 items-center gap-1 rounded-lg bg-panel p-1">
+            {(
+              [
+                ["all", "All", counts.all],
+                ["open", "Open", counts.open],
+                ["resolved", "Resolved", counts.resolved],
+              ] as const
+            ).map(([key, label, n]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setFilter(key)}
+                aria-pressed={filter === key}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition ${
+                  filter === key
+                    ? "bg-raised text-ink shadow-sm"
+                    : "text-ink-2 hover:text-ink"
+                }`}
+              >
+                {label}
+                <span className={filter === key ? "text-ink-2" : "text-ink-3"}>{n}</span>
+              </button>
+            ))}
+          </div>
+          {videoId && counts.open > 1 ? (
             <button
-              key={key}
               type="button"
-              onClick={() => setFilter(key)}
-              aria-pressed={filter === key}
-              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition ${
-                filter === key
-                  ? "bg-raised text-ink shadow-sm"
-                  : "text-ink-2 hover:text-ink"
-              }`}
+              disabled={summarizing}
+              title="Turns the open comments into one short punch list"
+              onClick={() => {
+                setSummarizing(true);
+                startTransition(async () => {
+                  const res = await summarizeRevisionsAction(videoId);
+                  setSummarizing(false);
+                  if (res?.error) toast.error(res.error);
+                  else if (res?.ok) setSummary(res.summary);
+                });
+              }}
+              className="flex shrink-0 items-center gap-1 rounded-md border border-line px-2 py-1.5 text-[11px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
             >
-              {label}
-              <span className={filter === key ? "text-ink-2" : "text-ink-3"}>{n}</span>
+              <IconSparkles size={11} />
+              {summarizing ? "Reading…" : "Summarize"}
             </button>
-          ))}
+          ) : null}
         </div>
+        {summary ? (
+          <div className="mt-2 whitespace-pre-wrap rounded-lg border border-line bg-panel px-2.5 py-2 text-xs leading-relaxed text-ink-2">
+            {summary}
+          </div>
+        ) : null}
       </div>
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-4">

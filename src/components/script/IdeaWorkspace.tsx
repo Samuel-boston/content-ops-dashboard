@@ -11,7 +11,6 @@ import { VoicePlayer, VoiceRecorder, type VoiceCapture } from "@/components/work
 import { PlanningStageBar } from "@/components/pipeline/PlanningStageBar";
 import { IconMic, IconSparkles, IconTrash } from "@/components/ui/icons";
 import { saveBriefVoiceAction, saveIdeaNotesAction, transcribeBriefAction } from "@/app/script-actions";
-import { suggestTagsAction } from "@/app/ai-actions";
 import { updateVideoAction } from "@/app/actions";
 import { uploadCommentMedia } from "@/lib/upload-client";
 import type { Profile, ReferenceItem, Video } from "@/lib/types";
@@ -54,35 +53,7 @@ export function IdeaWorkspace({
     duration: video.brief_voice_duration_seconds,
     peaks: video.brief_voice_peaks,
   });
-  const [suggestingTags, setSuggestingTags] = useState(false);
-
   const canEdit = viewer.role === "owner" || viewer.role === "admin";
-
-  function suggestTags() {
-    setSuggestingTags(true);
-    startTransition(async () => {
-      const res = await suggestTagsAction(video.id);
-      setSuggestingTags(false);
-      if (res?.error) {
-        toast.error(res.error);
-        return;
-      }
-      if (res?.ok) {
-        const patch = {
-          content_pillars: [...new Set([...video.content_pillars, ...res.pillars])],
-          formats: [...new Set([...video.formats, ...res.formats])],
-          platforms: [...new Set([...video.platforms, ...res.platforms])],
-        };
-        if (!patch.content_pillars.length && !patch.formats.length && !patch.platforms.length) {
-          toast.error("Nothing clear enough to suggest yet — add a bit more to the idea first.");
-          return;
-        }
-        await updateVideoAction(video.id, patch);
-        router.refresh();
-        toast.success("Tags suggested — check them below.");
-      }
-    });
-  }
 
   const save = useCallback(
     (value: string) => {
@@ -236,19 +207,7 @@ export function IdeaWorkspace({
         </section>
 
         <section className="space-y-3 rounded-2xl border border-line bg-card p-4">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold">Where it fits</h2>
-            <button
-              type="button"
-              disabled={suggestingTags}
-              title="Suggests from your notes — only ever picks from the real preset lists, never invents one"
-              onClick={suggestTags}
-              className="ml-auto flex items-center gap-1.5 rounded-lg border border-line px-2 py-1 text-[11px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-40"
-            >
-              <IconSparkles size={11} />
-              {suggestingTags ? "Reading…" : "Suggest tags"}
-            </button>
-          </div>
+          <h2 className="text-sm font-semibold">Where it fits</h2>
           <p className="text-[11px] leading-snug text-ink-3">
             Optional now — but tagging early is what makes the analytics worth reading later.
           </p>
