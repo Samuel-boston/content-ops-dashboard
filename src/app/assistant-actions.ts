@@ -137,8 +137,8 @@ Pages:
 - Library: shared music tracks, brand/screen-recording references, and SOP docs.
 - Series, Archive, Parked ("Later"), Publishing: series groupings, posted history, ideas/videos shelved for later, and the publishing queue.
 - Ask Andreas (this chat): finds videos, lists them by filter, pulls top performers, and — with a confirm click — moves a stage, tags a teammate, reassigns an editor, sets an ETA, drafts a caption, schedules a post, or logs a new idea.
-- Connect your AI assistant (in the account menu): generate a token to let an external AI (Claude, ChatGPT, etc. — whichever you already use) read and write the dashboard directly from its own chat, with the same permissions you have here.
-- Settings (owner only): integration credentials — Cloudflare Stream, Google Drive, Instagram, Telegram, and which AI engine (Groq/Claude/OpenAI) powers the in-app AI features.
+- Connect your AI assistant: its OWN separate link in the account menu (top-right avatar), open to any signed-in user — NOT inside Settings, not owner-only. Generate a token there to let an external AI (Claude, ChatGPT, etc. — whichever you already use) read and write the dashboard directly from its own chat, with the same permissions you have here.
+- Settings: a DIFFERENT page, owner-only, also reached from the account menu — integration credentials (Cloudflare Stream, Google Drive, Instagram, Telegram) and which AI engine (Groq/Claude/OpenAI) powers the in-app AI features. Has nothing to do with connecting an external AI assistant — don't conflate the two.
 `.trim();
 
 async function classify(question: string, people: string[]): Promise<Intent | null> {
