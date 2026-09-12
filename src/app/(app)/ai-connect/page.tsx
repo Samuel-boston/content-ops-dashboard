@@ -38,9 +38,11 @@ export default async function AiConnectPage() {
         <div className="space-y-1.5 border-t border-line pt-3">
           <p className="text-xs font-medium text-ink-1">Claude (claude.ai or the Claude desktop app)</p>
           <ol className="list-decimal space-y-0.5 pl-4 text-xs text-ink-2">
-            <li>Settings → Connectors → Add custom connector</li>
-            <li>Paste the Server URL above</li>
-            <li>When it asks for a token/API key, paste the token from step 1</li>
+            <li>Settings → Customize → Connectors → Add custom connector</li>
+            <li>Name it anything, paste the Server URL above, Continue</li>
+            <li>Under Authentication, pick <strong>No sign-in</strong> (Claude defaults to &ldquo;Sign in now&rdquo; — switch it)</li>
+            <li>Under Request headers, Add header → name <code>authorization</code>, value <code>Bearer </code> followed by the token from step 1 (no quotes)</li>
+            <li>Add, then Connect</li>
           </ol>
         </div>
 
