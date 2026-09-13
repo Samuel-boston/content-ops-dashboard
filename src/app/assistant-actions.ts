@@ -2,6 +2,7 @@
 
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth";
+import { notify } from "@/lib/notify";
 import { chatJSON, chatText, aiErrorMessage } from "@/lib/integrations/ai";
 import { generateCaptionAction } from "@/app/ai-actions";
 import { CONTENT_PILLARS, FORMATS, PLATFORMS } from "@/lib/taxonomy";
@@ -29,6 +30,7 @@ interface Intent {
     | "top_performers"
     | "move_stage"
     | "tag_teammate"
+    | "message_person"
     | "reassign_editor"
     | "set_eta"
     | "draft_caption"
@@ -45,9 +47,9 @@ interface Intent {
   pillar: string | null;
   toStatus: string | null;
   limit: number | null;
-  /** tag_teammate / reassign_editor: who, by name. */
+  /** tag_teammate / message_person / reassign_editor: who, by name. */
   personName: string | null;
-  /** tag_teammate: the message to leave them. draft_caption/schedule_post: a style note. */
+  /** tag_teammate / message_person: the message to leave them. draft_caption/schedule_post: a style note. */
   note: string | null;
   /** set_eta: an absolute date, YYYY-MM-DD, resolved from whatever phrase was given. */
   etaISO: string | null;
@@ -76,6 +78,15 @@ export type AssistantAction =
       videoId: string;
       videoTitle: string;
       personName: string;
+      body: string;
+      label: string;
+    }
+  | {
+      type: "message_person";
+      personIds: string[];
+      personLabel: string;
+      videoId: string | null;
+      videoTitle: string | null;
       body: string;
       label: string;
     }
@@ -136,7 +147,7 @@ Pages:
 - Analytics / Report: performance by video, pillar, format, platform.
 - Library: shared music tracks, brand/screen-recording references, and SOP docs.
 - Series, Archive, Parked ("Later"), Publishing: series groupings, posted history, ideas/videos shelved for later, and the publishing queue.
-- Ask Andreas (this chat): finds videos, lists them by filter, pulls top performers, and — with a confirm click — moves a stage, tags a teammate, reassigns an editor, sets an ETA, drafts a caption, schedules a post, or logs a new idea.
+- Ask Andreas (this chat): finds videos, lists them by filter, pulls top performers, and — with a confirm click — moves a stage, tags a teammate, messages a person or the whole editor team, reassigns an editor, sets an ETA, drafts a caption, schedules a post, or logs a new idea. There's no video-call or meeting feature — Andreas only sends written in-app messages/notifications.
 - Connect your AI assistant: its OWN separate link in the account menu (top-right avatar), open to any signed-in user — NOT inside Settings, not owner-only. Generate a token there to let an external AI (Claude, ChatGPT, etc. — whichever you already use) read and write the dashboard directly from its own chat, with the same permissions you have here.
 - Settings: a DIFFERENT page, owner-only, also reached from the account menu — integration credentials (Cloudflare Stream, Google Drive, Instagram, Telegram) and which AI engine (Groq/Claude/OpenAI) powers the in-app AI features. Has nothing to do with connecting an external AI assistant — don't conflate the two.
 `.trim();
@@ -162,7 +173,8 @@ async function classify(question: string, people: string[]): Promise<Intent | nu
       `- "list_videos": asking for a filtered list (by format/platform/pillar/status/time window), not analytics-ranked.\n` +
       `- "top_performers": asking which videos performed best/worst, by views or engagement, over some window. daysBack from any "last N months/weeks" phrase (default 180 if posting performance is implied but no window given).\n` +
       `- "move_stage": asking to move/change a specific video's stage (e.g. "move the pricing video to ready to edit"). searchText is the video, toStatus must be one of the exact status values listed above.\n` +
-      `- "tag_teammate": asking to tag/mention/tell/loop in a specific person on a specific video (e.g. "tell Nathan to check the pricing video", "tag Nathan on the testimonial video and ask him to review it"). searchText is the video, personName is their name (must match someone in the people list), note is the message to leave them — write it as a short first-person note from the person asking, addressed to that teammate.\n` +
+      `- "tag_teammate": asking to tag/mention/tell/loop in a specific person ON A SPECIFIC EXISTING VIDEO (e.g. "tell Nathan to check the pricing video", "tag Nathan on the testimonial video and ask him to review it"). searchText is the video, personName is their name (must match someone in the people list), note is the message to leave them — write it as a short first-person note from the person asking, addressed to that teammate.\n` +
+      `- "message_person": asking to message/tell/notify a specific person OR a team, NOT anchored to one particular existing video (e.g. "message the editor team", "let Nathan know I'll have notes later", "tell the editors we're pausing this week"). searchText is null unless a specific video is also named alongside the message. personName is who — a name matching someone in the people list, or a group phrase like "the editor team"/"the editors" if no single person is named. note is the message itself.\n` +
       `- "reassign_editor": asking to give/assign/hand a video to a specific editor. searchText is the video, personName is the editor.\n` +
       `- "set_eta": asking to set/change when a video is due. searchText is the video, etaISO is the resolved absolute date.\n` +
       `- "draft_caption": asking to write/draft a caption (or hashtags) for a specific video, without asking to schedule it. searchText is the video, note is any style instruction given.\n` +
@@ -181,6 +193,7 @@ interface Person {
   id: string;
   full_name: string | null;
   email: string;
+  role: string;
 }
 
 /** Same forgiving match resolveMentions() uses for @-mentions — first name, full name, or email local-part, case-insensitive. */
@@ -193,6 +206,15 @@ function matchPerson(name: string | null, roster: Person[]): Person | null {
     roster.find((p) => p.email.split("@")[0].toLowerCase() === needle) ??
     null
   );
+}
+
+/**
+ * "message_person" without a name that matches anyone specific — if it reads
+ * as addressing the editors as a group ("the editor team", "the editors"),
+ * broadcast to everyone with that role instead of failing to resolve a name.
+ */
+function wantsEditorTeam(personName: string | null, question: string): boolean {
+  return /editors?\b|editing team/i.test(`${personName ?? ""} ${question}`);
 }
 
 function since(daysBack: number | null): string | null {
@@ -277,6 +299,35 @@ async function resolveOneVideo(
   return { video: data[0] as VideoLookupRow };
 }
 
+/**
+ * message_person's video-less (or team-broadcast) path: a plain notification
+ * + email, no video_messages row. The single-person + single-video case goes
+ * through sendMessageAction instead (chat-actions.ts), same as tag_teammate,
+ * so it shows up in that video's own message thread.
+ */
+export async function messageTeamAction(
+  personIds: string[],
+  body: string,
+  video?: { id: string; title: string } | null
+): Promise<{ error?: string }> {
+  const me = await requireRole("owner", "admin");
+  const text = body.trim();
+  if (!text) return { error: "Empty message." };
+  const targets = personIds.filter((id) => id !== me.id);
+  if (!targets.length) return { error: "Nobody to message." };
+  await notify({
+    userIds: targets,
+    kind: "mention",
+    title: video
+      ? `${me.full_name || me.email} sent you a message about "${video.title}"`
+      : `${me.full_name || me.email} sent you a message`,
+    body: text,
+    link: video ? `/videos/${video.id}` : undefined,
+    videoId: video?.id,
+  });
+  return {};
+}
+
 export async function assistantQueryAction(question: string): Promise<AssistantReply> {
   await requireRole("owner", "admin");
   if (!question.trim()) return { ok: false, text: "Ask me something first." };
@@ -284,7 +335,7 @@ export async function assistantQueryAction(question: string): Promise<AssistantR
   const supabase = await supabaseServer();
   const { data: roster } = await supabase
     .from("profiles")
-    .select("id, full_name, email")
+    .select("id, full_name, email, role")
     .eq("active", true);
   const people = (roster as Person[]) ?? [];
 
@@ -423,6 +474,60 @@ export async function assistantQueryAction(question: string): Promise<AssistantR
         label: `Tag ${name}`,
       },
     };
+  }
+
+  if (parsed.intent === "message_person") {
+    const note = parsed.note?.trim();
+    if (!note) return { ok: false, text: "What should I tell them?" };
+
+    let videoId: string | null = null;
+    let videoTitle: string | null = null;
+    if (parsed.searchText?.trim()) {
+      const found = await resolveOneVideo(supabase, parsed.searchText);
+      if ("reply" in found) return found.reply;
+      videoId = found.video.id;
+      videoTitle = found.video.title;
+    }
+
+    const person = matchPerson(parsed.personName, people);
+    if (person) {
+      const name = person.full_name || person.email;
+      return {
+        ok: true,
+        text: videoTitle
+          ? `Message ${name} on "${videoTitle}" — "${note}"?`
+          : `Message ${name} — "${note}"?`,
+        action: {
+          type: "message_person",
+          personIds: [person.id],
+          personLabel: name,
+          videoId,
+          videoTitle,
+          body: videoId ? `@${name} ${note}` : note,
+          label: `Message ${name}`,
+        },
+      };
+    }
+
+    if (wantsEditorTeam(parsed.personName, question)) {
+      const editors = people.filter((p) => p.role === "editor");
+      if (!editors.length) return { ok: false, text: "There's nobody with the editor role right now." };
+      return {
+        ok: true,
+        text: `Message the editor team (${editors.length} ${editors.length === 1 ? "person" : "people"})${videoTitle ? ` about "${videoTitle}"` : ""} — "${note}"?`,
+        action: {
+          type: "message_person",
+          personIds: editors.map((e) => e.id),
+          personLabel: "the editor team",
+          videoId,
+          videoTitle,
+          body: videoId ? `@editors ${note}` : note,
+          label: "Message the editor team",
+        },
+      };
+    }
+
+    return { ok: false, text: `I couldn't tell who "${parsed.personName ?? "that"}" is on the team.` };
   }
 
   if (parsed.intent === "reassign_editor") {
@@ -587,8 +692,8 @@ export async function assistantQueryAction(question: string): Promise<AssistantR
     ok: true,
     text:
       "I can find videos, list them by filter, pull top performers, move a video's stage, tag a teammate, " +
-      "reassign an editor, set an ETA, draft a caption, schedule a post, log a new idea, or give you a quick " +
-      "report — try rephrasing around one of those.",
+      "message a person or the editor team, reassign an editor, set an ETA, draft a caption, schedule a post, " +
+      "log a new idea, or give you a quick report — try rephrasing around one of those.",
   };
 }
 

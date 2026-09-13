@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useTrackedTransition } from "@/components/ui/Pending";
 import { useToast } from "@/components/ui/Toast";
-import { assistantQueryAction, type AssistantAction, type AssistantVideoRow } from "@/app/assistant-actions";
+import {
+  assistantQueryAction,
+  messageTeamAction,
+  type AssistantAction,
+  type AssistantVideoRow,
+} from "@/app/assistant-actions";
 import { setPlanningStageAction, setEtaAction } from "@/app/pipeline-actions";
 import { setStatusAction, assignEditorAction, createVideoAction } from "@/app/actions";
 import { sendMessageAction } from "@/app/chat-actions";
@@ -21,6 +26,7 @@ const EXAMPLES = [
   "Top performers in the last 6 months",
   "Move the pricing video to ready to edit",
   "Tag Nathan on the testimonial video and ask him to check it",
+  "Tell the editor team we're pausing new briefs this week",
   "Schedule the pricing video for today",
   "Add an idea about a behind-the-scenes reel",
 ];
@@ -110,6 +116,22 @@ export function AndreasChat({ autoAsk }: { autoAsk?: { text: string; nonce: numb
         case "tag_teammate": {
           res = await sendMessageAction(action.videoId, action.body);
           successMessage = `Tagged ${action.personName} on "${action.videoTitle}".`;
+          break;
+        }
+        case "message_person": {
+          res =
+            action.personIds.length === 1 && action.videoId
+              ? await sendMessageAction(action.videoId, action.body)
+              : await messageTeamAction(
+                  action.personIds,
+                  action.body,
+                  action.videoId && action.videoTitle
+                    ? { id: action.videoId, title: action.videoTitle }
+                    : null
+                );
+          successMessage = action.videoTitle
+            ? `Messaged ${action.personLabel} on "${action.videoTitle}".`
+            : `Messaged ${action.personLabel}.`;
           break;
         }
         case "reassign_editor": {
