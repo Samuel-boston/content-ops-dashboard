@@ -12,9 +12,16 @@ export const metadata: Metadata = {
 
 // Every route reads auth cookies, so all rendering is dynamic already.
 
+// Runs before paint so a stored light/dark choice never flashes the other
+// theme first. Reads the same "theme" localStorage key as ThemeToggle.
+const THEME_BOOTSTRAP = `(function(){try{var t=localStorage.getItem("theme");if(t==="light"||t==="dark"){document.documentElement.setAttribute("data-theme",t);}}catch(e){}})();`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
+      </head>
       <body className="min-h-full bg-app text-ink font-sans">{children}</body>
     </html>
   );

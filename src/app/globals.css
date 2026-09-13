@@ -56,6 +56,59 @@ html {
   color-scheme: dark;
 }
 
+/* ===========================================================================
+   Light theme
+   Same surfaces-step-forward logic as the dark palette, just inverted: the
+   canvas is the dimmest thing on the page and raised surfaces read whiter.
+   Applies when explicitly chosen (data-theme="light") or, absent a choice,
+   when the OS itself is in light mode.
+   =========================================================================== */
+:root[data-theme="light"],
+:root:not([data-theme]) {
+  @media (prefers-color-scheme: light) {
+    --color-app: #f3f3f6;
+    --color-panel: #ffffff;
+    --color-card: #ffffff;
+    --color-raised: #eef0f4;
+    --color-hover: #e6e8ee;
+
+    --color-line: #e3e4ea;
+    --color-line-strong: #cdcfd9;
+
+    --color-ink: #17171d;
+    --color-ink-2: #55555f;
+    --color-ink-3: #82828d;
+
+    --color-accent: #7c5cff;
+    --color-accent-hi: #6a45f0;
+    --color-accent-lo: #5b3fd6;
+    --color-accent-ghost: #7c5cff14;
+
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --color-app: #f3f3f6;
+  --color-panel: #ffffff;
+  --color-card: #ffffff;
+  --color-raised: #eef0f4;
+  --color-hover: #e6e8ee;
+
+  --color-line: #e3e4ea;
+  --color-line-strong: #cdcfd9;
+
+  --color-ink: #17171d;
+  --color-ink-2: #55555f;
+  --color-ink-3: #82828d;
+
+  --color-accent: #7c5cff;
+  --color-accent-hi: #6a45f0;
+  --color-accent-lo: #5b3fd6;
+  --color-accent-ghost: #7c5cff14;
+
+  color-scheme: light;
+}
+
 body {
   background: var(--color-app);
   color: var(--color-ink);

@@ -9,6 +9,7 @@ import { signOutAction } from "@/app/actions";
 import { NotificationBell } from "@/components/NotificationBell";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { NeedsAttentionBell } from "@/components/NeedsAttentionBell";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { IconChevronDown, IconComment, IconSettings } from "@/components/ui/icons";
 import type { AppNotification, Profile } from "@/lib/types";
 import type { StalledVideo } from "@/app/overview-actions";
@@ -359,6 +360,9 @@ export function Nav({
                       Settings
                     </Link>
                   ) : null}
+                  <div className="border-t border-line">
+                    <ThemeToggle />
+                  </div>
                   <form action={async () => { await signOutAction(); }}>
                     <button className="w-full px-3 py-1.5 text-left text-ink-2 hover:bg-hover">
                       Sign out
