@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { getVideo, listTaxonomyCustoms } from "@/app/actions";
 import { briefVoiceUrl, listHookSnippets } from "@/app/script-actions";
+import { listCarouselImages } from "@/app/carousel-actions";
 import { ScriptWorkspace } from "@/components/script/ScriptWorkspace";
 
 export default async function ScriptPage({ params }: PageProps<"/videos/[id]/script">) {
@@ -10,10 +11,11 @@ export default async function ScriptPage({ params }: PageProps<"/videos/[id]/scr
   // get the writing room.
   const viewer = await requireRole("owner", "admin");
 
-  const [video, customs, snippets] = await Promise.all([
+  const [video, customs, snippets, carouselSlides] = await Promise.all([
     getVideo(id),
     listTaxonomyCustoms(),
     listHookSnippets(),
+    listCarouselImages(id),
   ]);
   if (!video) notFound();
 
@@ -33,6 +35,7 @@ export default async function ScriptPage({ params }: PageProps<"/videos/[id]/scr
       }}
       briefVoiceUrl={voiceUrl}
       snippets={snippets}
+      carouselSlides={carouselSlides}
     />
   );
 }

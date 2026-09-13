@@ -295,6 +295,8 @@ export interface CarouselImage {
   position: number;
   storage_path: string | null;
   size_bytes: number | null;
+  /** The slide's own on-image text — written at the scripting stage, often before an image exists. */
+  caption: string | null;
   uploaded_by: string | null;
   created_at: string;
   signed_url?: string;

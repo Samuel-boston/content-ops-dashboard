@@ -12,6 +12,8 @@ import { StageBack } from "@/components/pipeline/StageBack";
 import { PlanningStageBar } from "@/components/pipeline/PlanningStageBar";
 import { Teleprompter } from "@/components/script/Teleprompter";
 import { HookLibrary } from "@/components/script/HookLibrary";
+import { CarouselSlides } from "@/components/script/CarouselSlides";
+import { isCarouselFormat } from "@/lib/taxonomy";
 import {
   IconCheck,
   IconChart,
@@ -34,7 +36,7 @@ import {
 import { updateVideoAction } from "@/app/actions";
 import { uploadCommentMedia } from "@/lib/upload-client";
 import { readTime } from "@/lib/format";
-import { type HookSnippet, type Profile, type Video } from "@/lib/types";
+import { type CarouselImage, type HookSnippet, type Profile, type Video } from "@/lib/types";
 
 /**
  * The client's writing room. Deliberately one job per pane: the script on the
@@ -51,12 +53,14 @@ export function ScriptWorkspace({
   customs,
   briefVoiceUrl,
   snippets,
+  carouselSlides,
 }: {
   video: Video;
   viewer: Profile;
   customs: { content_pillar: string[]; format: string[]; platform: string[] };
   briefVoiceUrl: string | null;
   snippets: HookSnippet[];
+  carouselSlides: CarouselImage[];
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -747,6 +751,10 @@ export function ScriptWorkspace({
 
       {/* ---- Everything about the video ---- */}
       <aside className="min-w-0 space-y-4">
+        {isCarouselFormat(video.formats) ? (
+          <CarouselSlides videoId={video.id} slides={carouselSlides} />
+        ) : null}
+
         <section className="rounded-2xl border border-line bg-card p-4">
           <h2 className="mb-2 text-sm font-semibold">Spoken brief</h2>
           <p className="mb-2.5 text-xs leading-relaxed text-ink-3">

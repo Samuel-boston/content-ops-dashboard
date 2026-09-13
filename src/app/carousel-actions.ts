@@ -40,6 +40,12 @@ export async function createCarouselUploadUrlAction(videoId: string, filename: s
   return { ok: true as const, path, signedUrl: data.signedUrl };
 }
 
+/**
+ * A slide written at the scripting stage (caption, no image yet) should get
+ * its image here rather than a brand new slide appearing after it — so this
+ * fills the earliest empty slot (by position) if one exists, and only
+ * appends a new row once every existing slide already has an image.
+ */
 export async function registerCarouselImageAction(input: {
   videoId: string;
   storagePath: string;
@@ -47,21 +53,102 @@ export async function registerCarouselImageAction(input: {
 }) {
   const me = await requireUser();
   const supabase = await supabaseServer();
-  // Append to the end — carousels display in upload order.
+
+  const { data: openSlot } = await supabase
+    .from("carousel_images")
+    .select("id")
+    .eq("video_id", input.videoId)
+    .is("storage_path", null)
+    .order("position", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const { error } = openSlot
+    ? await supabase
+        .from("carousel_images")
+        .update({ storage_path: input.storagePath, size_bytes: input.sizeBytes ?? null, uploaded_by: me.id })
+        .eq("id", openSlot.id)
+    : await (async () => {
+        const { count } = await supabase
+          .from("carousel_images")
+          .select("id", { count: "exact", head: true })
+          .eq("video_id", input.videoId);
+        return supabase.from("carousel_images").insert({
+          video_id: input.videoId,
+          position: count ?? 0,
+          storage_path: input.storagePath,
+          size_bytes: input.sizeBytes ?? null,
+          uploaded_by: me.id,
+        });
+      })();
+  if (error) return { error: error.message };
+  revalidatePath(`/videos/${input.videoId}`);
+  revalidatePath(`/videos/${input.videoId}/script`);
+  revalidatePath(`/videos/${input.videoId}/review`);
+  return { ok: true as const };
+}
+
+/**
+ * A slide written before it has an image — the scripting stage's per-slide
+ * text, filled in on the same table an uploaded image will later join
+ * (matched by position). storage_path stays null until Ready to Film/editing
+ * uploads the actual slide.
+ */
+export async function createCarouselSlideAction(videoId: string) {
+  const me = await requireUser();
+  const supabase = await supabaseServer();
   const { count } = await supabase
     .from("carousel_images")
     .select("id", { count: "exact", head: true })
-    .eq("video_id", input.videoId);
+    .eq("video_id", videoId);
   const { error } = await supabase.from("carousel_images").insert({
-    video_id: input.videoId,
+    video_id: videoId,
     position: count ?? 0,
-    storage_path: input.storagePath,
-    size_bytes: input.sizeBytes ?? null,
+    caption: "",
     uploaded_by: me.id,
   });
   if (error) return { error: error.message };
-  revalidatePath(`/videos/${input.videoId}`);
-  revalidatePath(`/videos/${input.videoId}/review`);
+  revalidatePath(`/videos/${videoId}/script`);
+  return { ok: true as const };
+}
+
+export async function updateCarouselCaptionAction(id: string, videoId: string, caption: string) {
+  await requireUser();
+  const supabase = await supabaseServer();
+  const { error } = await supabase
+    .from("carousel_images")
+    .update({ caption: caption.trim() || null })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath(`/videos/${videoId}`);
+  revalidatePath(`/videos/${videoId}/script`);
+  revalidatePath(`/videos/${videoId}/review`);
+  return { ok: true as const };
+}
+
+/** Swaps this slide's position with its neighbor — good enough for a handful of slides without pulling in a drag-and-drop library. */
+export async function moveCarouselImageAction(id: string, videoId: string, direction: "left" | "right") {
+  await requireUser();
+  const supabase = await supabaseServer();
+  const { data: rows } = await supabase
+    .from("carousel_images")
+    .select("id, position")
+    .eq("video_id", videoId)
+    .order("position", { ascending: true });
+  const ordered = rows ?? [];
+  const i = ordered.findIndex((r) => r.id === id);
+  const j = direction === "left" ? i - 1 : i + 1;
+  if (i < 0 || j < 0 || j >= ordered.length) return { ok: true as const };
+  const a = ordered[i];
+  const b = ordered[j];
+  const [{ error: e1 }, { error: e2 }] = await Promise.all([
+    supabase.from("carousel_images").update({ position: b.position }).eq("id", a.id),
+    supabase.from("carousel_images").update({ position: a.position }).eq("id", b.id),
+  ]);
+  if (e1 || e2) return { error: (e1 ?? e2)!.message };
+  revalidatePath(`/videos/${videoId}`);
+  revalidatePath(`/videos/${videoId}/script`);
+  revalidatePath(`/videos/${videoId}/review`);
   return { ok: true as const };
 }
 

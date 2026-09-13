@@ -7,8 +7,11 @@ import { useToast } from "@/components/ui/Toast";
 import {
   createCarouselUploadUrlAction,
   deleteCarouselImageAction,
+  moveCarouselImageAction,
   registerCarouselImageAction,
+  updateCarouselCaptionAction,
 } from "@/app/carousel-actions";
+import { IconChevronDown } from "@/components/ui/icons";
 import type { CarouselImage } from "@/lib/types";
 
 /**
@@ -57,29 +60,77 @@ export function CarouselDeliver({ videoId, images }: { videoId: string; images: 
   return (
     <div className="space-y-2.5">
       {images.length > 0 ? (
-        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+        <div className="space-y-2">
           {images.map((img, i) => (
-            <div key={img.id} className="group relative aspect-square overflow-hidden rounded-lg bg-card">
-              {img.signed_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={img.signed_url} alt={`Slide ${i + 1}`} className="h-full w-full object-cover" />
-              ) : null}
-              <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 text-[10px] text-white">
-                {i + 1}
+            <div key={img.id} className="flex gap-2 rounded-lg border border-line bg-card p-2">
+              <span className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-app">
+                {img.signed_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={img.signed_url} alt={`Slide ${i + 1}`} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="flex h-full items-center justify-center text-center text-[10px] leading-tight text-ink-3">
+                    No image yet
+                  </span>
+                )}
+                <span className="absolute bottom-0.5 left-0.5 rounded bg-black/60 px-1 text-[9px] text-white">
+                  {i + 1}
+                </span>
               </span>
-              <button
-                type="button"
-                onClick={() =>
+              <textarea
+                defaultValue={img.caption ?? ""}
+                rows={2}
+                placeholder={`Slide ${i + 1} text…`}
+                onBlur={(e) => {
+                  if (e.target.value === (img.caption ?? "")) return;
                   startTransition(async () => {
-                    await deleteCarouselImageAction(img.id, videoId);
-                    router.refresh();
-                  })
-                }
-                className="absolute right-1 top-1 hidden rounded-full bg-black/60 px-1.5 text-xs leading-5 text-white group-hover:block hover:bg-danger"
-                aria-label="Remove"
-              >
-                ×
-              </button>
+                    await updateCarouselCaptionAction(img.id, videoId, e.target.value);
+                  });
+                }}
+                className="min-w-0 flex-1 resize-none rounded-md bg-raised px-2 py-1.5 text-xs placeholder:text-ink-3 focus:outline-none"
+              />
+              <div className="flex shrink-0 flex-col items-center gap-0.5">
+                <button
+                  type="button"
+                  disabled={i === 0}
+                  title="Move earlier"
+                  onClick={() =>
+                    startTransition(async () => {
+                      await moveCarouselImageAction(img.id, videoId, "left");
+                      router.refresh();
+                    })
+                  }
+                  className="rotate-180 rounded p-1 text-ink-3 hover:bg-hover hover:text-ink disabled:opacity-30"
+                >
+                  <IconChevronDown size={12} />
+                </button>
+                <button
+                  type="button"
+                  disabled={i === images.length - 1}
+                  title="Move later"
+                  onClick={() =>
+                    startTransition(async () => {
+                      await moveCarouselImageAction(img.id, videoId, "right");
+                      router.refresh();
+                    })
+                  }
+                  className="rounded p-1 text-ink-3 hover:bg-hover hover:text-ink disabled:opacity-30"
+                >
+                  <IconChevronDown size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    startTransition(async () => {
+                      await deleteCarouselImageAction(img.id, videoId);
+                      router.refresh();
+                    })
+                  }
+                  aria-label="Remove"
+                  className="rounded p-1 text-ink-3 hover:bg-hover hover:text-danger"
+                >
+                  ×
+                </button>
+              </div>
             </div>
           ))}
         </div>

@@ -34,6 +34,12 @@ export function CarouselViewer({ images }: { images: CarouselImage[] }) {
         <span className="text-sm text-ink-3">Image unavailable.</span>
       )}
 
+      {img.caption?.trim() ? (
+        <p className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-6 pb-5 pt-8 text-center text-sm font-medium leading-snug text-white">
+          {img.caption}
+        </p>
+      ) : null}
+
       {images.length > 1 ? (
         <>
           <button
@@ -52,7 +58,7 @@ export function CarouselViewer({ images }: { images: CarouselImage[] }) {
           >
             ›
           </button>
-          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-2.5 py-1 text-xs text-white">
+          <div className="absolute right-3 top-3 rounded-full bg-black/60 px-2.5 py-1 text-xs text-white">
             {index + 1} / {images.length}
           </div>
         </>
