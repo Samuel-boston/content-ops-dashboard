@@ -13,7 +13,6 @@ import { TranscriptTab } from "@/components/workspace/TranscriptTab";
 import { PostTab } from "@/components/workspace/PostTab";
 import { FilesTab } from "@/components/workspace/FilesTab";
 import { ChatTab } from "@/components/workspace/ChatTab";
-import { HookPane } from "@/components/workspace/HookPane";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type { Selection } from "@/components/workspace/Timeline";
@@ -268,8 +267,10 @@ export function VideoWorkspace({
 
         {tab === "files" ? (
           <FilesTab
+            video={video}
             videoId={video.id}
             cuts={cuts}
+            comments={comments}
             activeCutId={activeCut?.id ?? ""}
             onCutChange={(id) => {
               setActiveCutId(id);
@@ -430,26 +431,12 @@ export function VideoWorkspace({
         <div className="min-h-0 flex-1">{mobilePane === "player" ? player : panel}</div>
       </div>
 
-      {/* Desktop: player | tabs | this video's cuts */}
+      {/* Desktop: player | tabs (comments, files — cuts & hooks live there too) */}
       {/* grid-rows-[minmax(0,1fr)] + min-h-0 panes: without both, the row is
           sized by the tallest pane and the player scrolls off. */}
-      <div className="hidden h-[calc(100dvh-3.5rem)] lg:grid lg:grid-cols-[minmax(380px,1fr)_minmax(320px,360px)] lg:grid-rows-[minmax(0,1fr)] xl:grid-cols-[minmax(420px,1fr)_minmax(330px,370px)_minmax(260px,300px)]">
+      <div className="hidden h-[calc(100dvh-3.5rem)] lg:grid lg:grid-cols-[minmax(420px,1fr)_minmax(330px,420px)] lg:grid-rows-[minmax(0,1fr)]">
         <div className="min-h-0 min-w-0 overflow-hidden border-r border-line">{player}</div>
-        <div className="min-h-0 min-w-0 overflow-hidden border-r border-line">{panel}</div>
-        <div className="hidden min-h-0 min-w-0 overflow-hidden xl:block">
-          <HookPane
-            video={video}
-            cuts={cuts}
-            comments={comments}
-            activeCutId={activeCut.id}
-            onCutChange={(id) => {
-              setActiveCutId(id);
-              const next = cuts.find((c) => c.id === id)?.versions[0];
-              setVersionId(next?.id ?? "");
-            }}
-            canEdit={viewer.role !== "editor" || video.assigned_editor_id === viewer.id}
-          />
-        </div>
+        <div className="min-h-0 min-w-0 overflow-hidden">{panel}</div>
       </div>
 
       <ConfirmDialog

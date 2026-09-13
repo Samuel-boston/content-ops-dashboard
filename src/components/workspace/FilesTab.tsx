@@ -4,7 +4,7 @@ import { VideoFootage } from "@/components/VideoFootage";
 import { VideoReferences } from "@/components/VideoReferences";
 import { ShareLinks } from "@/components/workspace/ShareLinks";
 import { CutManager } from "@/components/workspace/CutManager";
-import type { CutWithVersions, GuestLink, ReferenceItem, VideoAsset } from "@/lib/types";
+import type { CutComment, CutWithVersions, GuestLink, ReferenceItem, Video, VideoAsset } from "@/lib/types";
 
 /**
  * Everything file-shaped for this video: the cut's version stack, hook
@@ -12,8 +12,10 @@ import type { CutWithVersions, GuestLink, ReferenceItem, VideoAsset } from "@/li
  * and reference material.
  */
 export function FilesTab({
+  video,
   videoId,
   cuts,
+  comments,
   activeCutId,
   onCutChange,
   assets,
@@ -24,8 +26,10 @@ export function FilesTab({
   guestLinks,
   canShare,
 }: {
+  video: Pick<Video, "script_hooks">;
   videoId: string;
   cuts: CutWithVersions[];
+  comments: CutComment[];
   activeCutId: string;
   onCutChange: (id: string) => void;
   assets: VideoAsset[];
@@ -39,8 +43,10 @@ export function FilesTab({
   return (
     <div className="h-full space-y-5 overflow-y-auto px-3 py-3">
       <CutManager
+        video={video}
         videoId={videoId}
         cuts={cuts}
+        comments={comments}
         activeCutId={activeCutId}
         onCutChange={onCutChange}
         streamConfigured={streamConfigured}

@@ -6,15 +6,16 @@ import { useRouter } from "next/navigation";
 import { UploadDropzone } from "@/components/engine/UploadDropzone";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { IconLayers, IconPlus, IconTrash, IconUndo } from "@/components/ui/icons";
+import { IconCheck, IconComment, IconLayers, IconPlus, IconSparkles, IconTrash, IconUndo } from "@/components/ui/icons";
 import {
   addHookVariantAction,
   deleteCutAction,
+  postVariantsToDriveAction,
   revertToVersionAction,
   updateCutAction,
 } from "@/app/engine-actions";
 import { timecode } from "@/lib/format";
-import type { CutWithVersions } from "@/lib/types";
+import type { CutComment, CutWithVersions, Video } from "@/lib/types";
 
 /**
  * The cut's version stack (upload, history, revert) plus its hook variants —
@@ -25,15 +26,19 @@ import type { CutWithVersions } from "@/lib/types";
  * an editor's own working view — not a rebuild that quietly drifts from it.
  */
 export function CutManager({
+  video,
   videoId,
   cuts,
+  comments,
   activeCutId,
   onCutChange,
   streamConfigured,
   canEdit,
 }: {
+  video: Pick<Video, "script_hooks">;
   videoId: string;
   cuts: CutWithVersions[];
+  comments: CutComment[];
   activeCutId: string;
   onCutChange: (id: string) => void;
   streamConfigured: boolean;
@@ -46,9 +51,15 @@ export function CutManager({
   const [hookLabel, setHookLabel] = useState("");
   const [hookNotes, setHookNotes] = useState("");
   const [confirmCut, setConfirmCut] = useState<CutWithVersions | null>(null);
+  const [posting, setPosting] = useState<"idle" | "sending" | "done">("idle");
 
   const activeCut = cuts.find((c) => c.id === activeCutId) ?? cuts[0];
   const hooks = cuts.filter((c) => c.kind === "hook");
+  const scriptHooks = video.script_hooks ?? [];
+  // One variant per scripted hook beyond the first is the working assumption.
+  const expected = Math.max(0, scriptHooks.length);
+  const openFor = (cutId: string) =>
+    comments.filter((c) => c.cut_id === cutId && !c.resolved && !c.parent_comment_id).length;
 
   return (
     <>
@@ -119,7 +130,7 @@ export function CutManager({
 
       {/* Hook variants */}
       <section>
-        <div className="mb-2 flex items-center gap-2">
+        <div className="mb-1 flex items-center gap-2">
           <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
             Hook variations
           </h3>
@@ -134,60 +145,141 @@ export function CutManager({
             </button>
           ) : null}
         </div>
+        <p className="mb-2 text-[11px] text-ink-3">
+          {expected > 1
+            ? `Script has ${expected} hooks · ${hooks.length} variant${hooks.length === 1 ? "" : "s"} uploaded`
+            : "Single hook in the script — no variants expected"}
+        </p>
 
         <div className="space-y-1.5">
-          {hooks.map((h) => (
-            <div
-              key={h.id}
-              className={`rounded-lg border px-2.5 py-2 ${
-                h.id === activeCutId ? "border-accent bg-accent-ghost" : "border-line bg-card"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => onCutChange(h.id)}
-                  className="min-w-0 flex-1 truncate text-left text-xs font-medium hover:text-accent-hi"
-                >
-                  {h.label}
-                </button>
-                <span className="text-[10px] text-ink-3">{h.versions.length} ver.</span>
-                {canEdit ? (
+          {hooks.map((h) => {
+            const top = h.versions[0];
+            const open = openFor(h.id);
+            return (
+              <div
+                key={h.id}
+                className={`rounded-lg border p-2 ${
+                  h.id === activeCutId ? "border-accent bg-accent-ghost" : "border-line bg-card"
+                }`}
+              >
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setConfirmCut(h)}
-                    aria-label={`Delete ${h.label}`}
-                    className="rounded p-1 text-ink-3 hover:bg-hover hover:text-danger"
+                    onClick={() => onCutChange(h.id)}
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
                   >
-                    <IconTrash size={12} />
+                    <span className="relative shrink-0 overflow-hidden rounded-md bg-app">
+                      {top?.thumbnail_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={top.thumbnail_url} alt="" className="h-10 w-16 object-cover" />
+                      ) : (
+                        <span className="flex h-10 w-16 items-center justify-center text-ink-3">
+                          <IconLayers size={14} />
+                        </span>
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <span className="min-w-0 flex-1 truncate text-xs font-medium">{h.label}</span>
+                        {open ? (
+                          <span className="flex shrink-0 items-center gap-0.5 rounded bg-accent px-1.5 text-[10px] font-semibold text-white">
+                            <IconComment size={9} />
+                            {open}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="text-[10px] text-ink-3">
+                        {h.versions.length} ver.{top?.duration_seconds ? ` · ${timecode(top.duration_seconds)}` : ""}
+                      </span>
+                    </span>
                   </button>
-                ) : null}
-              </div>
-              <textarea
-                defaultValue={h.notes ?? ""}
-                readOnly={!canEdit}
-                rows={2}
-                placeholder="Notes on this hook…"
-                onBlur={(e) => {
-                  if (!canEdit || e.target.value === (h.notes ?? "")) return;
-                  startTransition(async () => {
-                    const res = await updateCutAction(h.id, {
-                      notes: e.target.value.trim() || null,
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmCut(h)}
+                      aria-label={`Delete ${h.label}`}
+                      className="shrink-0 rounded p-1 text-ink-3 hover:bg-hover hover:text-danger"
+                    >
+                      <IconTrash size={12} />
+                    </button>
+                  ) : null}
+                </div>
+                <textarea
+                  defaultValue={h.notes ?? ""}
+                  readOnly={!canEdit}
+                  rows={2}
+                  placeholder="Notes on this hook…"
+                  onBlur={(e) => {
+                    if (!canEdit || e.target.value === (h.notes ?? "")) return;
+                    startTransition(async () => {
+                      const res = await updateCutAction(h.id, {
+                        notes: e.target.value.trim() || null,
+                      });
+                      if (res?.error) toast.error(res.error);
                     });
-                    if (res?.error) toast.error(res.error);
-                  });
-                }}
-                className="mt-1.5 w-full resize-none rounded-md bg-raised px-2 py-1.5 text-[11px] placeholder:text-ink-3 focus:outline-none"
-              />
-            </div>
-          ))}
+                  }}
+                  className="mt-1.5 w-full resize-none rounded-md bg-raised px-2 py-1.5 text-[11px] placeholder:text-ink-3 focus:outline-none"
+                />
+              </div>
+            );
+          })}
           {!hooks.length ? (
             <p className="text-xs text-ink-3">
               No hook variations yet. Each one is a full cut — its own upload, versions and
               comments.
             </p>
           ) : null}
+          {expected > 1 && hooks.length < expected - 1 ? (
+            <p className="rounded-lg border border-dashed border-line-strong px-3 py-2.5 text-center text-[11px] leading-snug text-ink-3">
+              The script has {expected} hooks. Once the main cut is approved this video goes to
+              Awaiting Variants until the rest are uploaded.
+            </p>
+          ) : null}
         </div>
+
+        {canEdit && hooks.length > 0 ? (
+          <button
+            type="button"
+            disabled={posting === "sending"}
+            onClick={() => {
+              setPosting("sending");
+              startTransition(async () => {
+                const res = await postVariantsToDriveAction(videoId);
+                if (res?.ok) {
+                  setPosting("done");
+                  toast.success(
+                    `Sent ${res.uploaded}/${res.total} variant${res.total === 1 ? "" : "s"} to Drive.` +
+                      (res.failed.length ? ` (${res.failed.join(", ")} skipped.)` : "")
+                  );
+                  setTimeout(() => setPosting("idle"), 2200);
+                } else {
+                  setPosting("idle");
+                  toast.error(res?.error ?? "Couldn't send the variants.");
+                }
+              });
+            }}
+            className={`mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-[11px] font-medium transition ${
+              posting === "done" ? "bg-ok/15 text-ok" : "bg-accent-ghost text-accent-hi hover:bg-accent/25"
+            } disabled:opacity-70`}
+          >
+            {posting === "sending" ? (
+              <>
+                <span className="h-2.5 w-2.5 animate-spin rounded-full border-[1.5px] border-accent-hi border-t-transparent" />
+                Sending to Drive…
+              </>
+            ) : posting === "done" ? (
+              <>
+                <IconCheck size={12} />
+                Sent to Drive
+              </>
+            ) : (
+              <>
+                <IconSparkles size={12} />
+                Post variants to Drive
+              </>
+            )}
+          </button>
+        ) : null}
 
         {addingHook ? (
           <div className="mt-2 space-y-1.5 rounded-lg border border-line bg-card p-2.5">
@@ -204,6 +296,25 @@ export function CutManager({
               placeholder="What's different about this hook?"
               className="w-full resize-none rounded-md bg-raised px-2 py-1.5 text-xs placeholder:text-ink-3 focus:outline-none"
             />
+            {/* Offer the scripted hooks as one-tap labels — they're already written. */}
+            {scriptHooks.length > 1 ? (
+              <div className="flex flex-wrap gap-1">
+                {scriptHooks.map((h, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      setHookLabel(`Hook ${String.fromCharCode(65 + i)}`);
+                      setHookNotes(h);
+                    }}
+                    title={h}
+                    className="max-w-full truncate rounded-md border border-line px-2 py-1 text-[10px] text-ink-3 hover:border-accent hover:text-ink"
+                  >
+                    Hook {String.fromCharCode(65 + i)}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <div className="flex justify-end gap-1.5">
               <button
                 type="button"
