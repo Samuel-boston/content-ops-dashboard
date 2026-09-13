@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth";
-import { storageUsage } from "@/app/settings-extra-actions";
+import { lastBackup, storageUsage } from "@/app/settings-extra-actions";
 import { StorageUsage } from "@/components/StorageUsage";
+import { BackupStatus } from "@/components/BackupStatus";
 import {
   brandingFor,
   getWorkspaceSettings,
@@ -12,10 +13,11 @@ import { BrandingForm } from "@/components/BrandingForm";
 
 export default async function SettingsPage() {
   await requireRole("owner");
-  const [settings, usage, branding] = await Promise.all([
+  const [settings, usage, branding, backup] = await Promise.all([
     getWorkspaceSettings(),
     storageUsage(),
     brandingFor(),
+    lastBackup(),
   ]);
   return (
     <div className="max-w-2xl space-y-4">
@@ -32,6 +34,7 @@ export default async function SettingsPage() {
         status={integrationStatus(settings)}
       />
       <StorageUsage usage={usage} />
+      <BackupStatus last={backup} driveConfigured={integrationStatus(settings).drive} />
     </div>
   );
 }
