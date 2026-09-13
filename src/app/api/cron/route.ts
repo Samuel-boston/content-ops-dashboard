@@ -7,8 +7,11 @@ import { runBackupJob } from "@/lib/backup";
 import { STALLED_AFTER_DAYS, STATUS_LABELS, type VideoStatus } from "@/lib/types";
 
 /**
- * Periodic housekeeping. Point a scheduler (Vercel Cron, Netlify Scheduled
- * Functions, cron-job.org …) at `/api/cron?key=$CRON_SECRET` — hourly is plenty.
+ * Periodic housekeeping. `vercel.json` schedules this daily and Vercel signs
+ * the request itself (an `Authorization: Bearer $CRON_SECRET` header it adds
+ * automatically — nothing to configure). An external scheduler (cron-job.org,
+ * Netlify Scheduled Functions …) can still call `/api/cron?key=$CRON_SECRET`
+ * the same way it always could; either credential is accepted.
  *   - flag videos stalled in one stage too long (deduped per video)
  *   - auto-archive unattached references after ~30 days of no activity
  *   - run any due scheduled publish jobs
@@ -17,7 +20,12 @@ import { STALLED_AFTER_DAYS, STATUS_LABELS, type VideoStatus } from "@/lib/types
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  if (process.env.CRON_SECRET && url.searchParams.get("key") !== process.env.CRON_SECRET) {
+  const secret = process.env.CRON_SECRET;
+  const authorized =
+    !secret ||
+    url.searchParams.get("key") === secret ||
+    req.headers.get("authorization") === `Bearer ${secret}`;
+  if (!authorized) {
     return new Response("unauthorized", { status: 401 });
   }
   const db = supabaseAdmin();
