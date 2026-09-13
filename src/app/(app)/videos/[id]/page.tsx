@@ -144,6 +144,8 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
           references={references}
           music={music}
           briefVoiceUrl={briefVoice}
+          guestLinks={guestLinks}
+          driveConfigured={integrationStatus(settings).drive}
         />
       );
     }

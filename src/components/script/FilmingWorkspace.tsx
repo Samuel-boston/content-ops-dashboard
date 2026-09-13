@@ -9,6 +9,7 @@ import { StageMove } from "@/components/pipeline/StageMove";
 import { StageBack } from "@/components/pipeline/StageBack";
 import { Teleprompter } from "@/components/script/Teleprompter";
 import { VideoFootage } from "@/components/VideoFootage";
+import { ShareLinks } from "@/components/workspace/ShareLinks";
 import { VoicePlayer, VoiceRecorder, type VoiceCapture } from "@/components/workspace/Voice";
 import { uploadCommentMedia } from "@/lib/upload-client";
 import { saveBriefVoiceAction } from "@/app/script-actions";
@@ -16,7 +17,7 @@ import { buildEditorBriefAction } from "@/app/ai-actions";
 import { updateVideoAction } from "@/app/actions";
 import { IconChart, IconCheck, IconFile, IconMic, IconSparkles, IconTrash } from "@/components/ui/icons";
 import { STATUS_COLOR, STATUS_LABELS } from "@/lib/types";
-import type { Video, VideoAsset } from "@/lib/types";
+import type { GuestLink, Video, VideoAsset } from "@/lib/types";
 
 /**
  * The assembly step between "script done" and "sent to editors" — everything
@@ -32,11 +33,13 @@ export function FilmingWorkspace({
   assets,
   driveConfigured,
   briefVoiceUrl,
+  guestLinks,
 }: {
   video: Video;
   assets: VideoAsset[];
   driveConfigured: boolean;
   briefVoiceUrl: string | null;
+  guestLinks: GuestLink[];
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -176,9 +179,14 @@ export function FilmingWorkspace({
             </button>
           </section>
 
-          <section className="rounded-2xl border border-line bg-card p-4">
-            <h2 className="mb-2 text-sm font-semibold">Raw footage</h2>
-            <VideoFootage videoId={video.id} assets={assets} driveConfigured={driveConfigured} />
+          <section className="space-y-4 rounded-2xl border border-line bg-card p-4">
+            <div>
+              <h2 className="mb-2 text-sm font-semibold">Raw footage</h2>
+              <VideoFootage videoId={video.id} assets={assets} driveConfigured={driveConfigured} />
+            </div>
+            <div className="border-t border-line pt-3">
+              <ShareLinks videoId={video.id} links={guestLinks} canManage />
+            </div>
           </section>
         </div>
 

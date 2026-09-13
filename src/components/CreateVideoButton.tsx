@@ -7,10 +7,12 @@ import { createVideoAction } from "@/app/actions";
 import { saveBriefVoiceAction } from "@/app/script-actions";
 import { draftIdeaFromRecordingAction } from "@/app/ai-actions";
 import { createFootageUploadUrlAction, registerAssetAction } from "@/app/asset-actions";
+import { createGuestLinkAction } from "@/app/guest-actions";
 import { uploadCommentMedia } from "@/lib/upload-client";
 import { TaxonomyMultiSelect } from "@/components/TaxonomyMultiSelect";
 import { VoiceRecorder, type VoiceCapture } from "@/components/workspace/Voice";
-import { IconFile, IconMic, IconPlus, IconSparkles, IconX } from "@/components/ui/icons";
+import { QR } from "@/components/ui/QR";
+import { IconCamera, IconFile, IconMic, IconPlus, IconSparkles, IconX } from "@/components/ui/icons";
 import { displayName } from "@/lib/format";
 import {
   STATUS_COLOR,
@@ -93,6 +95,8 @@ export function NewVideoDialog({
   );
   const [footageFile, setFootageFile] = useState<File | null>(null);
   const [footageProgress, setFootageProgress] = useState<number | null>(null);
+  const [wantsQr, setWantsQr] = useState(false);
+  const [qrStep, setQrStep] = useState<{ url: string; dest: string } | null>(null);
   const footageInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
@@ -107,6 +111,8 @@ export function NewVideoDialog({
     setDrafting(false);
     setVoice(null);
     setFootageFile(null);
+    setWantsQr(false);
+    setQrStep(null);
   }
 
   async function onVoiceDone(capture: VoiceCapture) {
@@ -132,6 +138,43 @@ export function NewVideoDialog({
   }
 
   if (!open) return null;
+
+  if (qrStep) {
+    return (
+      <div
+        role="dialog"
+        aria-modal
+        aria-label="Scan to upload footage"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-xs space-y-3 rounded-2xl border border-line bg-card p-5 text-center shadow-2xl"
+        >
+          <h2 className="text-sm font-semibold">Video created — scan to upload footage</h2>
+          <div className="flex justify-center">
+            <QR url={qrStep.url} />
+          </div>
+          <p className="text-[11px] leading-snug text-ink-3">
+            Point a phone camera at this. Footage uploads straight to the editors — the phone
+            never needs to be signed in.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              const dest = qrStep.dest;
+              onClose();
+              reset();
+              router.push(dest);
+            }}
+            className="w-full rounded-lg bg-accent py-1.5 text-sm font-medium text-white hover:bg-accent-hi"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const notesCopy = status ? (NOTES_COPY[status] ?? NOTES_COPY.ready_to_edit) : null;
   const canSubmit = status !== null && (status === "ideation" || title.trim().length > 0);
@@ -163,6 +206,18 @@ export function NewVideoDialog({
             // The recording was only staged — attach it to the video now
             // that it actually exists, so it's waiting on the Idea page.
             if (res?.id && voice) await saveBriefVoiceAction(res.id, voice);
+            // A phone-scanned upload needs the video to exist first — create
+            // the guest link now and hold the dialog open on a QR step
+            // instead of navigating straight away.
+            const dest = status;
+            const destHref = res?.id ? (DEST_AFTER_CREATE[dest]?.(res.id) ?? `/board?open=${res.id}`) : null;
+            if (res?.id && wantsQr && !footageFile) {
+              const link = await createGuestLinkAction({ videoId: res.id, purpose: "upload" });
+              if ("token" in link && link.token && destHref) {
+                setQrStep({ url: `${window.location.origin}/g/${link.token}`, dest: destHref });
+                return;
+              }
+            }
             // Same for footage — best-effort, a failure here shouldn't block
             // navigating to the video that was already created successfully.
             if (res?.id && footageFile) {
@@ -195,13 +250,12 @@ export function NewVideoDialog({
               setFootageProgress(null);
             }
             onClose();
-            const dest = status;
             reset();
             // Land straight in the workspace for whichever stage it started
             // in — the idea capture, the script editor, the shoot page, or
             // (for Ready to Edit) the shared workspace — instead of a
             // generic form.
-            if (res?.id) router.push(DEST_AFTER_CREATE[dest]?.(res.id) ?? `/board?open=${res.id}`);
+            if (destHref) router.push(destHref);
             else router.refresh();
           });
         }}
@@ -368,41 +422,69 @@ export function NewVideoDialog({
                 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-ink-3">
                   Raw footage <span className="normal-case text-ink-3">(optional)</span>
                 </span>
-                <div
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const f = e.dataTransfer.files?.[0];
-                    if (f) setFootageFile(f);
-                  }}
-                  onClick={() => footageInputRef.current?.click()}
-                  className="cursor-pointer rounded-lg border border-dashed border-line-strong px-3 py-3 text-center text-xs text-ink-2 hover:border-accent"
-                >
-                  {footageFile ? (
+                {wantsQr ? (
+                  <div className="rounded-lg border border-dashed border-accent bg-accent-ghost px-3 py-3 text-center text-xs text-ink-2">
                     <span className="flex items-center justify-center gap-1.5">
-                      <IconFile size={12} />
-                      {footageFile.name}
+                      <IconCamera size={13} className="text-accent-hi" />
+                      You&rsquo;ll get a QR to scan and upload from a phone right after creating.
                     </span>
-                  ) : (
-                    "Drop the raw footage here, or click to choose"
-                  )}
-                  <input
-                    ref={footageInputRef}
-                    type="file"
-                    accept="video/*"
-                    hidden
-                    onChange={(e) => setFootageFile(e.target.files?.[0] ?? null)}
-                  />
-                </div>
-                {footageFile ? (
-                  <button
-                    type="button"
-                    onClick={() => setFootageFile(null)}
-                    className="mt-1 text-[11px] text-ink-3 hover:text-danger"
-                  >
-                    Remove
-                  </button>
-                ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setWantsQr(false)}
+                      className="mt-1.5 text-[11px] text-ink-3 hover:text-ink"
+                    >
+                      Use a file instead
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const f = e.dataTransfer.files?.[0];
+                        if (f) setFootageFile(f);
+                      }}
+                      onClick={() => footageInputRef.current?.click()}
+                      className="cursor-pointer rounded-lg border border-dashed border-line-strong px-3 py-3 text-center text-xs text-ink-2 hover:border-accent"
+                    >
+                      {footageFile ? (
+                        <span className="flex items-center justify-center gap-1.5">
+                          <IconFile size={12} />
+                          {footageFile.name}
+                        </span>
+                      ) : (
+                        "Drop the raw footage here, or click to choose"
+                      )}
+                      <input
+                        ref={footageInputRef}
+                        type="file"
+                        accept="video/*"
+                        hidden
+                        onChange={(e) => setFootageFile(e.target.files?.[0] ?? null)}
+                      />
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
+                      {footageFile ? (
+                        <button
+                          type="button"
+                          onClick={() => setFootageFile(null)}
+                          className="text-[11px] text-ink-3 hover:text-danger"
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => setWantsQr(true)}
+                        className="ml-auto flex items-center gap-1 text-[11px] text-ink-3 hover:text-ink"
+                      >
+                        <IconCamera size={11} />
+                        Or scan a QR to upload from a phone instead
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             ) : null}
 

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { getVideo } from "@/app/actions";
 import { listAssets } from "@/app/asset-actions";
+import { listGuestLinks } from "@/app/guest-actions";
 import { getWorkspaceSettings, integrationStatus } from "@/lib/workspace";
 import { briefVoiceUrl } from "@/app/script-actions";
 import { FilmingWorkspace } from "@/components/script/FilmingWorkspace";
@@ -20,7 +21,11 @@ export default async function FilmPage({ params }: PageProps<"/videos/[id]/film"
   const video = await getVideo(id);
   if (!video) notFound();
 
-  const [assets, settings] = await Promise.all([listAssets(id), getWorkspaceSettings()]);
+  const [assets, settings, guestLinks] = await Promise.all([
+    listAssets(id),
+    getWorkspaceSettings(),
+    listGuestLinks(id),
+  ]);
 
   const voiceUrl = await briefVoiceUrl(video.brief_voice_path);
 
@@ -30,6 +35,7 @@ export default async function FilmPage({ params }: PageProps<"/videos/[id]/film"
       assets={assets}
       driveConfigured={integrationStatus(settings).drive}
       briefVoiceUrl={voiceUrl}
+      guestLinks={guestLinks}
     />
   );
 }

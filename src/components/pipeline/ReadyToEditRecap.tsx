@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { ViewMaterialsButton } from "@/components/pipeline/ViewMaterials";
+import { VideoFootage } from "@/components/VideoFootage";
+import { ShareLinks } from "@/components/workspace/ShareLinks";
 import { IconCheck } from "@/components/ui/icons";
 import { PRIORITY_LABELS } from "@/lib/types";
-import type { MusicTrack, ReferenceItem, Video, VideoAsset } from "@/lib/types";
+import type { GuestLink, MusicTrack, ReferenceItem, Video, VideoAsset } from "@/lib/types";
 
 /**
  * What "Ready to Edit" opens onto for a manager: everything Editor Brief
@@ -15,15 +17,18 @@ export function ReadyToEditRecap({
   references,
   music,
   briefVoiceUrl,
+  guestLinks,
+  driveConfigured,
 }: {
   video: Video;
   assets: VideoAsset[];
   references: ReferenceItem[];
   music: MusicTrack[];
   briefVoiceUrl: string | null;
+  guestLinks: GuestLink[];
+  driveConfigured: boolean;
 }) {
   const clips = assets.filter((a) => a.kind === "other");
-  const footage = assets.filter((a) => a.kind === "raw");
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -65,19 +70,14 @@ export function ReadyToEditRecap({
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2">
-        <div className="rounded-2xl border border-line bg-card p-4">
-          <h2 className="mb-2 text-sm font-semibold">Raw footage</h2>
-          {footage.length ? (
-            <ul className="space-y-1 text-sm text-ink-2">
-              {footage.map((a) => (
-                <li key={a.id} className="truncate">
-                  {a.label}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-ink-3">None on file.</p>
-          )}
+        <div className="space-y-4 rounded-2xl border border-line bg-card p-4">
+          <div>
+            <h2 className="mb-2 text-sm font-semibold">Raw footage</h2>
+            <VideoFootage videoId={video.id} assets={assets} driveConfigured={driveConfigured} />
+          </div>
+          <div className="border-t border-line pt-3">
+            <ShareLinks videoId={video.id} links={guestLinks} canManage />
+          </div>
         </div>
         <div className="rounded-2xl border border-line bg-card p-4">
           <h2 className="mb-2 text-sm font-semibold">Music</h2>

@@ -1,30 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useTrackedTransition } from "@/components/ui/Pending";
 import { useRouter } from "next/navigation";
-import QRCode from "qrcode";
 import { useToast } from "@/components/ui/Toast";
+import { QR } from "@/components/ui/QR";
 import { IconCamera, IconFolder, IconLink, IconTrash, IconX } from "@/components/ui/icons";
 import { createGuestLinkAction, revokeGuestLinkAction } from "@/app/guest-actions";
 import { shortDate } from "@/lib/format";
 import type { GuestLink } from "@/lib/types";
-
-function QR({ url }: { url: string }) {
-  const canvas = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    if (!canvas.current) return;
-    // Drawn locally — nothing about the link ever leaves the browser.
-    void QRCode.toCanvas(canvas.current, url, {
-      width: 190,
-      margin: 1,
-      color: { dark: "#0a0a0d", light: "#ffffff" },
-    });
-  }, [url]);
-
-  return <canvas ref={canvas} className="rounded-lg bg-white p-1" />;
-}
 
 /**
  * Three kinds of link off the same table:
