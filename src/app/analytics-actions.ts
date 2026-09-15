@@ -256,3 +256,75 @@ export async function hookPerformance(): Promise<
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
 }
+
+/**
+ * The trial-reel leaderboard: every video whose hooks were (or are being)
+ * trial-tested, its trials ranked by views. Trial numbers are typed in by
+ * hand — Instagram's API can't see a reel while it's a trial — so a row with
+ * no numbers isn't "zero views", it's "nobody's brought the numbers back
+ * yet", and the UI says so.
+ */
+export interface TrialInsightGroup {
+  videoId: string;
+  videoTitle: string;
+  trials: {
+    id: string;
+    label: string;
+    status: string;
+    views: number | null;
+    likes: number | null;
+    shares: number | null;
+    winner: boolean;
+    permalink: string | null;
+    posted_at: string | null;
+  }[];
+}
+
+export async function trialInsights(): Promise<TrialInsightGroup[]> {
+  await requireRole("owner", "admin");
+  const supabase = await supabaseServer();
+  const { data } = await supabase
+    .from("trial_posts")
+    .select("id, video_id, label, status, views, likes, shares, winner, permalink, posted_at, video:videos (title)")
+    .neq("status", "archived")
+    .order("created_at", { ascending: true });
+
+  const groups = new Map<string, TrialInsightGroup>();
+  for (const t of (data ?? []) as unknown as {
+    id: string;
+    video_id: string;
+    label: string;
+    status: string;
+    views: number | null;
+    likes: number | null;
+    shares: number | null;
+    winner: boolean;
+    permalink: string | null;
+    posted_at: string | null;
+    video: { title: string } | null;
+  }[]) {
+    const g = groups.get(t.video_id) ?? {
+      videoId: t.video_id,
+      videoTitle: t.video?.title ?? "Untitled",
+      trials: [],
+    };
+    g.trials.push({
+      id: t.id,
+      label: t.label,
+      status: t.status,
+      views: t.views,
+      likes: t.likes,
+      shares: t.shares,
+      winner: t.winner,
+      permalink: t.permalink,
+      posted_at: t.posted_at,
+    });
+    groups.set(t.video_id, g);
+  }
+
+  // Rank trials within each video by views; rank videos by their best trial.
+  const out = [...groups.values()];
+  for (const g of out) g.trials.sort((a, b) => (b.views ?? -1) - (a.views ?? -1));
+  out.sort((a, b) => (b.trials[0]?.views ?? -1) - (a.trials[0]?.views ?? -1));
+  return out;
+}

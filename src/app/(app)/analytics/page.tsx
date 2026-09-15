@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/auth";
-import { hookPerformance, insightRows } from "@/app/analytics-actions";
+import { hookPerformance, insightRows, trialInsights } from "@/app/analytics-actions";
+import { TrialPerformance } from "@/components/analytics/TrialPerformance";
 import { listTaxonomyCustoms } from "@/app/actions";
 import { getWorkspaceSettings, integrationStatus } from "@/lib/workspace";
 import { taxonomyOptions } from "@/lib/taxonomy";
@@ -11,9 +12,10 @@ export default async function AnalyticsPage() {
   // performance data, and "not linked" is not the same as "not reachable".
   const viewer = await requireRole("owner", "admin");
 
-  const [{ rows, editors }, hooks, customs, settings] = await Promise.all([
+  const [{ rows, editors }, hooks, trials, customs, settings] = await Promise.all([
     insightRows(),
     hookPerformance(),
+    trialInsights(),
     listTaxonomyCustoms(),
     getWorkspaceSettings(),
   ]);
@@ -43,6 +45,8 @@ export default async function AnalyticsPage() {
           it in Settings → Integrations and the whole page fills in.
         </p>
       ) : null}
+
+      <TrialPerformance groups={trials} />
 
       <AnalyticsView
         rows={rows}

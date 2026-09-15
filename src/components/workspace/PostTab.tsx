@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui/Toast";
 import { IconCalendar, IconCheck, IconClock, IconSparkles } from "@/components/ui/icons";
 import { schedulePostAction } from "@/app/publishing-actions";
 import { generateCaptionAction } from "@/app/ai-actions";
+import { TrialsPanel } from "@/components/workspace/TrialsPanel";
 import { CHANNEL_LABELS, PUBLISH_CHANNELS, type PublishChannel } from "@/lib/types";
 import type { PublishJob, Video } from "@/lib/types";
 
@@ -319,6 +320,10 @@ export function PostTab({
       >
         {pending ? "Scheduling…" : "Schedule post"}
       </button>
+
+      {/* Hook trials — manual by nature (IG's API can't post or read trial
+          reels), so it lives beside the automatic scheduler, not inside it. */}
+      <TrialsPanel videoId={video.id} />
     </div>
   );
 }
