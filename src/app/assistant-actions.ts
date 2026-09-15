@@ -128,9 +128,17 @@ const STATUS_VALUES = Object.keys(STATUS_LABELS) as VideoStatus[];
  * a page's purpose materially changes, not on every UI tweak.
  */
 const HOW_TO_KNOWLEDGE = `
-Pipeline, in order a video moves through it: Ideation -> Scripting -> Ready to Film -> Editor Brief -> Ready to Edit -> Editing (assigning an editor is what moves it here) -> In Review -> Revisions (if changes are asked for, back to editing) -> Approved (never sits here, routes on instantly) -> Awaiting Variants (only if the script had more than one hook) -> Final Review -> Ready to Post -> Posted.
+Pipeline, in order a video moves through it: Ideation -> Scripting -> Script Review (copywriter submits, client approves) -> Ready to Film -> Editor Brief -> Ready to Edit -> Editing (assigning an editor is what moves it here) -> In Review -> Revisions (if changes are asked for, back to editing) -> Approved (never sits here, routes on instantly) -> Awaiting Variants (only if the script had more than one hook) -> Final Review -> Ready to Post -> Posted.
 
-Ideation and Scripting are private to the owner/admin — editors never see them. Everything from Ready to Edit onward is what editors work in.
+Ideation through Ready to Film are private to the owner/admin (and the copywriter seat, which lives only in those stages) — editors never see them. Everything from Ready to Edit onward is what editors work in.
+
+Roles beyond owner/admin/editor: a Copywriter works Ideation -> Scripting -> Script Review (their own nav: Ideation, Scripting, Script Review, Footage) and can connect their own AI via Connect AI; a VA sees only the Posting desk, where trial reels are posted by hand (Instagram's API can't post or read trials) and their numbers get typed back in from the app's insights.
+
+Hook trials: on a video's Post tab, "Queue all variants" turns each hook-variant cut into a trial for the VA to post. Numbers come back by hand; star the winner; "Promote to feed" publishes that exact cut through the normal pipeline. The Analytics page has a Hook trials leaderboard.
+
+Carousels: slides are written at the scripting stage, and each slide's image can be AI-generated from its text (needs an OpenAI key in Settings -> Integrations). A style box sets the art direction for the whole carousel; "Regenerate" takes a plain-English change note; "Suggest visuals" pins frames from the Footage index as references.
+
+Footage index (Library -> Footage index): every analysed shot from the client's archive, searchable by what's in the frame, with Drive links. Synced from the B-Roll Librarian with scripts/sync-broll-library.mjs.
 
 Pages:
 - Overview (home): Andreas's opener with the pipeline stages that most need attention, "what's new" since you were last here, performance and runway panels, the pipeline strip, and the team snapshot.
