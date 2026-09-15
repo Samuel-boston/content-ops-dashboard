@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
-import { requireUser } from "@/lib/auth";
+import { requireRole, requireUser } from "@/lib/auth";
+import { generateSlideImage } from "@/lib/integrations/openai-images";
+import { NotConfiguredError } from "@/lib/integrations/stream";
 import type { CarouselImage } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -166,4 +168,149 @@ export async function deleteCarouselImageAction(id: string, videoId: string) {
   revalidatePath(`/videos/${videoId}`);
   revalidatePath(`/videos/${videoId}/review`);
   return { ok: true as const };
+}
+
+// ---------------------------------------------------------------------------
+// AI slide generation (migration 029). The slide's caption is the content;
+// videos.carousel_style is the shared art direction; library shots ride along
+// as reference frames so the result is grounded in the client's real footage.
+// Generated PNGs land in the same `carousels` bucket, on the same row, as an
+// upload would — the editor path and the AI path are interchangeable.
+// ---------------------------------------------------------------------------
+
+/** Shared art direction for every slide of this carousel. */
+export async function saveCarouselStyleAction(videoId: string, style: string) {
+  await requireRole("owner", "admin", "copywriter");
+  const supabase = await supabaseServer();
+  const { error } = await supabase
+    .from("videos")
+    .update({ carousel_style: style.trim() || null })
+    .eq("id", videoId);
+  if (error) return { error: error.message };
+  revalidatePath(`/videos/${videoId}/script`);
+  return { ok: true };
+}
+
+/** Attach footage-index shots to a slide as visual references for generation. */
+export async function setSlideRefsAction(id: string, videoId: string, refShotIds: string[]) {
+  await requireRole("owner", "admin", "copywriter");
+  const supabase = await supabaseServer();
+  const { error } = await supabase
+    .from("carousel_images")
+    .update({ ref_shot_ids: refShotIds.slice(0, 4) })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  revalidatePath(`/videos/${videoId}/script`);
+  return { ok: true };
+}
+
+const DEFAULT_STYLE =
+  "Clean, bold, text-forward Instagram carousel slide. Solid or softly-textured background, " +
+  "one strong typographic hierarchy, generous margins, high contrast, no watermark, no border.";
+
+/**
+ * Generate (or regenerate) one slide's image from its caption.
+ *
+ * With `changeNote` and an existing image, the current image is sent back as
+ * a reference so the model adjusts the slide instead of starting over — the
+ * "regenerate with a prompt" loop. Library-shot references (ref_shot_ids)
+ * ride along either way. The old file is removed only after the new one is
+ * safely registered.
+ */
+export async function generateCarouselSlideAction(
+  id: string,
+  videoId: string,
+  changeNote?: string
+) {
+  await requireRole("owner", "admin", "copywriter");
+  const supabase = await supabaseServer();
+
+  const [{ data: slide }, { data: video }, { data: siblings }] = await Promise.all([
+    supabase.from("carousel_images").select("*").eq("id", id).single(),
+    supabase.from("videos").select("title, carousel_style").eq("id", videoId).single(),
+    supabase
+      .from("carousel_images")
+      .select("position, caption")
+      .eq("video_id", videoId)
+      .order("position"),
+  ]);
+  if (!slide) return { error: "Slide not found." };
+  if (!video) return { error: "Video not found." };
+  const text = (slide.caption as string | null)?.trim();
+  if (!text) return { error: "Write the slide's text first — the image is designed around it." };
+
+  const all = siblings ?? [];
+  const idx = all.findIndex((s) => s.position === slide.position);
+  const n = idx >= 0 ? idx + 1 : (slide.position as number) + 1;
+
+  const prompt = [
+    `Design slide ${n} of ${all.length || n} for an Instagram carousel ("${video.title}").`,
+    `Art direction: ${(video.carousel_style as string | null)?.trim() || DEFAULT_STYLE}`,
+    `The slide must display this text, verbatim, correctly spelled, as the visual centrepiece:\n"${text}"`,
+    "Compose safe for a 4:5 crop (keep everything important away from the top and bottom edges).",
+    "Keep the look consistent with the rest of the carousel series.",
+    changeNote?.trim() ? `Adjust from the current version: ${changeNote.trim()}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  // References: the current image (for continuity when regenerating) plus any
+  // footage-index frames pinned to the slide.
+  const references: { data: Buffer; mime: string; name: string }[] = [];
+  if (slide.storage_path && changeNote?.trim()) {
+    const { data: cur } = await supabase.storage.from("carousels").download(slide.storage_path as string);
+    if (cur) references.push({ data: Buffer.from(await cur.arrayBuffer()), mime: "image/png", name: "current-slide.png" });
+  }
+  const refIds = (slide.ref_shot_ids as string[] | null) ?? [];
+  if (refIds.length) {
+    const { data: shots } = await supabase
+      .from("library_shots")
+      .select("id, thumb_path")
+      .in("id", refIds);
+    for (const s of shots ?? []) {
+      if (!s.thumb_path) continue;
+      const { data: blob } = await supabase.storage.from("library-thumbs").download(s.thumb_path as string);
+      if (blob) references.push({ data: Buffer.from(await blob.arrayBuffer()), mime: "image/jpeg", name: `${s.id}.jpg` });
+    }
+  }
+
+  let png: Buffer;
+  try {
+    png = await generateSlideImage({ prompt, references });
+  } catch (e) {
+    if (e instanceof NotConfiguredError) {
+      return { error: "Add an OpenAI API key in Settings → Integrations to generate slides." };
+    }
+    return { error: (e as Error).message };
+  }
+
+  const newPath = `${videoId}/${crypto.randomUUID()}.png`;
+  const { error: upErr } = await supabase.storage
+    .from("carousels")
+    .upload(newPath, png, { contentType: "image/png" });
+  if (upErr) return { error: upErr.message };
+
+  const oldPath = slide.storage_path as string | null;
+  const me = await requireUser();
+  const { error } = await supabase
+    .from("carousel_images")
+    .update({
+      storage_path: newPath,
+      size_bytes: png.length,
+      uploaded_by: me.id,
+      gen_prompt: changeNote?.trim() || "Generated from the slide text",
+      gen_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) {
+    // Registration failed — don't leave the fresh upload orphaned.
+    await supabase.storage.from("carousels").remove([newPath]);
+    return { error: error.message };
+  }
+  if (oldPath && oldPath !== newPath) await supabase.storage.from("carousels").remove([oldPath]);
+
+  revalidatePath(`/videos/${videoId}`);
+  revalidatePath(`/videos/${videoId}/script`);
+  revalidatePath(`/videos/${videoId}/review`);
+  return { ok: true };
 }

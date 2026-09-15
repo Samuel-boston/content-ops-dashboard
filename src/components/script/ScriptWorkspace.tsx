@@ -752,7 +752,7 @@ export function ScriptWorkspace({
       {/* ---- Everything about the video ---- */}
       <aside className="min-w-0 space-y-4">
         {isCarouselFormat(video.formats) ? (
-          <CarouselSlides videoId={video.id} slides={carouselSlides} />
+          <CarouselSlides videoId={video.id} slides={carouselSlides} carouselStyle={video.carousel_style} />
         ) : null}
 
         <section className="rounded-2xl border border-line bg-card p-4">
