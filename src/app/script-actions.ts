@@ -13,7 +13,7 @@ export async function saveScriptAction(
   videoId: string,
   script: { hooks: string[]; body: string; cta: string }
 ) {
-  await requireRole("owner", "admin");
+  await requireRole("owner", "admin", "copywriter");
   const supabase = await supabaseServer();
   const hooks = script.hooks.map((h) => h.trim()).filter(Boolean);
 
@@ -41,7 +41,7 @@ export async function saveScriptAction(
  * be messy, and none of this has to survive into what gets read to camera.
  */
 export async function saveIdeaNotesAction(videoId: string, notes: string) {
-  await requireRole("owner", "admin");
+  await requireRole("owner", "admin", "copywriter");
   const supabase = await supabaseServer();
   const { error } = await supabase
     .from("videos")
@@ -60,7 +60,7 @@ export async function saveBriefVoiceAction(
   videoId: string,
   voice: { path: string; duration: number; peaks: number[] } | null
 ) {
-  await requireRole("owner", "admin");
+  await requireRole("owner", "admin", "copywriter");
   const supabase = await supabaseServer();
   const { error } = await supabase
     .from("videos")
@@ -90,7 +90,7 @@ export async function briefVoiceUrl(path: string | null): Promise<string | null>
  * a rough dictation shouldn't silently overwrite something already written.
  */
 export async function transcribeBriefAction(videoId: string) {
-  await requireRole("owner", "admin");
+  await requireRole("owner", "admin", "copywriter");
   const supabase = await supabaseServer();
   const { data: v } = await supabase
     .from("videos")
@@ -116,7 +116,7 @@ export async function transcribeBriefAction(videoId: string) {
 // ---------------------------------------------------------------------------
 
 export async function listHookSnippets(): Promise<HookSnippet[]> {
-  await requireRole("owner", "admin");
+  await requireRole("owner", "admin", "copywriter");
   const supabase = await supabaseServer();
   const { data } = await supabase
     .from("hook_snippets")
@@ -131,7 +131,7 @@ export async function saveHookSnippetAction(input: {
   note?: string;
   sourceVideoId?: string | null;
 }) {
-  const me = await requireRole("owner", "admin");
+  const me = await requireRole("owner", "admin", "copywriter");
   const text = input.text.trim();
   if (!text) return { error: "Nothing to save." };
 
@@ -153,7 +153,7 @@ export async function saveHookSnippetAction(input: {
  * the call as a React hook and reject it inside a callback.
  */
 export async function markHookSnippetUsedAction(id: string) {
-  await requireRole("owner", "admin");
+  await requireRole("owner", "admin", "copywriter");
   const supabase = await supabaseServer();
   const { data: row } = await supabase
     .from("hook_snippets")

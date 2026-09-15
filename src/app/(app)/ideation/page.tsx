@@ -12,7 +12,7 @@ import { IdeaVoiceCapture } from "@/components/script/IdeaVoiceCapture";
  * that's enforced by RLS rather than by hiding the nav link.
  */
 export default async function IdeationPage() {
-  const viewer = await requireRole("owner", "admin");
+  const viewer = await requireRole("owner", "admin", "copywriter");
   const [board, editors, customs] = await Promise.all([
     listActiveBoard(),
     listEditors(),

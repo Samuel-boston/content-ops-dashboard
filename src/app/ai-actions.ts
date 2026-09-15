@@ -86,7 +86,7 @@ async function brandContext(): Promise<string> {
  * doubles as a re-prompt rather than a one-shot generator.
  */
 export async function generateHooksAction(videoId: string, refinement?: string) {
-  await requireRole("owner", "admin");
+  await requireRole("owner", "admin", "copywriter");
   const v = await videoContext(videoId);
   if (!v) return { error: "Video not found." };
 
@@ -119,7 +119,7 @@ export async function generateHooksAction(videoId: string, refinement?: string) 
  * using instead of rewriting from scratch.
  */
 export async function draftScriptAction(videoId: string, hook?: string, prompt?: string) {
-  await requireRole("owner", "admin");
+  await requireRole("owner", "admin", "copywriter");
   const v = await videoContext(videoId);
   if (!v) return { error: "Video not found." };
 
@@ -164,7 +164,7 @@ export async function rephraseSelectionAction(
   after: string,
   instruction?: string
 ) {
-  await requireRole("owner", "admin");
+  await requireRole("owner", "admin", "copywriter");
   if (!selection.trim()) return { error: "Nothing selected." };
   const v = await videoContext(videoId);
   if (!v) return { error: "Video not found." };
@@ -193,7 +193,7 @@ export async function rephraseSelectionAction(
 
 /** Continue a partial body to a natural finish — needs something to continue from. */
 export async function finishScriptAction(videoId: string, partialBody: string) {
-  await requireRole("owner", "admin");
+  await requireRole("owner", "admin", "copywriter");
   if (!partialBody.trim()) {
     return { error: "Write the start of the body first — there's nothing to finish yet." };
   }
@@ -220,7 +220,7 @@ export async function finishScriptAction(videoId: string, partialBody: string) {
 
 /** A CTA suggestion from the finished body — needs a body to react to. */
 export async function generateCtaAction(videoId: string) {
-  await requireRole("owner", "admin");
+  await requireRole("owner", "admin", "copywriter");
   const v = await videoContext(videoId);
   if (!v) return { error: "Video not found." };
   if (!v.script_body?.trim()) {
@@ -240,7 +240,7 @@ export async function generateCtaAction(videoId: string) {
 
 /** Turn the recorded spoken brief into a structured hook/body/CTA draft, not one raw paragraph. */
 export async function structureBriefAction(videoId: string) {
-  await requireRole("owner", "admin");
+  await requireRole("owner", "admin", "copywriter");
   const supabase = await supabaseServer();
   const { data: v } = await supabase
     .from("videos")
@@ -396,7 +396,7 @@ export async function generateIdeaOptionsAction(input: {
   mode: "performers" | "prompt";
   prompt?: string;
 }) {
-  await requireRole("owner", "admin");
+  await requireRole("owner", "admin", "copywriter");
   const supabase = await supabaseServer();
 
   const { data: recent } = await supabase
@@ -459,7 +459,7 @@ export async function generateIdeaOptionsAction(input: {
 
 /** Saves exactly the one idea option the person picked — same shape as the New Video form's own insert. */
 export async function createIdeaFromOptionAction(option: IdeaOption) {
-  const me = await requireRole("owner", "admin");
+  const me = await requireRole("owner", "admin", "copywriter");
   const supabase = await supabaseServer();
 
   const { data, error } = await supabase
@@ -491,7 +491,7 @@ export async function createIdeaFromOptionAction(option: IdeaOption) {
  * the caller never has to handle a transcript directly.
  */
 export async function draftIdeaFromRecordingAction(storagePath: string) {
-  await requireRole("owner", "admin");
+  await requireRole("owner", "admin", "copywriter");
   const url = await briefVoiceUrl(storagePath);
   if (!url) return { error: "Couldn't read the recording." };
 
@@ -542,7 +542,7 @@ export async function createIdeaFromVoiceDraftAction(input: {
   musicMood: string;
   voice: { path: string; duration: number; peaks: number[] };
 }) {
-  const me = await requireRole("owner", "admin");
+  const me = await requireRole("owner", "admin", "copywriter");
   const supabase = await supabaseServer();
 
   const brief = [input.brief, input.musicMood ? `Music mood: ${input.musicMood}.` : ""]

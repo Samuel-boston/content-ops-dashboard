@@ -9,7 +9,7 @@ export default async function ScriptPage({ params }: PageProps<"/videos/[id]/scr
   const { id } = await params;
   // The script is the client's — editors read it inside the video, they don't
   // get the writing room.
-  const viewer = await requireRole("owner", "admin");
+  const viewer = await requireRole("owner", "admin", "copywriter");
 
   const [video, customs, snippets, carouselSlides] = await Promise.all([
     getVideo(id),

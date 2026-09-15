@@ -32,6 +32,7 @@
   /* Stage / semantic colours — used by the board column rails and pills */
   --color-stage-ideation: #a78bfa;
   --color-stage-scripting: #38bdf8;
+  --color-stage-script-review: #2dd4bf;
   --color-stage-film: #fb7185;
   --color-stage-brief: #fcd34d;
   --color-stage-ready: #64748b;

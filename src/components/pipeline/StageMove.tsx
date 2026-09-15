@@ -15,7 +15,10 @@ export function StageMove({
   goTo,
 }: {
   videoId: string;
-  to: Extract<VideoStatus, "ideation" | "scripting" | "ready_to_film" | "editor_brief" | "ready_to_edit">;
+  to: Extract<
+    VideoStatus,
+    "ideation" | "scripting" | "script_review" | "ready_to_film" | "editor_brief" | "ready_to_edit"
+  >;
   label?: string;
   /**
    * Where to land after the move. "Script it" that only changes a status and

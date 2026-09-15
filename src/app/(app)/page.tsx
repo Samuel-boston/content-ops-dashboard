@@ -20,6 +20,10 @@ import { CreateVideoButton } from "@/components/CreateVideoButton";
 export default async function OverviewPage() {
   const viewer = await requireUser();
   if (viewer.role === "editor") redirect("/my-work");
+  // Each specialist seat opens on its own desk — the Overview is the
+  // client's cockpit and its loaders are manager-gated (they'd bounce).
+  if (viewer.role === "copywriter") redirect("/scripting");
+  if (viewer.role === "va") redirect("/posting");
 
   const [counts, team, editors, customs, settings, perf, runway, news] =
     await Promise.all([

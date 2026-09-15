@@ -8,7 +8,7 @@ import { IdeaWorkspace } from "@/components/script/IdeaWorkspace";
 export default async function IdeaPage({ params }: PageProps<"/videos/[id]/idea">) {
   const { id } = await params;
   // Ideation is the client's private shelf — editors never see this stage.
-  const viewer = await requireRole("owner", "admin");
+  const viewer = await requireRole("owner", "admin", "copywriter");
 
   const [video, customs, references] = await Promise.all([
     getVideo(id),

@@ -53,6 +53,8 @@ export function TeamManager({ team, viewer }: { team: Profile[]; viewer: Profile
           />
           <select name="role" defaultValue="editor" className={field}>
             <option value="editor">Editor</option>
+            <option value="copywriter">Copywriter</option>
+            <option value="va">VA (posting)</option>
             {viewerIsOwner ? <option value="admin">Admin</option> : null}
           </select>
           <button
@@ -93,6 +95,8 @@ export function TeamManager({ team, viewer }: { team: Profile[]; viewer: Profile
                 className={field}
               >
                 <option value="editor">Editor</option>
+                <option value="copywriter">Copywriter</option>
+                <option value="va">VA (posting)</option>
                 {viewerIsOwner ? <option value="admin">Admin</option> : null}
               </select>
             ) : (

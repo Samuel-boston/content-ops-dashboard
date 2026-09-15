@@ -10,9 +10,10 @@ import type { Profile, VideoStatus } from "@/lib/types";
  * session here — each handler is handed the already-resolved `Profile` for
  * the token that called it (see lib/mcp/auth.ts) and enforces, by hand, the
  * same shape of rule the app's RLS/trigger layer enforces for that role:
- * ideation + scripting stay invisible to editors, editors only ever touch
- * their own assigned videos, and only an owner/admin can write a script or
- * seed an idea. Keep this file as the one place those rules live for the MCP
+ * planning stages stay invisible to editors, editors only ever touch their
+ * own assigned videos, a copywriter lives inside the planning stages (and
+ * writes scripts there — that's the job), and everything else stays
+ * owner/admin. Keep this file as the one place those rules live for the MCP
  * surface — don't duplicate the checks inline at each call site.
  */
 
@@ -24,6 +25,8 @@ const STAGE_ALIASES: Record<string, VideoStatus[]> = {
   ideation: ["ideation"],
   ready_to_script: ["scripting"],
   scripting: ["scripting"],
+  script_review: ["script_review"],
+  ready_to_review: ["script_review"],
   ready_to_film: ["ready_to_film"],
   editing: ["in_progress"],
   in_progress: ["in_progress"],
@@ -37,6 +40,17 @@ const STAGE_ALIASES: Record<string, VideoStatus[]> = {
 function isManager(p: Profile) {
   return p.role === "owner" || p.role === "admin";
 }
+
+/** Seats that write scripts: managers, and the copywriter (planning half only). */
+function isScriptStaff(p: Profile) {
+  return isManager(p) || p.role === "copywriter";
+}
+
+/** What a copywriter can see — mirrors videos_select_copywriter (migration 027). */
+const COPYWRITER_VISIBLE: VideoStatus[] = ["ideation", "scripting", "script_review", "ready_to_film"];
+
+/** The client's private planning half — invisible to editors (RLS parity). */
+const PLANNING: VideoStatus[] = ["ideation", "scripting", "script_review", "ready_to_film", "editor_brief"];
 
 const VIDEO_FIELDS =
   "id, title, status, priority, content_pillars, formats, platforms, brief, " +
@@ -79,10 +93,13 @@ export async function listVideos(profile: Profile, args: z.infer<typeof listVide
   const db = supabaseAdmin();
   let q = db.from("videos").select(VIDEO_FIELDS).order("updated_at", { ascending: false }).limit(args.limit);
 
-  if (!isManager(profile)) {
+  if (profile.role === "copywriter") {
+    // The planning half only — the same boundary RLS draws for them in the app.
+    q = q.in("status", COPYWRITER_VISIBLE);
+  } else if (!isManager(profile)) {
     // Editors never see the client's private planning stages, and only ever
     // their own work — the same boundary RLS draws for them in the app.
-    q = q.eq("assigned_editor_id", profile.id).not("status", "in", "(ideation,scripting)");
+    q = q.eq("assigned_editor_id", profile.id).not("status", "in", `(${PLANNING.join(",")})`);
   }
   if (args.stage) q = q.in("status", STAGE_ALIASES[args.stage]);
   if (args.query) q = q.ilike("title", `%${args.query}%`);
@@ -104,9 +121,13 @@ export async function getVideo(profile: Profile, args: z.infer<typeof getVideoSc
   if (error) throw new Error(error.message);
   if (!data) return { error: "No video with that id." };
   const v = data as unknown as Record<string, unknown>;
-  if (!isManager(profile)) {
+  if (profile.role === "copywriter") {
+    if (!COPYWRITER_VISIBLE.includes(v.status as VideoStatus)) {
+      return { error: "That video has left the planning stages — not visible to a copywriter." };
+    }
+  } else if (!isManager(profile)) {
     if (v.assigned_editor_id !== profile.id) return { error: "That video isn't assigned to you." };
-    if (v.status === "ideation" || v.status === "scripting") return { error: "Not visible to editors." };
+    if (PLANNING.includes(v.status as VideoStatus)) return { error: "Not visible to editors." };
   }
   return { video: shapeVideo(v) };
 }
@@ -120,7 +141,7 @@ export const createIdeaSchema = z.object({
 });
 
 export async function createIdea(profile: Profile, args: z.infer<typeof createIdeaSchema>) {
-  if (!isManager(profile)) return { error: "Only an owner or admin can add ideas." };
+  if (!isScriptStaff(profile)) return { error: "Only an owner, admin or copywriter can add ideas." };
   const db = supabaseAdmin();
   const { data, error } = await db
     .from("videos")
@@ -148,8 +169,17 @@ export const saveScriptSchema = z.object({
 });
 
 export async function saveScript(profile: Profile, args: z.infer<typeof saveScriptSchema>) {
-  if (!isManager(profile)) return { error: "Only an owner or admin can write scripts." };
+  if (!isScriptStaff(profile)) return { error: "Only an owner, admin or copywriter can write scripts." };
   const db = supabaseAdmin();
+  if (profile.role === "copywriter") {
+    // Same fence as RLS: once a video leaves the planning half its script is
+    // locked to management.
+    const { data: v } = await db.from("videos").select("status").eq("id", args.video_id).maybeSingle();
+    if (!v) return { error: "No video with that id." };
+    if (!COPYWRITER_VISIBLE.includes(v.status as VideoStatus)) {
+      return { error: "That video has left the planning stages — its script is locked." };
+    }
+  }
   const patch: Record<string, unknown> = {};
   if (args.script_body !== undefined) patch.script_body = args.script_body;
   if (args.script_hooks !== undefined) patch.script_hooks = args.script_hooks;
@@ -167,15 +197,18 @@ export const addHookVariantsSchema = z.object({
 });
 
 export async function addHookVariants(profile: Profile, args: z.infer<typeof addHookVariantsSchema>) {
-  if (!isManager(profile)) return { error: "Only an owner or admin can add hook variants." };
+  if (!isScriptStaff(profile)) return { error: "Only an owner, admin or copywriter can add hook variants." };
   const db = supabaseAdmin();
   const { data: existing, error: readErr } = await db
     .from("videos")
-    .select("script_hooks")
+    .select("script_hooks, status")
     .eq("id", args.video_id)
     .maybeSingle();
   if (readErr) throw new Error(readErr.message);
   if (!existing) return { error: "No video with that id." };
+  if (profile.role === "copywriter" && !COPYWRITER_VISIBLE.includes(existing.status as VideoStatus)) {
+    return { error: "That video has left the planning stages — its script is locked." };
+  }
 
   const merged = [...new Set([...(existing.script_hooks ?? []), ...args.hooks])];
   const { error } = await db.from("videos").update({ script_hooks: merged }).eq("id", args.video_id);

@@ -1,4 +1,4 @@
-export type Role = "owner" | "admin" | "editor";
+export type Role = "owner" | "admin" | "editor" | "copywriter" | "va";
 
 export interface Profile {
   id: string;
@@ -29,6 +29,7 @@ export interface Profile {
 export type VideoStatus =
   | "ideation"
   | "scripting"
+  | "script_review"
   | "ready_to_film"
   | "editor_brief"
   | "ready_to_edit"
@@ -44,6 +45,7 @@ export type VideoStatus =
 export const STATUS_LABELS: Record<VideoStatus, string> = {
   ideation: "Ideation",
   scripting: "Scripting",
+  script_review: "Script Review",
   ready_to_film: "Ready to Film",
   editor_brief: "Editor Brief",
   ready_to_edit: "Ready to Edit",
@@ -61,6 +63,7 @@ export const STATUS_LABELS: Record<VideoStatus, string> = {
 export const STATUS_OWNER: Record<VideoStatus, "client" | "editor" | "done"> = {
   ideation: "client",
   scripting: "client",
+  script_review: "client",
   ready_to_film: "client",
   editor_brief: "client",
   ready_to_edit: "editor",
@@ -78,6 +81,7 @@ export const STATUS_OWNER: Record<VideoStatus, "client" | "editor" | "done"> = {
 export const ACTIVE_STATUSES: VideoStatus[] = [
   "ideation",
   "scripting",
+  "script_review",
   "ready_to_film",
   "editor_brief",
   "ready_to_edit",
@@ -113,7 +117,32 @@ export const EDITOR_SETTABLE_STATUSES: VideoStatus[] = [
 ];
 
 /** Client-only stages. Editors can't see these at all (enforced in RLS). */
-export const PLANNING_STAGES: VideoStatus[] = ["ideation", "scripting", "ready_to_film", "editor_brief"];
+export const PLANNING_STAGES: VideoStatus[] = [
+  "ideation",
+  "scripting",
+  "script_review",
+  "ready_to_film",
+  "editor_brief",
+];
+
+/**
+ * The copywriter's world: the stages they can see (everything up to Ready to
+ * Film), and the subset they can move a script between. Approving a script —
+ * Script Review → Ready to Film — is the client's call, and the DB guard
+ * trigger (migration 027) enforces exactly this split. Keep the two in step,
+ * the same way EDITOR_SETTABLE_STATUSES mirrors the editor blocklist.
+ */
+export const COPYWRITER_STATUSES: VideoStatus[] = [
+  "ideation",
+  "scripting",
+  "script_review",
+  "ready_to_film",
+];
+export const COPYWRITER_SETTABLE_STATUSES: VideoStatus[] = [
+  "ideation",
+  "scripting",
+  "script_review",
+];
 
 /** Stages where the editor owes the client an ETA before picking the work up. */
 export const ETA_STAGES: VideoStatus[] = ["in_progress", "revisions", "awaiting_variants"];
@@ -145,6 +174,7 @@ export function previousStage(status: VideoStatus): VideoStatus | null {
 export const STATUS_COLOR: Record<VideoStatus, string> = {
   ideation: "var(--color-stage-ideation)",
   scripting: "var(--color-stage-scripting)",
+  script_review: "var(--color-stage-script-review)",
   ready_to_film: "var(--color-stage-film)",
   editor_brief: "var(--color-stage-brief)",
   ready_to_edit: "var(--color-stage-ready)",
@@ -238,6 +268,13 @@ export interface Video {
   /** Generated: does this video need hook variants before it can go out? */
   needs_variants: boolean;
 
+  /**
+   * Art direction shared by every slide of a carousel — the "prompt context"
+   * for AI slide generation. On the video (not per slide) so a 10-slide
+   * carousel reads as one designed piece.
+   */
+  carousel_style: string | null;
+
   /** Spoken brief recorded by the client. Signed URLs are minted per-request
    *  (see `briefVoiceUrl()` in script-actions.ts) and passed down explicitly
    *  as a prop — never stored, and never a field on this type. */
@@ -299,6 +336,11 @@ export interface CarouselImage {
   caption: string | null;
   uploaded_by: string | null;
   created_at: string;
+  /** The instruction the last AI generation ran with; null = uploaded by hand. */
+  gen_prompt: string | null;
+  gen_at: string | null;
+  /** Library shots (footage index) sent along as image references when generating. */
+  ref_shot_ids: string[];
   signed_url?: string;
 }
 
@@ -337,6 +379,7 @@ export interface TaxonomyOption {
 export const STALLED_AFTER_DAYS: Partial<Record<VideoStatus, number>> = {
   ideation: 14,
   scripting: 10,
+  script_review: 3,
   ready_to_film: 7,
   ready_to_edit: 7,
   in_progress: 5,
@@ -740,4 +783,85 @@ export interface EditorPaymentDetails {
   payment_link: string | null;
   note: string | null;
   updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Trial reels (hook testing) — migration 028
+// ---------------------------------------------------------------------------
+
+export type TrialStatus = "planned" | "posted" | "promoted" | "archived";
+
+export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
+  planned: "To post",
+  posted: "Live trial",
+  promoted: "Promoted",
+  archived: "Archived",
+};
+
+/**
+ * One trial-reel run of one hook variant. Posted by hand (Instagram's API can
+ * neither post nor read trials) and measured by hand from the app's insights
+ * screen; once promoted to the main feed, the normal publish_jobs →
+ * video_metrics machinery takes over via `promoted_job_id`.
+ */
+export interface TrialPost {
+  id: string;
+  video_id: string;
+  cut_id: string | null;
+  label: string;
+  caption: string | null;
+  status: TrialStatus;
+  scheduled_for: string | null;
+  posted_at: string | null;
+  posted_by: string | null;
+  permalink: string | null;
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  saves: number | null;
+  metrics_updated_at: string | null;
+  metrics_updated_by: string | null;
+  winner: boolean;
+  promoted_job_id: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Footage index — mirror of the B-Roll Librarian archive (migration 030)
+// ---------------------------------------------------------------------------
+
+/**
+ * One analysed shot from the client's footage archive: a video's Nth detected
+ * shot or a photo. Synced up from the local B-Roll Librarian by
+ * scripts/sync-broll-library.mjs; media stays in Drive, the thumbnail frame
+ * lives in the `library-thumbs` bucket.
+ */
+export interface LibraryShot {
+  id: string;
+  source_id: string;
+  media_kind: "video" | "image";
+  filename: string | null;
+  caption: string | null;
+  action: string | null;
+  setting: string | null;
+  shot_type: string | null;
+  emotions: string[];
+  subjects: string[];
+  category: string | null;
+  featured_person: boolean;
+  top_pick: boolean;
+  start_s: number | null;
+  end_s: number | null;
+  duration_s: number | null;
+  drive_file_id: string | null;
+  drive_web_link: string | null;
+  drive_path: string | null;
+  thumb_path: string | null;
+  search_text: string | null;
+  synced_at: string;
+  /** Minted server-side at read time; never stored. */
+  thumb_url?: string;
 }

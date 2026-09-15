@@ -285,9 +285,15 @@ export async function requestRevisionsAction(videoId: string) {
 
 /** Move an idea along the client's private planning stages. */
 export async function setPlanningStageAction(videoId: string, status: VideoStatus) {
-  await requireRole("owner", "admin");
-  if (!["ideation", "scripting", "ready_to_film", "editor_brief", "ready_to_edit"].includes(status)) {
+  const me = await requireRole("owner", "admin", "copywriter");
+  if (!["ideation", "scripting", "script_review", "ready_to_film", "editor_brief", "ready_to_edit"].includes(status)) {
     return { error: "Not a planning stage." };
+  }
+  // Mirrors the DB guard (migration 027): a copywriter moves scripts between
+  // Idea / Scripting / Script Review — approving one for filming is the
+  // client's call. Checked here too so the button fails with words, not SQL.
+  if (me.role === "copywriter" && !["ideation", "scripting", "script_review"].includes(status)) {
+    return { error: "Approving a script for filming is the client's call." };
   }
   const supabase = await supabaseServer();
   const { error } = await supabase.from("videos").update({ status }).eq("id", videoId);

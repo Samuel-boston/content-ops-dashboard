@@ -62,17 +62,23 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
   // A planning-stage video (idea/script/ready-to-film) doesn't have cuts to
   // review yet — the review workspace below is the wrong room for it. Send
   // owners/admins to the dedicated page for whichever stage it's actually
-  // in; editors never see planning-stage videos in the first place.
+  // in; editors never see planning-stage videos in the first place. The
+  // copywriter lands on the idea/script rooms too — but never on /film or
+  // /editor-brief, which stay manager-only (their gates would bounce the
+  // whole page): everything past scripting reads as the script room to them.
   if (isManager(viewer.role) && PLANNING_STAGES.includes(video.status)) {
     const dest =
       video.status === "ideation"
         ? "idea"
-        : video.status === "scripting"
+        : video.status === "scripting" || video.status === "script_review"
           ? "script"
           : video.status === "ready_to_film"
             ? "film"
             : "editor-brief";
     redirect(`/videos/${id}/${dest}`);
+  }
+  if (viewer.role === "copywriter" && PLANNING_STAGES.includes(video.status)) {
+    redirect(`/videos/${id}/${video.status === "ideation" ? "idea" : "script"}`);
   }
 
   // Comments for every cut in one pass — the workspace filters client-side as

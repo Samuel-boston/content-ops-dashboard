@@ -29,6 +29,7 @@ const MANAGER_LINKS_BEFORE = [
 const PIPELINE_LINKS = [
   { href: "/ideation", label: "Ideation" },
   { href: "/scripting", label: "Scripting" },
+  { href: "/script-review", label: "Script Review" },
   { href: "/filming", label: "Filming" },
   { href: "/editor-brief", label: "Editor Brief" },
   { href: "/review", label: "Review" },
@@ -70,6 +71,22 @@ const EDITOR_SECONDARY_LINKS = [
   { href: "/parked", label: "Later" },
   { href: "/publishing", label: "Publishing" },
 ];
+
+/**
+ * The copywriter lives in the planning half only: ideas in, scripts out.
+ * Script Review is their "submitted, waiting on the client" column, and the
+ * footage index is there because good scripts get written against footage
+ * that actually exists.
+ */
+const COPYWRITER_LINKS = [
+  { href: "/ideation", label: "Ideation" },
+  { href: "/scripting", label: "Scripting" },
+  { href: "/script-review", label: "Script Review" },
+  { href: "/library/visuals", label: "Footage" },
+];
+
+/** The VA sees one thing: what to post. Everything else stays out of reach. */
+const VA_LINKS = [{ href: "/posting", label: "Posting" }];
 
 /**
  * Inline pending indicator for a nav link — a dot beside the label while the
@@ -197,7 +214,11 @@ export function Nav({
   const links = [
     ...(isManager
       ? [...MANAGER_LINKS_BEFORE, ...PIPELINE_LINKS, ...MANAGER_LINKS_AFTER, ...MORE_LINKS]
-      : EDITOR_LINKS),
+      : profile.role === "copywriter"
+        ? COPYWRITER_LINKS
+        : profile.role === "va"
+          ? VA_LINKS
+          : EDITOR_LINKS),
   ];
   if (profile.role === "owner") links.push({ href: "/settings", label: "Settings" });
   const inPipeline = PIPELINE_LINKS.some((l) => isActive(pathname, l.href));
@@ -334,7 +355,7 @@ export function Nav({
                     </p>
                     <p className="text-xs capitalize text-ink-3">{profile.role}</p>
                   </div>
-                  {(isManager ? [] : EDITOR_SECONDARY_LINKS).map((l) => (
+                  {(profile.role === "editor" ? EDITOR_SECONDARY_LINKS : []).map((l) => (
                     <Link
                       key={l.href}
                       href={l.href}

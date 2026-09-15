@@ -12,7 +12,7 @@ import { IconCheck } from "@/components/ui/icons";
  * meaningful action on this page.
  */
 export default async function ScriptingPage() {
-  const viewer = await requireRole("owner", "admin");
+  const viewer = await requireRole("owner", "admin", "copywriter");
   const [board, editors, customs] = await Promise.all([
     listActiveBoard(),
     listEditors(),
@@ -64,7 +64,12 @@ export default async function ScriptingPage() {
               action={
                 <span className="flex items-center gap-1">
                   <StageBack videoId={v.id} status={v.status} compact />
-                  <StageMove videoId={v.id} to="ready_to_film" label="Ready to film" />
+                  <StageMove videoId={v.id} to="script_review" label="Submit for review" />
+                  {viewer.role !== "copywriter" ? (
+                    // The client's fast path: skip the review queue when
+                    // they've written (or read) it themselves.
+                    <StageMove videoId={v.id} to="ready_to_film" label="Ready to film" />
+                  ) : null}
                 </span>
               }
             />
