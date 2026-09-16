@@ -10,6 +10,7 @@ import { createFootageUploadUrlAction, registerAssetAction } from "@/app/asset-a
 import { createGuestLinkAction } from "@/app/guest-actions";
 import { uploadCommentMedia } from "@/lib/upload-client";
 import { TaxonomyMultiSelect } from "@/components/TaxonomyMultiSelect";
+import { CAROUSEL_FORMAT } from "@/lib/taxonomy";
 import { VoiceRecorder, type VoiceCapture } from "@/components/workspace/Voice";
 import { QR } from "@/components/ui/QR";
 import { IconCamera, IconFile, IconMic, IconPlus, IconSparkles, IconX } from "@/components/ui/icons";
@@ -177,7 +178,9 @@ export function NewVideoDialog({
   }
 
   const notesCopy = status ? (NOTES_COPY[status] ?? NOTES_COPY.ready_to_edit) : null;
-  const canSubmit = status !== null && (status === "ideation" || title.trim().length > 0);
+  const canSubmit =
+    status !== null &&
+    (status === "ideation" || (title.trim().length > 0 && formats.length > 0));
 
   return (
     <div
@@ -341,6 +344,9 @@ export function NewVideoDialog({
               </div>
             ) : null}
 
+            {/* Title + Format — the two non-negotiables. Everything below is
+                detail that can change later; these two decide how the video
+                actually works on the dashboard, so they get the space. */}
             <label className="block">
               <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-ink-3">
                 Title {status === "ideation" ? <span className="normal-case text-ink-3">(optional)</span> : null}
@@ -352,9 +358,28 @@ export function NewVideoDialog({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="What's the video?"
-                className="w-full rounded-lg border border-line bg-raised px-3 py-2 placeholder:text-ink-3 focus:border-accent focus:outline-none"
+                className="w-full rounded-lg border border-line bg-raised px-3 py-2 text-base placeholder:text-ink-3 focus:border-accent focus:outline-none"
               />
             </label>
+
+            <div className="rounded-xl border border-line-strong bg-app p-3">
+              <TaxonomyMultiSelect
+                kind="format"
+                selected={formats}
+                customs={customs.format}
+                onChange={setFormats}
+                size="lg"
+              />
+              {status !== "ideation" && formats.length === 0 ? (
+                <p className="mt-2 text-[11px] text-ink-3">
+                  Required — this decides how the video is scripted and delivered.
+                </p>
+              ) : formats.includes(CAROUSEL_FORMAT) ? (
+                <p className="mt-2 text-[11px] text-accent-hi">
+                  Carousel — the script stage will ask for slides, not a hook/body/CTA.
+                </p>
+              ) : null}
+            </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
@@ -402,12 +427,6 @@ export function NewVideoDialog({
                 selected={pillars}
                 customs={customs.content_pillar}
                 onChange={setPillars}
-              />
-              <TaxonomyMultiSelect
-                kind="format"
-                selected={formats}
-                customs={customs.format}
-                onChange={setFormats}
               />
               <TaxonomyMultiSelect
                 kind="platform"

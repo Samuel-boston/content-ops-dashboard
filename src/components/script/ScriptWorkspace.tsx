@@ -235,6 +235,10 @@ export function ScriptWorkspace({
           <PlanningStageBar videoId={video.id} current={video.status} canEdit={canEditStage} />
         </div>
 
+        {isCarouselFormat(video.formats) ? (
+          <CarouselSlides videoId={video.id} slides={carouselSlides} carouselStyle={video.carousel_style} />
+        ) : (
+          <>
         {/* Hooks */}
         <section className="rounded-2xl border border-line bg-card p-4">
           <div className="mb-1 flex items-center gap-2">
@@ -588,38 +592,44 @@ export function ScriptWorkspace({
             className="w-full resize-y bg-transparent text-sm leading-relaxed placeholder:text-ink-3 focus:outline-none"
           />
         </section>
+          </>
+        )}
 
         <div className="flex flex-wrap items-center gap-3">
-          <span className="text-xs text-ink-3">
-            {saving ? "Saving…" : dirty ? "Unsaved changes" : "Saved"}
-          </span>
-          <span className="text-xs text-ink-3">
-            Full read: <span className="tabular-nums text-ink-2">{fullTime.label}</span>
-          </span>
-          <button
-            type="button"
-            onClick={() => setPrompting(true)}
-            disabled={!body.trim() && !hooks.some((h) => h.trim()) && !cta.trim()}
-            className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-xs text-ink-2 transition hover:border-accent hover:text-ink disabled:opacity-40"
-          >
-            <IconChart size={13} />
-            Teleprompter
-          </button>
-          <button
-            type="button"
-            disabled={drafting}
-            onClick={() => setShowDraftPrompt((v) => !v)}
-            className="flex items-center gap-1.5 rounded-lg bg-accent-ghost px-2.5 py-1.5 text-xs font-medium text-accent-hi transition hover:bg-accent/25 disabled:opacity-50"
-          >
-            <IconSparkles size={13} />
-            {drafting ? "Drafting…" : "Draft with AI"}
-          </button>
-          <span
-            title="Uses this video's brief/idea notes, the chosen hook, your SOP guide, and a few of your own posted scripts as tone examples."
-            className="text-[11px] text-ink-3"
-          >
-            (uses the brief + your house style)
-          </span>
+          {!isCarouselFormat(video.formats) ? (
+            <>
+              <span className="text-xs text-ink-3">
+                {saving ? "Saving…" : dirty ? "Unsaved changes" : "Saved"}
+              </span>
+              <span className="text-xs text-ink-3">
+                Full read: <span className="tabular-nums text-ink-2">{fullTime.label}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setPrompting(true)}
+                disabled={!body.trim() && !hooks.some((h) => h.trim()) && !cta.trim()}
+                className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-xs text-ink-2 transition hover:border-accent hover:text-ink disabled:opacity-40"
+              >
+                <IconChart size={13} />
+                Teleprompter
+              </button>
+              <button
+                type="button"
+                disabled={drafting}
+                onClick={() => setShowDraftPrompt((v) => !v)}
+                className="flex items-center gap-1.5 rounded-lg bg-accent-ghost px-2.5 py-1.5 text-xs font-medium text-accent-hi transition hover:bg-accent/25 disabled:opacity-50"
+              >
+                <IconSparkles size={13} />
+                {drafting ? "Drafting…" : "Draft with AI"}
+              </button>
+              <span
+                title="Uses this video's brief/idea notes, the chosen hook, your SOP guide, and a few of your own posted scripts as tone examples."
+                className="text-[11px] text-ink-3"
+              >
+                (uses the brief + your house style)
+              </span>
+            </>
+          ) : null}
           {video.status === "scripting" && canEditStage ? (
             <div className="ml-auto flex items-center gap-1">
               <StageBack videoId={video.id} status={video.status} />
@@ -751,10 +761,6 @@ export function ScriptWorkspace({
 
       {/* ---- Everything about the video ---- */}
       <aside className="min-w-0 space-y-4">
-        {isCarouselFormat(video.formats) ? (
-          <CarouselSlides videoId={video.id} slides={carouselSlides} carouselStyle={video.carousel_style} />
-        ) : null}
-
         <section className="rounded-2xl border border-line bg-card p-4">
           <h2 className="mb-2 text-sm font-semibold">Spoken brief</h2>
           <p className="mb-2.5 text-xs leading-relaxed text-ink-3">
@@ -862,16 +868,18 @@ export function ScriptWorkspace({
           </details>
         ) : null}
 
-        <HookLibrary
-          snippets={snippets}
-          currentHooks={hooks}
-          videoId={video.id}
-          onInsert={(text) => {
-            const next = [...hooks, text];
-            setHooks(next);
-            save({ hooks: next });
-          }}
-        />
+        {!isCarouselFormat(video.formats) ? (
+          <HookLibrary
+            snippets={snippets}
+            currentHooks={hooks}
+            videoId={video.id}
+            onInsert={(text) => {
+              const next = [...hooks, text];
+              setHooks(next);
+              save({ hooks: next });
+            }}
+          />
+        ) : null}
 
         <section className="rounded-2xl border border-line bg-card p-4">
           <h2 className="mb-2 text-sm font-semibold">Written brief</h2>

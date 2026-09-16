@@ -10,9 +10,11 @@ interface Props {
   selected: string[];
   customs: string[];
   onChange: (next: string[]) => void;
+  /** "lg" for a field that decides how the video functions (format at creation) — big tiles, not small chips. */
+  size?: "sm" | "lg";
 }
 
-export function TaxonomyMultiSelect({ kind, selected, customs, onChange }: Props) {
+export function TaxonomyMultiSelect({ kind, selected, customs, onChange, size = "sm" }: Props) {
   const [localCustoms, setLocalCustoms] = useState(customs);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -36,6 +38,63 @@ export function TaxonomyMultiSelect({ kind, selected, customs, onChange }: Props
     startTransition(() => {
       addTaxonomyOptionAction(kind, v);
     });
+  }
+
+  if (size === "lg") {
+    return (
+      <div>
+        <label className="mb-1.5 block text-sm font-semibold text-ink">{TAXONOMY_LABELS[kind]}</label>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {options.map((o) => {
+            const on = selected.includes(o);
+            return (
+              <button
+                key={o}
+                type="button"
+                aria-pressed={on}
+                onClick={() => toggle(o)}
+                className={`rounded-xl border px-3 py-2.5 text-left text-sm font-medium transition ${
+                  on
+                    ? "border-accent bg-accent-ghost text-accent-hi"
+                    : "border-line bg-raised text-ink-2 hover:border-line-strong hover:text-ink"
+                }`}
+              >
+                {o}
+              </button>
+            );
+          })}
+
+          {adding ? (
+            <input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commitCustom}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  commitCustom();
+                }
+                if (e.key === "Escape") {
+                  setDraft("");
+                  setAdding(false);
+                }
+              }}
+              placeholder="new value…"
+              className="rounded-xl border border-line-strong bg-raised px-3 py-2.5 text-sm outline-none"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="rounded-xl border border-dashed border-line-strong px-3 py-2.5 text-left text-sm text-ink-3 hover:text-ink-2"
+            >
+              + Add your own
+            </button>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
