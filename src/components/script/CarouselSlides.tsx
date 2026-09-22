@@ -20,6 +20,25 @@ import { ShotCard } from "@/components/library/VisualsBrowser";
 import { IconChevronDown, IconPlus, IconSparkles, IconTrash } from "@/components/ui/icons";
 import type { CarouselImage, LibraryShot } from "@/lib/types";
 
+const STYLE_PRESETS: { label: string; style: string }[] = [
+  {
+    label: "Off-white editorial",
+    style: "Off-white paper background, bold black serif type, one red underline accent, editorial.",
+  },
+  {
+    label: "Bold black/red",
+    style: "Solid black background, oversized bold white sans type, one red accent shape, high contrast.",
+  },
+  {
+    label: "Minimal typographic",
+    style: "Plain soft-grey background, clean sans type, generous margins, no decoration, minimal.",
+  },
+  {
+    label: "Warm photo overlay",
+    style: "Warm-toned photo background with a soft dark gradient, white text laid over it, readable.",
+  },
+];
+
 /**
  * A carousel's script isn't one body of text — it's one caption per slide.
  * The filmstrip along the top is the whole set at a glance; clicking a frame
@@ -48,6 +67,16 @@ export function CarouselSlides({
   const [adding, setAdding] = useState(false);
   const [batchRunning, setBatchRunning] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(slides[0]?.id ?? null);
+  const [style, setStyle] = useState(carouselStyle ?? "");
+
+  function saveStyle(next: string) {
+    setStyle(next);
+    startTransition(async () => {
+      const res = await saveCarouselStyleAction(videoId, next);
+      if (res?.error) toast.error(res.error);
+      else toast.success("Style saved — new generations will use it.");
+    });
+  }
 
   // A selection can go stale across refreshes — the slide it pointed at got
   // deleted, or nothing was ever picked yet. Fall back to the last slide
@@ -119,17 +148,27 @@ export function CarouselSlides({
       </p>
 
       {/* Carousel-wide art direction, applied to every generated slide. */}
+      <div className="mb-1.5 flex flex-wrap items-center gap-1">
+        <span className="text-[10px] text-ink-3">Presets:</span>
+        {STYLE_PRESETS.map((p) => (
+          <button
+            key={p.label}
+            type="button"
+            onClick={() => saveStyle(p.style)}
+            className="rounded-md border border-line px-2 py-1 text-[10px] text-ink-3 hover:border-accent hover:text-ink"
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
       <textarea
-        defaultValue={carouselStyle ?? ""}
+        value={style}
         rows={2}
         placeholder='Style for the whole carousel — e.g. "off-white paper background, bold black serif, one red underline accent, editorial"'
+        onChange={(e) => setStyle(e.target.value)}
         onBlur={(e) => {
           if (e.target.value === (carouselStyle ?? "")) return;
-          startTransition(async () => {
-            const res = await saveCarouselStyleAction(videoId, e.target.value);
-            if (res?.error) toast.error(res.error);
-            else toast.success("Style saved — new generations will use it.");
-          });
+          saveStyle(e.target.value);
         }}
         className="mb-3 w-full resize-none rounded-lg border border-dashed border-line bg-app px-2.5 py-2 text-xs placeholder:text-ink-3 focus:border-accent focus:outline-none"
       />
@@ -373,23 +412,31 @@ function SlideFocus({
                 type="button"
                 disabled={pending || !hasText}
                 title={hasText ? "Design this slide from its text" : "Write the slide text first"}
-                onClick={() => generate()}
+                onClick={() => generate(note.trim() || undefined)}
                 className="flex items-center gap-1 rounded-md bg-accent px-2.5 py-1.5 text-xs font-medium text-white hover:bg-accent-hi disabled:opacity-40"
               >
                 <IconSparkles size={12} />
-                {generating ? "Designing…" : "Generate"}
+                {generating ? "Designing…" : "Generate Creative"}
               </button>
             ) : (
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => setShowNote((v) => !v)}
+                onClick={() => generate(note.trim() || undefined)}
                 className="flex items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
               >
                 <IconSparkles size={12} />
-                Regenerate…
+                {generating ? "Designing…" : "Regenerate Creative"}
               </button>
             )}
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => setShowNote((v) => !v)}
+              className="rounded-md px-2 py-1.5 text-xs text-ink-3 hover:bg-hover hover:text-ink"
+            >
+              {showNote ? "Hide context" : "+ Add context"}
+            </button>
             <button
               type="button"
               disabled={pending}
@@ -433,22 +480,16 @@ function SlideFocus({
           ) : null}
 
           {showNote ? (
-            <div className="flex gap-1.5">
-              <input
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder='What should change? — "bigger text, warmer background, drop the icon"'
-                className="min-w-0 flex-1 rounded-md border border-line bg-app px-2 py-1.5 text-xs placeholder:text-ink-3 focus:border-accent focus:outline-none"
-              />
-              <button
-                type="button"
-                disabled={pending || !note.trim()}
-                onClick={() => generate(note)}
-                className="shrink-0 rounded-md bg-accent px-2.5 py-1.5 text-xs font-medium text-white hover:bg-accent-hi disabled:opacity-40"
-              >
-                {generating ? "Designing…" : "Go"}
-              </button>
-            </div>
+            <input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder={
+                s.storage_path
+                  ? 'What should change? — "bigger text, warmer background, drop the icon"'
+                  : 'Optional — "bold red accent, off-white background, editorial serif"'
+              }
+              className="w-full rounded-md border border-line bg-app px-2 py-1.5 text-xs placeholder:text-ink-3 focus:border-accent focus:outline-none"
+            />
           ) : null}
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { isManager, requireUser } from "@/lib/auth";
 import { getVideo, listEditors, listTaxonomyCustoms } from "@/app/actions";
-import { PLANNING_STAGES } from "@/lib/types";
+import { PLANNING_STAGES, type VideoStatus } from "@/lib/types";
 import { isCarouselFormat } from "@/lib/taxonomy";
 import { getTranscript, listCutComments, listCuts } from "@/app/engine-actions";
 import { listVideoPublishJobs } from "@/app/publishing-actions";
@@ -162,9 +162,16 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
   }
 
   // A carousel skips the whole editing chain — Script Review approval lands
-  // it straight on Ready to Post, so this is the only room past Scripting it
-  // ever has. The generic review workspace below assumes a cut exists.
-  if (isCarouselFormat(video.formats) && (video.status === "ready_to_post" || video.status === "posted")) {
+  // it on Creative Review (the images, not the caption text), then Ready to
+  // Post. This is the only room past Scripting it ever has — the generic
+  // review workspace below assumes a cut exists, which a carousel never has.
+  const CAROUSEL_POST_STATUSES: VideoStatus[] = [
+    "creative_review",
+    "creative_revisions",
+    "ready_to_post",
+    "posted",
+  ];
+  if (isCarouselFormat(video.formats) && CAROUSEL_POST_STATUSES.includes(video.status)) {
     return <CarouselPostView video={video} carouselSlides={carouselImages} />;
   }
 

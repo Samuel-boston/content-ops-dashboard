@@ -26,7 +26,7 @@ import {
   IconX,
 } from "@/components/ui/icons";
 import { saveBriefVoiceAction, saveScriptAction, transcribeBriefAction } from "@/app/script-actions";
-import { approveCarouselAction } from "@/app/pipeline-actions";
+import { approveCarouselScriptAction, requestScriptRevisionsAction } from "@/app/pipeline-actions";
 import {
   draftScriptAction,
   finishScriptAction,
@@ -648,39 +648,60 @@ export function ScriptWorkspace({
                 label={canSubmitForReview ? "Send for review" : "Script done — send to review"}
               />
             </div>
-          ) : video.status === "script_review" && canEditStage && carousel ? (
+          ) : video.status === "script_review" && canEditStage ? (
             <div className="ml-auto flex items-center gap-1">
               <StageBack videoId={video.id} status={video.status} />
               <button
                 type="button"
                 onClick={() =>
                   startTransition(async () => {
-                    const res = await approveCarouselAction(video.id);
+                    const res = await requestScriptRevisionsAction(video.id);
                     if (res?.error) toast.error(res.error);
-                    else router.push(`/videos/${video.id}`);
+                    else router.refresh();
                   })
                 }
-                className="flex shrink-0 items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-[11px] text-ink-2 transition hover:border-accent hover:text-ink disabled:opacity-50"
+                className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] text-ink-3 transition hover:bg-hover hover:text-ink disabled:opacity-50"
               >
-                Approve — ready to post
-                <IconChevronRight size={11} />
+                Send back — needs changes
               </button>
-            </div>
-          ) : video.status === "script_review" && canEditStage ? (
-            <div className="ml-auto flex items-center gap-1">
-              <StageBack videoId={video.id} status={video.status} />
-              <StageMove
-                videoId={video.id}
-                to="ready_to_film"
-                label="Approve — ready to film"
-                goTo={`/videos/${video.id}/film`}
-              />
+              {carousel ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    startTransition(async () => {
+                      const res = await approveCarouselScriptAction(video.id);
+                      if (res?.error) toast.error(res.error);
+                      else router.push(`/videos/${video.id}`);
+                    })
+                  }
+                  className="flex shrink-0 items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-[11px] text-ink-2 transition hover:border-accent hover:text-ink disabled:opacity-50"
+                >
+                  Approve — review creatives
+                  <IconChevronRight size={11} />
+                </button>
+              ) : (
+                <StageMove
+                  videoId={video.id}
+                  to="ready_to_film"
+                  label="Approve — ready to film"
+                  goTo={`/videos/${video.id}/film`}
+                />
+              )}
             </div>
           ) : video.status === "script_review" && canSubmitForReview ? (
             <span className="ml-auto flex items-center gap-1.5 text-xs text-ink-2">
               <IconSparkles size={13} />
               Sent for review — waiting on approval
             </span>
+          ) : video.status === "script_revisions" && (canEditStage || canSubmitForReview) ? (
+            <div className="ml-auto flex items-center gap-1">
+              <StageBack videoId={video.id} status={video.status} />
+              <StageMove
+                videoId={video.id}
+                to="script_review"
+                label="Resubmit for review"
+              />
+            </div>
           ) : video.status === "ready_to_film" && canEditStage ? (
             <div className="ml-auto flex items-center gap-1">
               <StageBack videoId={video.id} status={video.status} />

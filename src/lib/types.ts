@@ -30,6 +30,9 @@ export type VideoStatus =
   | "ideation"
   | "scripting"
   | "script_review"
+  | "script_revisions"
+  | "creative_review"
+  | "creative_revisions"
   | "ready_to_film"
   | "editor_brief"
   | "ready_to_edit"
@@ -46,6 +49,9 @@ export const STATUS_LABELS: Record<VideoStatus, string> = {
   ideation: "Ideation",
   scripting: "Scripting",
   script_review: "Script Review",
+  script_revisions: "Script Revisions",
+  creative_review: "Creatives to Review",
+  creative_revisions: "Creative Revisions",
   ready_to_film: "Ready to Film",
   editor_brief: "Editor Brief",
   ready_to_edit: "Ready to Edit",
@@ -64,6 +70,9 @@ export const STATUS_OWNER: Record<VideoStatus, "client" | "editor" | "done"> = {
   ideation: "client",
   scripting: "client",
   script_review: "client",
+  script_revisions: "editor",
+  creative_review: "client",
+  creative_revisions: "editor",
   ready_to_film: "client",
   editor_brief: "client",
   ready_to_edit: "editor",
@@ -82,6 +91,9 @@ export const ACTIVE_STATUSES: VideoStatus[] = [
   "ideation",
   "scripting",
   "script_review",
+  "script_revisions",
+  "creative_review",
+  "creative_revisions",
   "ready_to_film",
   "editor_brief",
   "ready_to_edit",
@@ -116,11 +128,17 @@ export const EDITOR_SETTABLE_STATUSES: VideoStatus[] = [
   "awaiting_variants",
 ];
 
-/** Client-only stages. Editors can't see these at all (enforced in RLS). */
+/**
+ * Client-only stages. Editors can't see these at all (enforced in RLS).
+ * creative_review/creative_revisions are carousel-only and deliberately NOT
+ * here — they don't route to the /idea or /script rooms this list feeds,
+ * they route to CarouselPostView instead (see videos/[id]/page.tsx).
+ */
 export const PLANNING_STAGES: VideoStatus[] = [
   "ideation",
   "scripting",
   "script_review",
+  "script_revisions",
   "ready_to_film",
   "editor_brief",
 ];
@@ -136,6 +154,7 @@ export const COPYWRITER_STATUSES: VideoStatus[] = [
   "ideation",
   "scripting",
   "script_review",
+  "script_revisions",
   "ready_to_film",
 ];
 export const COPYWRITER_SETTABLE_STATUSES: VideoStatus[] = [
@@ -158,12 +177,16 @@ export const STATUS_ORDER: VideoStatus[] = [...ACTIVE_STATUSES, "posted"];
  * In Review, which is where the decision was actually made.
  */
 export function previousStage(status: VideoStatus, carousel = false): VideoStatus | null {
-  // A carousel skips straight from Script Review to Ready to Post — no
-  // filming, brief, or edit in between — so stepping back from either of
-  // those lands on Script Review, not a stage it never passed through.
+  // A carousel's life past Script Review is entirely its own: Script Review
+  // -> Creative Review -> Ready to Post, no filming, brief, or edit chain.
   // Checked first: a plain video's "ready_to_post -> in_review" rule below
   // would otherwise win and send a carousel somewhere it never was.
-  if (carousel && (status === "editor_brief" || status === "ready_to_post")) return "script_review";
+  if (carousel) {
+    if (status === "creative_review") return "script_review";
+    if (status === "creative_revisions") return "creative_review";
+    if (status === "ready_to_post") return "creative_review";
+    if (status === "editor_brief") return "script_review"; // legacy safety net
+  }
   if (status === "awaiting_variants" || status === "ready_to_post") return "in_review";
   if (status === "revisions") return "in_review";
   const i = STATUS_ORDER.indexOf(status);
@@ -181,6 +204,9 @@ export const STATUS_COLOR: Record<VideoStatus, string> = {
   ideation: "var(--color-stage-ideation)",
   scripting: "var(--color-stage-scripting)",
   script_review: "var(--color-stage-script-review)",
+  script_revisions: "var(--color-stage-script-revisions)",
+  creative_review: "var(--color-stage-creative-review)",
+  creative_revisions: "var(--color-stage-creative-revisions)",
   ready_to_film: "var(--color-stage-film)",
   editor_brief: "var(--color-stage-brief)",
   ready_to_edit: "var(--color-stage-ready)",
@@ -386,6 +412,9 @@ export const STALLED_AFTER_DAYS: Partial<Record<VideoStatus, number>> = {
   ideation: 14,
   scripting: 10,
   script_review: 3,
+  script_revisions: 3,
+  creative_review: 3,
+  creative_revisions: 3,
   ready_to_film: 7,
   ready_to_edit: 7,
   in_progress: 5,

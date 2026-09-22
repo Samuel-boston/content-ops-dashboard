@@ -11,6 +11,7 @@ type PlanningStage =
   | "ideation"
   | "scripting"
   | "script_review"
+  | "script_revisions"
   | "ready_to_film"
   | "editor_brief"
   | "ready_to_edit";
@@ -19,6 +20,7 @@ const STAGES: PlanningStage[] = [
   "ideation",
   "scripting",
   "script_review",
+  "script_revisions",
   "ready_to_film",
   "editor_brief",
   "ready_to_edit",
@@ -89,7 +91,7 @@ export function PlanningStageBar({
         </span>
         <span className="text-[11px] text-ink-3">
           {carousel
-            ? "Approved — ready to post."
+            ? "Past scripting — see the Carousels board for what's next."
             : "Out of planning — the editors have this one now."}
         </span>
       </div>

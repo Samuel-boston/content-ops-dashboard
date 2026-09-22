@@ -17,7 +17,13 @@ export function StageMove({
   videoId: string;
   to: Extract<
     VideoStatus,
-    "ideation" | "scripting" | "script_review" | "ready_to_film" | "editor_brief" | "ready_to_edit"
+    | "ideation"
+    | "scripting"
+    | "script_review"
+    | "script_revisions"
+    | "ready_to_film"
+    | "editor_brief"
+    | "ready_to_edit"
   >;
   label?: string;
   /**

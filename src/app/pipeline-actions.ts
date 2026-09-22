@@ -284,10 +284,33 @@ export async function requestRevisionsAction(videoId: string) {
   return { ok: true };
 }
 
+/** Client sends a script back from Script Review — same shape as requestRevisionsAction for a cut. */
+export async function requestScriptRevisionsAction(videoId: string) {
+  await requireRole("owner", "admin");
+  const supabase = await supabaseServer();
+  const { error } = await supabase
+    .from("videos")
+    .update({ status: "script_revisions" })
+    .eq("id", videoId);
+  if (error) return { error: error.message };
+  revalidateAll(videoId);
+  return { ok: true };
+}
+
 /** Move an idea along the client's private planning stages. */
 export async function setPlanningStageAction(videoId: string, status: VideoStatus) {
   const me = await requireRole("owner", "admin", "copywriter");
-  if (!["ideation", "scripting", "script_review", "ready_to_film", "editor_brief", "ready_to_edit"].includes(status)) {
+  if (
+    ![
+      "ideation",
+      "scripting",
+      "script_review",
+      "script_revisions",
+      "ready_to_film",
+      "editor_brief",
+      "ready_to_edit",
+    ].includes(status)
+  ) {
     return { error: "Not a planning stage." };
   }
   // Mirrors the DB guard (migration 027): a copywriter moves scripts between
@@ -303,31 +326,74 @@ export async function setPlanningStageAction(videoId: string, status: VideoStatu
   return { ok: true };
 }
 
-/**
- * Approve a carousel's script straight to Ready to Post.
- *
- * A carousel never gets filmed, briefed or edited — once the script (slide
- * text + generated or hand-picked images) is signed off, the deliverable
- * already exists. Sets status to 'approved', the same transient status a
- * normal video's In Review approval uses — the existing t25_videos_route_stage
- * trigger reads script_hooks (always empty for a carousel, which scripts
- * with captions instead) and routes it straight to 'ready_to_post', reusing
- * proven routing instead of inventing a parallel path.
- */
-export async function approveCarouselAction(videoId: string) {
-  await requireRole("owner", "admin");
+async function requireCarousel(videoId: string) {
   const supabase = await supabaseServer();
-
   const { data: video } = await supabase
     .from("videos")
     .select("formats")
     .eq("id", videoId)
     .maybeSingle();
-  if (!video || !isCarouselFormat(video.formats)) {
-    return { error: "Not a carousel." };
-  }
+  return video && isCarouselFormat(video.formats);
+}
 
-  const { error } = await supabase.from("videos").update({ status: "approved" }).eq("id", videoId);
+/**
+ * Approve a carousel's SCRIPT — the caption text — into Creative Review.
+ *
+ * A carousel never gets filmed or briefed: the script and the creative
+ * (the actual slide images) are reviewed as two separate things, same as a
+ * video separates the script from the finished cut. This is the first of
+ * the two approvals.
+ */
+export async function approveCarouselScriptAction(videoId: string) {
+  await requireRole("owner", "admin");
+  if (!(await requireCarousel(videoId))) return { error: "Not a carousel." };
+  const supabase = await supabaseServer();
+  const { error } = await supabase
+    .from("videos")
+    .update({ status: "creative_review" })
+    .eq("id", videoId);
+  if (error) return { error: error.message };
+  revalidateAll(videoId);
+  return { ok: true };
+}
+
+/** Approve the finished slide images — Creative Review -> Ready to Post. */
+export async function approveCarouselCreativeAction(videoId: string) {
+  await requireRole("owner", "admin");
+  if (!(await requireCarousel(videoId))) return { error: "Not a carousel." };
+  const supabase = await supabaseServer();
+  const { error } = await supabase
+    .from("videos")
+    .update({ status: "ready_to_post" })
+    .eq("id", videoId);
+  if (error) return { error: error.message };
+  revalidateAll(videoId);
+  return { ok: true };
+}
+
+/** Send the creatives back for another pass — Creative Review -> Creative Revisions. */
+export async function requestCarouselRevisionsAction(videoId: string) {
+  await requireRole("owner", "admin");
+  if (!(await requireCarousel(videoId))) return { error: "Not a carousel." };
+  const supabase = await supabaseServer();
+  const { error } = await supabase
+    .from("videos")
+    .update({ status: "creative_revisions" })
+    .eq("id", videoId);
+  if (error) return { error: error.message };
+  revalidateAll(videoId);
+  return { ok: true };
+}
+
+/** Reworked creatives are ready to look at again — Creative Revisions -> Creative Review. */
+export async function resubmitCarouselCreativeAction(videoId: string) {
+  await requireRole("owner", "admin");
+  if (!(await requireCarousel(videoId))) return { error: "Not a carousel." };
+  const supabase = await supabaseServer();
+  const { error } = await supabase
+    .from("videos")
+    .update({ status: "creative_review" })
+    .eq("id", videoId);
   if (error) return { error: error.message };
   revalidateAll(videoId);
   return { ok: true };

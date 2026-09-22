@@ -25,16 +25,6 @@ const MANAGER_LINKS_BEFORE = [
   { href: "/board", label: "Board" },
 ];
 
-/** The stages of making a video, grouped under one "Pipeline" dropdown so the bar isn't five items longer than it needs to be. */
-const PIPELINE_LINKS = [
-  { href: "/ideation", label: "Ideation" },
-  { href: "/scripting", label: "Scripting" },
-  { href: "/script-review", label: "Script Review" },
-  { href: "/filming", label: "Filming" },
-  { href: "/editor-brief", label: "Editor Brief" },
-  { href: "/review", label: "Review" },
-];
-
 const MANAGER_LINKS_AFTER = [
   { href: "/calendar", label: "Calendar" },
   { href: "/team", label: "Team" },
@@ -50,7 +40,6 @@ const MANAGER_LINKS_AFTER = [
  */
 const MORE_LINKS = [
   { href: "/archive", label: "Archive" },
-  { href: "/series", label: "Series" },
   { href: "/parked", label: "Later" },
   { href: "/publishing", label: "Publishing" },
 ];
@@ -213,7 +202,7 @@ export function Nav({
   const isManager = profile.role === "owner" || profile.role === "admin";
   const links = [
     ...(isManager
-      ? [...MANAGER_LINKS_BEFORE, ...PIPELINE_LINKS, ...MANAGER_LINKS_AFTER, ...MORE_LINKS]
+      ? [...MANAGER_LINKS_BEFORE, ...MANAGER_LINKS_AFTER, ...MORE_LINKS]
       : profile.role === "copywriter"
         ? COPYWRITER_LINKS
         : profile.role === "va"
@@ -221,7 +210,6 @@ export function Nav({
           : EDITOR_LINKS),
   ];
   if (profile.role === "owner") links.push({ href: "/settings", label: "Settings" });
-  const inPipeline = PIPELINE_LINKS.some((l) => isActive(pathname, l.href));
   const inMore = MORE_LINKS.some((l) => isActive(pathname, l.href));
 
   return (
@@ -276,10 +264,6 @@ export function Nav({
               <LinkPending />
             </Link>
           ))}
-
-          {isManager ? (
-            <NavDropdown label="Pipeline" active={inPipeline} items={PIPELINE_LINKS} pathname={pathname} />
-          ) : null}
 
           {isManager
             ? MANAGER_LINKS_AFTER.map((l) => (

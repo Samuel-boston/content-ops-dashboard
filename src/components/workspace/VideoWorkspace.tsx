@@ -43,8 +43,19 @@ import type {
   VideoMetrics,
 } from "@/lib/types";
 
-const TABS = ["comments", "brief", "transcript", "files", "chat", "post"] as const;
-type Tab = (typeof TABS)[number];
+type Tab = "comments" | "brief" | "transcript" | "files" | "chat" | "post";
+
+/**
+ * Post only belongs on screen once there's something to post — everywhere
+ * else it was a tab that did nothing, competing with tabs that mattered.
+ * Pinned first at Ready to Post / Posted since it's the reason you're there.
+ */
+function visibleTabs(status: Video["status"]): Tab[] {
+  if (status === "ready_to_post" || status === "posted") {
+    return ["post", "comments", "brief", "transcript", "files", "chat"];
+  }
+  return ["comments", "brief", "transcript", "files", "chat"];
+}
 
 const TAB_LABELS: Record<Tab, string> = {
   comments: "Comments",
@@ -110,7 +121,9 @@ export function VideoWorkspace({
   // Ready to Post is a finished video, not one under review — the review's
   // over, so it opens straight onto the caption/schedule tab instead of the
   // comments thread everyone else lands on.
-  const [tab, setTab] = useState<Tab>(video.status === "ready_to_post" ? "post" : "comments");
+  const [tab, setTab] = useState<Tab>(
+    video.status === "ready_to_post" || video.status === "posted" ? "post" : "comments"
+  );
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(version?.duration_seconds ?? 0);
   const [playing, setPlaying] = useState(false);
@@ -188,7 +201,7 @@ export function VideoWorkspace({
     <div className="flex h-full min-h-0 flex-col border-line bg-app">
       {/* Tabs */}
       <div className="no-scrollbar flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-3 pt-2">
-        {TABS.map((t) => (
+        {visibleTabs(video.status).map((t) => (
           <button
             key={t}
             type="button"

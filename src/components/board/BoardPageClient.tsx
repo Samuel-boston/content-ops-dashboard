@@ -38,16 +38,20 @@ const SCOPES: Record<
   },
   carousels: {
     label: "Carousels",
-    // A carousel never gets filmed, briefed, or handed to an editor — once
-    // Script Review is approved the deliverable already exists, so it lands
-    // straight on Ready to Post. No Editor Brief, Ready to Edit, Editing,
-    // In Review, Revisions or Final Review in between.
-    columns: ["ideation", "scripting", "script_review", "ready_to_post"],
+    // Scripting (the caption text) happens in the shared Scripting board —
+    // a carousel's own board picks up right after that: the images get
+    // made outside this dashboard (on the platform itself, no editor
+    // involved), reviewed here, and posted. No Editor Brief, Ready to Edit,
+    // Editing, In Review, Revisions or Final Review — none of that applies.
+    columns: ["creative_review", "creative_revisions", "ready_to_post"],
     match: (c) => isCarouselFormat(c.formats),
   },
   scripting: {
     label: "Scripting",
-    columns: ["ideation", "scripting", "script_review"],
+    // Both formats' words-and-approval half, in one place — this is also
+    // where a carousel's Script Review approval happens, before it moves on
+    // to the separate Carousels board for the creative-review half.
+    columns: ["ideation", "scripting", "script_review", "script_revisions", "ready_to_film"],
     match: () => true,
   },
   filming: {
