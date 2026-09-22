@@ -142,10 +142,13 @@ export function Board({
   editors = [],
   compact = false,
   id = "content-board",
+  columns = ACTIVE_STATUSES,
 }: {
   cards: BoardCard[];
   onAdd?: (status: VideoStatus) => void;
   editors?: Pick<Profile, "id" | "full_name" | "email">[];
+  /** Which status columns to show — a scoped board (Videos/Carousels/Scripting/Filming) shows a subset of the full pipeline. */
+  columns?: VideoStatus[];
   /** Right-rail mode inside the video workspace — narrower gutters. */
   compact?: boolean;
   /**
@@ -205,10 +208,10 @@ export function Board({
 
   const byStatus = useMemo(() => {
     const map = new Map<VideoStatus, BoardCard[]>();
-    for (const s of ACTIVE_STATUSES) map.set(s, []);
+    for (const s of columns) map.set(s, []);
     for (const c of items) map.get(c.status)?.push(c);
     return map;
-  }, [items]);
+  }, [items, columns]);
 
   const dragging = items.find((c) => c.id === dragId) ?? null;
 
@@ -222,7 +225,7 @@ export function Board({
   // the pointer isn't over any card, e.g. an empty column or its padding.
   const collisionDetection: CollisionDetection = (args) => {
     const hits = pointerWithin(args);
-    const cardHit = hits.find((h) => !ACTIVE_STATUSES.includes(String(h.id) as VideoStatus));
+    const cardHit = hits.find((h) => !columns.includes(String(h.id) as VideoStatus));
     if (cardHit) return [cardHit];
     return closestCorners(args);
   };
@@ -249,7 +252,7 @@ export function Board({
     // `over` is either a column (dropped on empty space) or another card.
     const overCard = items.find((c) => c.id === overId);
     const toStatus = (overCard?.status ?? (overId as VideoStatus)) as VideoStatus;
-    if (!ACTIVE_STATUSES.includes(toStatus)) return;
+    if (!columns.includes(toStatus)) return;
 
     // `column` is the target list with the dragged card already removed —
     // `at` is an index INTO THIS FILTERED LIST, so any no-op check must
@@ -302,7 +305,7 @@ export function Board({
       onDragCancel={() => setDragId(null)}
     >
       <div className={`flex h-full gap-3 overflow-x-auto ${compact ? "px-3 pb-3" : "pb-2"}`}>
-        {ACTIVE_STATUSES.map((s) => (
+        {columns.map((s) => (
           <Column
             key={s}
             status={s}
@@ -333,7 +336,7 @@ export function Board({
               className="rounded-md border border-line bg-card px-2 py-1 text-xs focus:outline-none"
             >
               <option value="">Move to…</option>
-              {ACTIVE_STATUSES.map((s) => (
+              {columns.map((s) => (
                 <option key={s} value={s}>
                   {STATUS_LABELS[s]}
                 </option>

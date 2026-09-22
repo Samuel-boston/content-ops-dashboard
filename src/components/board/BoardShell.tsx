@@ -23,6 +23,7 @@ import {
   type BoardCard,
   type Priority,
   type Profile,
+  type VideoStatus,
 } from "@/lib/types";
 
 type View = "list" | "kanban";
@@ -41,12 +42,15 @@ export function BoardShell({
   headline,
   onNew,
   compact = false,
+  columns,
 }: {
   cards: BoardCard[];
   editors: Pick<Profile, "id" | "full_name" | "email">[];
   headline: string;
   onNew?: () => void;
   compact?: boolean;
+  /** Which status columns the kanban view shows — a scoped board shows a subset. */
+  columns?: VideoStatus[];
 }) {
   const [view, setView] = useState<View>("kanban");
   const [query, setQuery] = useState("");
@@ -261,6 +265,7 @@ export function BoardShell({
             editors={editors}
             compact={compact}
             id={`board-${compact ? "rail" : "page"}`}
+            columns={columns}
           />
         ) : (
           <ListView cards={shown} compact={compact} />
