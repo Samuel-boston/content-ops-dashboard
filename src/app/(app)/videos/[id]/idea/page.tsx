@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth";
 import { getVideo, listTaxonomyCustoms } from "@/app/actions";
 import { briefVoiceUrl } from "@/app/script-actions";
 import { listReferences } from "@/app/library-actions";
+import { listCarouselImages } from "@/app/carousel-actions";
 import { IdeaWorkspace } from "@/components/script/IdeaWorkspace";
 
 export default async function IdeaPage({ params }: PageProps<"/videos/[id]/idea">) {
@@ -10,10 +11,11 @@ export default async function IdeaPage({ params }: PageProps<"/videos/[id]/idea"
   // Ideation is the client's private shelf — editors never see this stage.
   const viewer = await requireRole("owner", "admin", "copywriter");
 
-  const [video, customs, references] = await Promise.all([
+  const [video, customs, references, carouselSlides] = await Promise.all([
     getVideo(id),
     listTaxonomyCustoms(),
     listReferences(id),
+    listCarouselImages(id),
   ]);
   if (!video) notFound();
 
@@ -34,6 +36,7 @@ export default async function IdeaPage({ params }: PageProps<"/videos/[id]/idea"
       }}
       briefVoiceUrl={voiceUrl}
       references={references}
+      carouselSlides={carouselSlides}
     />
   );
 }

@@ -19,13 +19,17 @@ import { IconChevronDown, IconPlus, IconSparkles, IconTrash } from "@/components
 import type { CarouselImage, LibraryShot } from "@/lib/types";
 
 /**
- * A carousel's script isn't one body of text — it's one caption per slide,
- * written here at the scripting stage. From here each slide's image can be
- * GENERATED from that text (gpt-image-1): the carousel-wide style box is the
- * shared art direction, footage-index shots can be pinned as references so
- * the design grounds itself in the client's real material, and a finished
- * slide regenerates with a plain-English change note instead of starting
- * over. Uploading by hand (the editor path) still works — same slots.
+ * A carousel's script isn't one body of text — it's one caption per slide.
+ * The filmstrip along the top is the whole set at a glance; clicking a frame
+ * opens it in the focus panel below, which is the one place all the writing
+ * and design work for that slide happens. From here each slide's image can
+ * be GENERATED from its text (gpt-image-1): the carousel-wide style box is
+ * the shared art direction, footage-index shots can be pinned as references
+ * so the design grounds itself in the client's real material, and a
+ * finished slide regenerates with a plain-English change note instead of
+ * starting over. Uploading by hand (the editor path) still works — same
+ * slots. This section is shown at every stage the video passes through, not
+ * just scripting — a carousel is always "the slides", start to finish.
  */
 export function CarouselSlides({
   videoId,
@@ -41,7 +45,15 @@ export function CarouselSlides({
   const [pending, startTransition] = useTrackedTransition();
   const [adding, setAdding] = useState(false);
   const [batchRunning, setBatchRunning] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(slides[0]?.id ?? null);
 
+  // A selection can go stale across refreshes — the slide it pointed at got
+  // deleted, or nothing was ever picked yet. Fall back to the last slide
+  // (where "Add slide" appends) at render time rather than syncing it back
+  // into state, so this never fights React over who owns the value.
+  const selected =
+    slides.find((s) => s.id === selectedId) ?? slides[slides.length - 1] ?? null;
+  const selectedIndex = selected ? slides.indexOf(selected) : -1;
   const missing = slides.filter((s) => (s.caption ?? "").trim() && !s.storage_path);
 
   function generateAllMissing() {
@@ -100,8 +112,8 @@ export function CarouselSlides({
       </div>
 
       <p className="mb-2 text-xs leading-relaxed text-ink-3">
-        One line per slide — the text that goes on the image itself. Generate the image from it, or
-        upload one later in the same order.
+        One line per slide — the text that goes on the image itself. Tap a frame below to write and
+        design it.
       </p>
 
       {/* Carousel-wide art direction, applied to every generated slide. */}
@@ -121,10 +133,17 @@ export function CarouselSlides({
       />
 
       {slides.length ? (
-        <div className="space-y-2">
-          {slides.map((s, i) => (
-            <SlideRow key={s.id} slide={s} index={i} count={slides.length} videoId={videoId} />
-          ))}
+        <div className="space-y-3">
+          <Filmstrip slides={slides} selectedId={selectedId} onSelect={setSelectedId} />
+          {selected ? (
+            <SlideFocus
+              key={selected.id}
+              slide={selected}
+              index={selectedIndex}
+              count={slides.length}
+              videoId={videoId}
+            />
+          ) : null}
         </div>
       ) : (
         <p className="text-xs text-ink-3">No slides yet — add the first one.</p>
@@ -133,7 +152,60 @@ export function CarouselSlides({
   );
 }
 
-function SlideRow({
+function Filmstrip({
+  slides,
+  selectedId,
+  onSelect,
+}: {
+  slides: CarouselImage[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-1">
+      {slides.map((s, i) => {
+        const hasText = Boolean((s.caption ?? "").trim());
+        const isSelected = s.id === selectedId;
+        return (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onSelect(s.id)}
+            title={s.caption?.trim() || `Slide ${i + 1} — no text yet`}
+            className={`relative flex h-24 w-16 shrink-0 flex-col overflow-hidden rounded-lg border-2 text-left transition ${
+              isSelected
+                ? "border-accent"
+                : "border-transparent ring-1 ring-line hover:ring-line-strong"
+            }`}
+          >
+            {s.signed_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={s.signed_url} alt={`Slide ${i + 1}`} className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-app px-1 text-center">
+                <span className="text-[9px] text-ink-3">
+                  {hasText ? "no image" : "empty"}
+                </span>
+              </div>
+            )}
+            <span
+              className={`absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-medium ${
+                isSelected ? "bg-accent text-white" : "bg-black/60 text-white"
+              }`}
+            >
+              {i + 1}
+            </span>
+            {!s.storage_path && hasText ? (
+              <span className="absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-accent-hi" />
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SlideFocus({
   slide: s,
   index: i,
   count,
@@ -188,26 +260,76 @@ function SlideRow({
   }
 
   return (
-    <div className="rounded-lg border border-line bg-raised p-2">
-      <div className="flex gap-2">
-        <span className="mt-1.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-app text-[10px] text-ink-3">
-          {i + 1}
-        </span>
+    <div className="rounded-xl border border-line bg-raised p-3">
+      <div className="grid gap-3 sm:grid-cols-[160px_minmax(0,1fr)]">
+        <div className="flex flex-col items-center gap-2">
+          {s.signed_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={s.signed_url}
+              alt={`Slide ${i + 1}`}
+              className="aspect-[2/3] w-full rounded-lg border border-line object-cover"
+            />
+          ) : (
+            <div className="flex aspect-[2/3] w-full items-center justify-center rounded-lg border border-dashed border-line-strong bg-app text-center text-[11px] text-ink-3">
+              {hasText ? "No image yet" : "Write the text, then generate"}
+            </div>
+          )}
+          <div className="flex w-full items-center justify-between gap-1">
+            <button
+              type="button"
+              disabled={i === 0 || pending}
+              title="Move earlier"
+              onClick={() =>
+                startTransition(async () => {
+                  await moveCarouselImageAction(s.id, videoId, "left");
+                  router.refresh();
+                })
+              }
+              className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[10px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-30"
+            >
+              <IconChevronDown size={11} className="rotate-90" />
+              Earlier
+            </button>
+            <span className="text-[10px] text-ink-3">
+              {i + 1} / {count}
+            </span>
+            <button
+              type="button"
+              disabled={i === count - 1 || pending}
+              title="Move later"
+              onClick={() =>
+                startTransition(async () => {
+                  await moveCarouselImageAction(s.id, videoId, "right");
+                  router.refresh();
+                })
+              }
+              className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[10px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-30"
+            >
+              Later
+              <IconChevronDown size={11} className="-rotate-90" />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              startTransition(async () => {
+                const res = await deleteCarouselImageAction(s.id, videoId);
+                if (res?.error) toast.error(res.error);
+                else router.refresh();
+              })
+            }
+            className="flex w-full items-center justify-center gap-1 rounded-md px-2 py-1 text-[10px] text-ink-3 hover:bg-hover hover:text-danger"
+          >
+            <IconTrash size={11} />
+            Delete slide
+          </button>
+        </div>
 
-        {s.signed_url ? (
-          // Signed Storage URL (short-lived) — plain <img>, as everywhere else.
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={s.signed_url}
-            alt={`Slide ${i + 1}`}
-            className="h-16 w-[52px] shrink-0 rounded-md border border-line object-cover"
-          />
-        ) : null}
-
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 space-y-2.5">
           <textarea
             defaultValue={s.caption ?? ""}
-            rows={2}
+            rows={4}
             placeholder={`Slide ${i + 1} text…`}
             onBlur={(e) => {
               if (e.target.value === (s.caption ?? "")) return;
@@ -216,19 +338,19 @@ function SlideRow({
                 if (res?.error) toast.error(res.error);
               });
             }}
-            className="w-full resize-none rounded-md bg-app px-2 py-1.5 text-xs placeholder:text-ink-3 focus:outline-none"
+            className="w-full resize-y rounded-lg border border-line bg-app px-2.5 py-2 text-sm leading-relaxed placeholder:text-ink-3 focus:border-accent focus:outline-none"
           />
 
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             {!s.storage_path ? (
               <button
                 type="button"
                 disabled={pending || !hasText}
                 title={hasText ? "Design this slide from its text" : "Write the slide text first"}
                 onClick={() => generate()}
-                className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-[10px] font-medium text-white hover:bg-accent-hi disabled:opacity-40"
+                className="flex items-center gap-1 rounded-md bg-accent px-2.5 py-1.5 text-xs font-medium text-white hover:bg-accent-hi disabled:opacity-40"
               >
-                <IconSparkles size={11} />
+                <IconSparkles size={12} />
                 {generating ? "Designing…" : "Generate"}
               </button>
             ) : (
@@ -236,9 +358,9 @@ function SlideRow({
                 type="button"
                 disabled={pending}
                 onClick={() => setShowNote((v) => !v)}
-                className="flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[10px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
+                className="flex items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
               >
-                <IconSparkles size={11} />
+                <IconSparkles size={12} />
                 Regenerate…
               </button>
             )}
@@ -246,80 +368,35 @@ function SlideRow({
               type="button"
               disabled={pending}
               onClick={openPicker}
-              className="rounded-md border border-line px-2 py-1 text-[10px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
+              className="rounded-md border border-line px-2.5 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
             >
               {refs.length ? `References (${refs.length})` : "Suggest visuals"}
             </button>
             {s.gen_at ? (
-              <span className="text-[9px] text-ink-3" title={s.gen_prompt ?? undefined}>
+              <span className="text-[10px] text-ink-3" title={s.gen_prompt ?? undefined}>
                 AI · {new Date(s.gen_at).toLocaleDateString()}
               </span>
             ) : null}
           </div>
 
           {showNote ? (
-            <div className="mt-1.5 flex gap-1.5">
+            <div className="flex gap-1.5">
               <input
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder='What should change? — "bigger text, warmer background, drop the icon"'
-                className="min-w-0 flex-1 rounded-md border border-line bg-app px-2 py-1 text-[11px] placeholder:text-ink-3 focus:border-accent focus:outline-none"
+                className="min-w-0 flex-1 rounded-md border border-line bg-app px-2 py-1.5 text-xs placeholder:text-ink-3 focus:border-accent focus:outline-none"
               />
               <button
                 type="button"
                 disabled={pending || !note.trim()}
                 onClick={() => generate(note)}
-                className="shrink-0 rounded-md bg-accent px-2 py-1 text-[10px] font-medium text-white hover:bg-accent-hi disabled:opacity-40"
+                className="shrink-0 rounded-md bg-accent px-2.5 py-1.5 text-xs font-medium text-white hover:bg-accent-hi disabled:opacity-40"
               >
                 {generating ? "Designing…" : "Go"}
               </button>
             </div>
           ) : null}
-        </div>
-
-        <div className="flex shrink-0 flex-col items-center gap-0.5">
-          <button
-            type="button"
-            disabled={i === 0}
-            title="Move earlier"
-            onClick={() =>
-              startTransition(async () => {
-                await moveCarouselImageAction(s.id, videoId, "left");
-                router.refresh();
-              })
-            }
-            className="rotate-180 rounded p-1 text-ink-3 hover:bg-hover hover:text-ink disabled:opacity-30"
-          >
-            <IconChevronDown size={12} />
-          </button>
-          <button
-            type="button"
-            disabled={i === count - 1}
-            title="Move later"
-            onClick={() =>
-              startTransition(async () => {
-                await moveCarouselImageAction(s.id, videoId, "right");
-                router.refresh();
-              })
-            }
-            className="rounded p-1 text-ink-3 hover:bg-hover hover:text-ink disabled:opacity-30"
-          >
-            <IconChevronDown size={12} />
-          </button>
-          <button
-            type="button"
-            title="Delete slide"
-            onClick={() =>
-              startTransition(async () => {
-                const res = await deleteCarouselImageAction(s.id, videoId);
-                if (res?.error) toast.error(res.error);
-                else router.refresh();
-              })
-            }
-            className="rounded p-1 text-ink-3 hover:bg-hover hover:text-danger"
-          >
-            <IconTrash size={11} />
-          </button>
         </div>
       </div>
 

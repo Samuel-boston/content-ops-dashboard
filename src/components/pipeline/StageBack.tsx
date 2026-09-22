@@ -19,16 +19,18 @@ export function StageBack({
   videoId,
   status,
   compact = false,
+  carousel = false,
 }: {
   videoId: string;
   status: VideoStatus;
   compact?: boolean;
+  carousel?: boolean;
 }) {
   const toast = useToast();
   const router = useRouter();
   const [pending, startTransition] = useTrackedTransition();
 
-  const back = previousStage(status);
+  const back = previousStage(status, carousel);
   if (!back) return null;
 
   return (

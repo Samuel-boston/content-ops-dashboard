@@ -4,6 +4,7 @@ import { getVideo } from "@/app/actions";
 import { listAssets } from "@/app/asset-actions";
 import { listMusic, listReferences, videoMusic } from "@/app/library-actions";
 import { briefVoiceUrl } from "@/app/script-actions";
+import { listCarouselImages } from "@/app/carousel-actions";
 import { EditorBriefWorkspace } from "@/components/script/EditorBriefWorkspace";
 
 /**
@@ -18,11 +19,12 @@ export default async function EditorBriefPage({ params }: PageProps<"/videos/[id
   const video = await getVideo(id);
   if (!video) notFound();
 
-  const [assets, references, music, library] = await Promise.all([
+  const [assets, references, music, library, carouselSlides] = await Promise.all([
     listAssets(id),
     listReferences(id),
     videoMusic(id),
     listMusic(),
+    listCarouselImages(id),
   ]);
 
   const voiceUrl = await briefVoiceUrl(video.brief_voice_path);
@@ -35,6 +37,7 @@ export default async function EditorBriefPage({ params }: PageProps<"/videos/[id
       music={music}
       musicLibrary={library.tracks}
       briefVoiceUrl={voiceUrl}
+      carouselSlides={carouselSlides}
     />
   );
 }

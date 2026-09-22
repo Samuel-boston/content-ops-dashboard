@@ -9,11 +9,13 @@ import { TaxonomyMultiSelect } from "@/components/TaxonomyMultiSelect";
 import { VideoReferences } from "@/components/VideoReferences";
 import { VoicePlayer, VoiceRecorder, type VoiceCapture } from "@/components/workspace/Voice";
 import { PlanningStageBar } from "@/components/pipeline/PlanningStageBar";
+import { CarouselSlides } from "@/components/script/CarouselSlides";
 import { IconMic, IconSparkles, IconTrash } from "@/components/ui/icons";
 import { saveBriefVoiceAction, saveIdeaNotesAction, transcribeBriefAction } from "@/app/script-actions";
 import { updateVideoAction } from "@/app/actions";
 import { uploadCommentMedia } from "@/lib/upload-client";
-import type { Profile, ReferenceItem, Video } from "@/lib/types";
+import { isCarouselFormat } from "@/lib/taxonomy";
+import type { CarouselImage, Profile, ReferenceItem, Video } from "@/lib/types";
 
 /**
  * The idea shelf, opened up.
@@ -31,12 +33,14 @@ export function IdeaWorkspace({
   customs,
   briefVoiceUrl,
   references,
+  carouselSlides,
 }: {
   video: Video;
   viewer: Profile;
   customs: { content_pillar: string[]; format: string[]; platform: string[] };
   briefVoiceUrl: string | null;
   references: ReferenceItem[];
+  carouselSlides: CarouselImage[];
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -104,8 +108,21 @@ export function IdeaWorkspace({
             <span className="text-ink-3">/</span>
             <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{video.title}</h1>
           </div>
-          <PlanningStageBar videoId={video.id} current={video.status} canEdit={canEdit} />
+          <PlanningStageBar
+            videoId={video.id}
+            current={video.status}
+            canEdit={canEdit}
+            carousel={isCarouselFormat(video.formats)}
+          />
         </div>
+
+        {isCarouselFormat(video.formats) ? (
+          <CarouselSlides
+            videoId={video.id}
+            slides={carouselSlides}
+            carouselStyle={video.carousel_style}
+          />
+        ) : null}
 
         <section className="rounded-2xl border border-line bg-card p-4">
           <div className="mb-2 flex items-baseline gap-2">

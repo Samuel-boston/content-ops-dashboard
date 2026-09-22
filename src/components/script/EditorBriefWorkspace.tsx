@@ -7,6 +7,8 @@ import { useTrackedTransition } from "@/components/ui/Pending";
 import { useToast } from "@/components/ui/Toast";
 import { StageMove } from "@/components/pipeline/StageMove";
 import { StageBack } from "@/components/pipeline/StageBack";
+import { CarouselSlides } from "@/components/script/CarouselSlides";
+import { isCarouselFormat } from "@/lib/taxonomy";
 import { VideoReferences } from "@/components/VideoReferences";
 import { MusicPicker } from "@/components/workspace/MusicPicker";
 import { ScreenRecorder, type ScreenCapture } from "@/components/workspace/ScreenRecorder";
@@ -29,6 +31,7 @@ import {
   PRIORITY_ORDER,
   STATUS_COLOR,
   STATUS_LABELS,
+  type CarouselImage,
   type MusicTrack,
   type Priority,
   type ReferenceItem,
@@ -51,6 +54,7 @@ export function EditorBriefWorkspace({
   music,
   musicLibrary,
   briefVoiceUrl,
+  carouselSlides,
 }: {
   video: Video;
   assets: VideoAsset[];
@@ -58,6 +62,7 @@ export function EditorBriefWorkspace({
   music: MusicTrack[];
   musicLibrary: MusicTrack[];
   briefVoiceUrl: string | null;
+  carouselSlides: CarouselImage[];
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -174,10 +179,10 @@ export function EditorBriefWorkspace({
           <span className="text-ink-3">/</span>
           <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{video.title}</h1>
           <Link
-            href={`/videos/${video.id}/film`}
+            href={`/videos/${video.id}/${isCarouselFormat(video.formats) ? "script" : "film"}`}
             className="rounded-lg border border-line px-2.5 py-1.5 text-xs text-ink-2 hover:bg-hover hover:text-ink"
           >
-            ← Back to filming
+            {isCarouselFormat(video.formats) ? "← Back to script" : "← Back to filming"}
           </Link>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -203,7 +208,7 @@ export function EditorBriefWorkspace({
             </span>
           ))}
           <span className="ml-auto flex items-center gap-1">
-            <StageBack videoId={video.id} status={video.status} />
+            <StageBack videoId={video.id} status={video.status} carousel={isCarouselFormat(video.formats)} />
             <StageMove
               videoId={video.id}
               to="ready_to_edit"
@@ -213,6 +218,14 @@ export function EditorBriefWorkspace({
           </span>
         </div>
       </div>
+
+      {isCarouselFormat(video.formats) ? (
+        <CarouselSlides
+          videoId={video.id}
+          slides={carouselSlides}
+          carouselStyle={video.carousel_style}
+        />
+      ) : null}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">

@@ -7,11 +7,18 @@ import { setPlanningStageAction } from "@/app/pipeline-actions";
 import { IconCheck } from "@/components/ui/icons";
 import { STATUS_COLOR, STATUS_LABELS, type VideoStatus } from "@/lib/types";
 
-type PlanningStage = "ideation" | "scripting" | "ready_to_film" | "editor_brief" | "ready_to_edit";
+type PlanningStage =
+  | "ideation"
+  | "scripting"
+  | "script_review"
+  | "ready_to_film"
+  | "editor_brief"
+  | "ready_to_edit";
 
 const STAGES: PlanningStage[] = [
   "ideation",
   "scripting",
+  "script_review",
   "ready_to_film",
   "editor_brief",
   "ready_to_edit",
@@ -32,16 +39,20 @@ export function PlanningStageBar({
   videoId,
   current,
   canEdit,
+  carousel = false,
 }: {
   videoId: string;
   current: VideoStatus;
   canEdit: boolean;
+  /** Carousels don't get filmed — Ready to Film never applies to them. */
+  carousel?: boolean;
 }) {
   const toast = useToast();
   const router = useRouter();
   const [pending, startTransition] = useTrackedTransition();
 
-  const currentIndex = STAGES.indexOf(current as PlanningStage);
+  const stages = carousel ? STAGES.filter((s) => s !== "ready_to_film") : STAGES;
+  const currentIndex = stages.indexOf(current as PlanningStage);
   // Past the handover the video is the editors' — show where it got to, but
   // don't offer to drag it back into planning from here.
   const beyondPlanning = currentIndex === -1;
@@ -81,7 +92,7 @@ export function PlanningStageBar({
   return (
     <div className="rounded-xl border border-line bg-card p-2">
       <div className="flex flex-wrap items-center gap-1">
-        {STAGES.map((stage, i) => {
+        {stages.map((stage, i) => {
           const isCurrent = i === currentIndex;
           const isDone = i < currentIndex;
           const colour = STATUS_COLOR[stage];

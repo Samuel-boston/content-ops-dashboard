@@ -85,7 +85,9 @@ export async function registerCarouselImageAction(input: {
       })();
   if (error) return { error: error.message };
   revalidatePath(`/videos/${input.videoId}`);
+  revalidatePath(`/videos/${input.videoId}/idea`);
   revalidatePath(`/videos/${input.videoId}/script`);
+  revalidatePath(`/videos/${input.videoId}/editor-brief`);
   revalidatePath(`/videos/${input.videoId}/review`);
   return { ok: true as const };
 }
@@ -110,7 +112,9 @@ export async function createCarouselSlideAction(videoId: string) {
     uploaded_by: me.id,
   });
   if (error) return { error: error.message };
+  revalidatePath(`/videos/${videoId}/idea`);
   revalidatePath(`/videos/${videoId}/script`);
+  revalidatePath(`/videos/${videoId}/editor-brief`);
   return { ok: true as const };
 }
 
@@ -123,7 +127,9 @@ export async function updateCarouselCaptionAction(id: string, videoId: string, c
     .eq("id", id);
   if (error) return { error: error.message };
   revalidatePath(`/videos/${videoId}`);
+  revalidatePath(`/videos/${videoId}/idea`);
   revalidatePath(`/videos/${videoId}/script`);
+  revalidatePath(`/videos/${videoId}/editor-brief`);
   revalidatePath(`/videos/${videoId}/review`);
   return { ok: true as const };
 }
@@ -149,7 +155,9 @@ export async function moveCarouselImageAction(id: string, videoId: string, direc
   ]);
   if (e1 || e2) return { error: (e1 ?? e2)!.message };
   revalidatePath(`/videos/${videoId}`);
+  revalidatePath(`/videos/${videoId}/idea`);
   revalidatePath(`/videos/${videoId}/script`);
+  revalidatePath(`/videos/${videoId}/editor-brief`);
   revalidatePath(`/videos/${videoId}/review`);
   return { ok: true as const };
 }
@@ -166,6 +174,9 @@ export async function deleteCarouselImageAction(id: string, videoId: string) {
   const { error } = await supabase.from("carousel_images").delete().eq("id", id);
   if (error) return { error: error.message };
   revalidatePath(`/videos/${videoId}`);
+  revalidatePath(`/videos/${videoId}/idea`);
+  revalidatePath(`/videos/${videoId}/script`);
+  revalidatePath(`/videos/${videoId}/editor-brief`);
   revalidatePath(`/videos/${videoId}/review`);
   return { ok: true as const };
 }
@@ -187,7 +198,9 @@ export async function saveCarouselStyleAction(videoId: string, style: string) {
     .update({ carousel_style: style.trim() || null })
     .eq("id", videoId);
   if (error) return { error: error.message };
+  revalidatePath(`/videos/${videoId}/idea`);
   revalidatePath(`/videos/${videoId}/script`);
+  revalidatePath(`/videos/${videoId}/editor-brief`);
   return { ok: true };
 }
 
@@ -200,7 +213,9 @@ export async function setSlideRefsAction(id: string, videoId: string, refShotIds
     .update({ ref_shot_ids: refShotIds.slice(0, 4) })
     .eq("id", id);
   if (error) return { error: error.message };
+  revalidatePath(`/videos/${videoId}/idea`);
   revalidatePath(`/videos/${videoId}/script`);
+  revalidatePath(`/videos/${videoId}/editor-brief`);
   return { ok: true };
 }
 
@@ -310,7 +325,9 @@ export async function generateCarouselSlideAction(
   if (oldPath && oldPath !== newPath) await supabase.storage.from("carousels").remove([oldPath]);
 
   revalidatePath(`/videos/${videoId}`);
+  revalidatePath(`/videos/${videoId}/idea`);
   revalidatePath(`/videos/${videoId}/script`);
+  revalidatePath(`/videos/${videoId}/editor-brief`);
   revalidatePath(`/videos/${videoId}/review`);
   return { ok: true };
 }

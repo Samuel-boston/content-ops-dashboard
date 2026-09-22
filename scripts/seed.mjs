@@ -46,6 +46,8 @@ const PLACEHOLDERS = (process.env.SEED_PLACEHOLDERS === "1"
       { email: "admin@example.com", password: "test-admin-pw", role: "admin", full_name: "Placeholder Admin" },
       { email: "editor1@example.com", password: "test-editor-pw", role: "editor", full_name: "Placeholder Editor One" },
       { email: "editor2@example.com", password: "test-editor-pw", role: "editor", full_name: "Placeholder Editor Two" },
+      { email: "copywriter1@example.com", password: "test-copy-pw", role: "copywriter", full_name: "Placeholder Copywriter" },
+      { email: "va1@example.com", password: "test-va-pw", role: "va", full_name: "Placeholder VA" },
     ]
   : []);
 

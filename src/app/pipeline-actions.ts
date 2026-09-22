@@ -7,6 +7,7 @@ import { notify } from "@/lib/notify";
 import { displayName } from "@/lib/format";
 import { NUDGES, type NudgeKind } from "@/lib/nudges";
 import { previousStage, type VideoStatus } from "@/lib/types";
+import { isCarouselFormat } from "@/lib/taxonomy";
 
 function revalidateAll(videoId?: string) {
   for (const p of [
@@ -404,12 +405,12 @@ export async function stepBackStageAction(videoId: string) {
 
   const { data: video } = await supabase
     .from("videos")
-    .select("title, status")
+    .select("title, status, formats")
     .eq("id", videoId)
     .maybeSingle();
   if (!video) return { error: "Not found." };
 
-  const back = previousStage(video.status as VideoStatus);
+  const back = previousStage(video.status as VideoStatus, isCarouselFormat(video.formats));
   if (!back) return { error: "That's the first stage — nothing to go back to." };
 
   const { error } = await supabase.from("videos").update({ status: back }).eq("id", videoId);

@@ -203,6 +203,8 @@ export function ScriptWorkspace({
 
   const variantsExpected = hooks.length > 1;
   const canEditStage = viewer.role === "owner" || viewer.role === "admin";
+  const canSubmitForReview = viewer.role === "copywriter";
+  const carousel = isCarouselFormat(video.formats);
   // Come back to the list you most likely arrived from.
   const [backHref, backLabel] =
     video.status === "ready_to_film"
@@ -232,7 +234,12 @@ export function ScriptWorkspace({
               Video review →
             </Link>
           </div>
-          <PlanningStageBar videoId={video.id} current={video.status} canEdit={canEditStage} />
+          <PlanningStageBar
+            videoId={video.id}
+            current={video.status}
+            canEdit={canEditStage}
+            carousel={carousel}
+          />
         </div>
 
         {isCarouselFormat(video.formats) ? (
@@ -630,16 +637,32 @@ export function ScriptWorkspace({
               </span>
             </>
           ) : null}
-          {video.status === "scripting" && canEditStage ? (
+          {video.status === "scripting" && (canEditStage || canSubmitForReview) ? (
             <div className="ml-auto flex items-center gap-1">
               <StageBack videoId={video.id} status={video.status} />
               <StageMove
                 videoId={video.id}
-                to="ready_to_film"
-                label="Script done — ready to film"
-                goTo={`/videos/${video.id}/film`}
+                to="script_review"
+                label={canSubmitForReview ? "Send for review" : "Script done — send to review"}
               />
             </div>
+          ) : video.status === "script_review" && canEditStage ? (
+            <div className="ml-auto flex items-center gap-1">
+              <StageBack videoId={video.id} status={video.status} />
+              <StageMove
+                videoId={video.id}
+                to={carousel ? "editor_brief" : "ready_to_film"}
+                label={carousel ? "Approve — build the brief" : "Approve — ready to film"}
+                goTo={
+                  carousel ? `/videos/${video.id}/editor-brief` : `/videos/${video.id}/film`
+                }
+              />
+            </div>
+          ) : video.status === "script_review" && canSubmitForReview ? (
+            <span className="ml-auto flex items-center gap-1.5 text-xs text-ink-2">
+              <IconSparkles size={13} />
+              Sent for review — waiting on approval
+            </span>
           ) : video.status === "ready_to_film" && canEditStage ? (
             <div className="ml-auto flex items-center gap-1">
               <StageBack videoId={video.id} status={video.status} />

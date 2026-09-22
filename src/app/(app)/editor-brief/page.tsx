@@ -2,6 +2,7 @@ import { requireRole } from "@/lib/auth";
 import { listActiveBoard, listEditors, listTaxonomyCustoms } from "@/app/actions";
 import { VideoRow } from "@/components/pipeline/VideoRow";
 import { StageBack } from "@/components/pipeline/StageBack";
+import { isCarouselFormat } from "@/lib/taxonomy";
 import { CreateVideoButton } from "@/components/CreateVideoButton";
 import { IconCheck } from "@/components/ui/icons";
 
@@ -62,7 +63,14 @@ export default async function EditorBriefListPage() {
               href={`/videos/${v.id}/editor-brief`}
               showStage={false}
               showEta={false}
-              action={<StageBack videoId={v.id} status={v.status} compact />}
+              action={
+                <StageBack
+                  videoId={v.id}
+                  status={v.status}
+                  compact
+                  carousel={isCarouselFormat(v.formats)}
+                />
+              }
             />
           ))}
         </div>
