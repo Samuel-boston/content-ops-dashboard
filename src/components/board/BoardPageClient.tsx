@@ -38,18 +38,11 @@ const SCOPES: Record<
   },
   carousels: {
     label: "Carousels",
-    columns: [
-      "ideation",
-      "scripting",
-      "script_review",
-      "editor_brief",
-      "ready_to_edit",
-      "in_progress",
-      "in_review",
-      "revisions",
-      "final_review",
-      "ready_to_post",
-    ],
+    // A carousel never gets filmed, briefed, or handed to an editor — once
+    // Script Review is approved the deliverable already exists, so it lands
+    // straight on Ready to Post. No Editor Brief, Ready to Edit, Editing,
+    // In Review, Revisions or Final Review in between.
+    columns: ["ideation", "scripting", "script_review", "ready_to_post"],
     match: (c) => isCarouselFormat(c.formats),
   },
   scripting: {

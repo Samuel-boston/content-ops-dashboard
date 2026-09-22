@@ -17,6 +17,7 @@ import { isCarouselFormat } from "@/lib/taxonomy";
 import {
   IconCheck,
   IconChart,
+  IconChevronRight,
   IconGrip,
   IconMic,
   IconPlus,
@@ -25,6 +26,7 @@ import {
   IconX,
 } from "@/components/ui/icons";
 import { saveBriefVoiceAction, saveScriptAction, transcribeBriefAction } from "@/app/script-actions";
+import { approveCarouselAction } from "@/app/pipeline-actions";
 import {
   draftScriptAction,
   finishScriptAction,
@@ -646,16 +648,32 @@ export function ScriptWorkspace({
                 label={canSubmitForReview ? "Send for review" : "Script done — send to review"}
               />
             </div>
+          ) : video.status === "script_review" && canEditStage && carousel ? (
+            <div className="ml-auto flex items-center gap-1">
+              <StageBack videoId={video.id} status={video.status} />
+              <button
+                type="button"
+                onClick={() =>
+                  startTransition(async () => {
+                    const res = await approveCarouselAction(video.id);
+                    if (res?.error) toast.error(res.error);
+                    else router.push(`/videos/${video.id}`);
+                  })
+                }
+                className="flex shrink-0 items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-[11px] text-ink-2 transition hover:border-accent hover:text-ink disabled:opacity-50"
+              >
+                Approve — ready to post
+                <IconChevronRight size={11} />
+              </button>
+            </div>
           ) : video.status === "script_review" && canEditStage ? (
             <div className="ml-auto flex items-center gap-1">
               <StageBack videoId={video.id} status={video.status} />
               <StageMove
                 videoId={video.id}
-                to={carousel ? "editor_brief" : "ready_to_film"}
-                label={carousel ? "Approve — build the brief" : "Approve — ready to film"}
-                goTo={
-                  carousel ? `/videos/${video.id}/editor-brief` : `/videos/${video.id}/film`
-                }
+                to="ready_to_film"
+                label="Approve — ready to film"
+                goTo={`/videos/${video.id}/film`}
               />
             </div>
           ) : video.status === "script_review" && canSubmitForReview ? (

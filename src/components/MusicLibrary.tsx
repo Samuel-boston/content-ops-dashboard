@@ -387,7 +387,7 @@ function DropTargets({ videos }: { videos: { id: string; title: string }[] }) {
                 }
               });
             }}
-            className={`truncate rounded-lg border px-2.5 py-2 text-[11px] transition ${
+            className={`shrink-0 truncate rounded-lg border px-2.5 py-2 text-[11px] transition ${
               over === v.id
                 ? "border-accent bg-accent-ghost text-ink"
                 : "border-line bg-panel text-ink-2"

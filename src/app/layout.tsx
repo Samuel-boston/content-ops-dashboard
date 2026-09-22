@@ -18,7 +18,16 @@ const THEME_BOOTSTRAP = `(function(){try{var t=localStorage.getItem("theme");if(
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      // The inline script below sets data-theme on this element before React
+      // hydrates, on purpose (that's what stops the flash of the wrong
+      // theme). React compares that against its own theme-less server
+      // render and logs a hydration-mismatch warning for a mismatch we
+      // caused deliberately — this tells it to trust the DOM here instead.
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
       </head>

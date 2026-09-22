@@ -13,6 +13,7 @@ import {
   setSlideRefsAction,
   updateCarouselCaptionAction,
   setSlideImageFromShotAction,
+  type ReferenceLayout,
 } from "@/app/carousel-actions";
 import { suggestSlideVisualsAction } from "@/app/library-visuals-actions";
 import { ShotCard } from "@/components/library/VisualsBrowser";
@@ -226,13 +227,19 @@ function SlideFocus({
   const [refs, setRefs] = useState<string[]>(s.ref_shot_ids ?? []);
   const [generating, setGenerating] = useState(false);
   const [usingShotId, setUsingShotId] = useState<string | null>(null);
+  const [layout, setLayout] = useState<ReferenceLayout | "">("");
 
   const hasText = Boolean((s.caption ?? "").trim());
 
   function generate(changeNote?: string) {
     setGenerating(true);
     startTransition(async () => {
-      const res = await generateCarouselSlideAction(s.id, videoId, changeNote);
+      const res = await generateCarouselSlideAction(
+        s.id,
+        videoId,
+        changeNote,
+        layout || undefined
+      );
       setGenerating(false);
       if (res?.error) toast.error(res.error);
       else {
@@ -397,6 +404,33 @@ function SlideFocus({
               </span>
             ) : null}
           </div>
+
+          {refs.length >= 2 ? (
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-[10px] text-ink-3">Layout:</span>
+              {(
+                [
+                  { key: "top-bottom", label: "Top / bottom" },
+                  { key: "side-by-side", label: "Side by side" },
+                  { key: "diagonal", label: "Diagonal" },
+                ] as { key: ReferenceLayout; label: string }[]
+              ).map((o) => (
+                <button
+                  key={o.key}
+                  type="button"
+                  onClick={() => setLayout((v) => (v === o.key ? "" : o.key))}
+                  aria-pressed={layout === o.key}
+                  className={`rounded-md px-2 py-1 text-[10px] ${
+                    layout === o.key
+                      ? "bg-accent text-white"
+                      : "border border-line text-ink-3 hover:border-accent hover:text-ink"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           {showNote ? (
             <div className="flex gap-1.5">

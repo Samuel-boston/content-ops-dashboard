@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { isManager, requireUser } from "@/lib/auth";
 import { getVideo, listEditors, listTaxonomyCustoms } from "@/app/actions";
 import { PLANNING_STAGES } from "@/lib/types";
+import { isCarouselFormat } from "@/lib/taxonomy";
 import { getTranscript, listCutComments, listCuts } from "@/app/engine-actions";
 import { listVideoPublishJobs } from "@/app/publishing-actions";
 import { listGuestLinks } from "@/app/guest-actions";
@@ -18,6 +19,7 @@ import { VideoWorkspace } from "@/components/workspace/VideoWorkspace";
 import { EditorVideoView } from "@/components/editor/EditorVideoView";
 import { ReadyToEditRecap } from "@/components/pipeline/ReadyToEditRecap";
 import { EditingStatusCard } from "@/components/pipeline/EditingStatusCard";
+import { CarouselPostView } from "@/components/script/CarouselPostView";
 import type { CutComment } from "@/lib/types";
 
 export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
@@ -157,6 +159,13 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
     }
     const editor = roster.find((e) => e.id === video.assigned_editor_id) ?? null;
     return <EditingStatusCard video={video} editor={editor} briefVoiceUrl={briefVoice} />;
+  }
+
+  // A carousel skips the whole editing chain — Script Review approval lands
+  // it straight on Ready to Post, so this is the only room past Scripting it
+  // ever has. The generic review workspace below assumes a cut exists.
+  if (isCarouselFormat(video.formats) && (video.status === "ready_to_post" || video.status === "posted")) {
+    return <CarouselPostView video={video} carouselSlides={carouselImages} />;
   }
 
   const customsBy = {

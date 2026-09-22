@@ -51,7 +51,12 @@ export function PlanningStageBar({
   const router = useRouter();
   const [pending, startTransition] = useTrackedTransition();
 
-  const stages = carousel ? STAGES.filter((s) => s !== "ready_to_film") : STAGES;
+  // A carousel never gets filmed, briefed, or handed to an editor — once
+  // Script Review is approved it jumps straight to Ready to Post, outside
+  // this stepper entirely.
+  const stages = carousel
+    ? STAGES.filter((s) => !["ready_to_film", "editor_brief", "ready_to_edit"].includes(s))
+    : STAGES;
   const currentIndex = stages.indexOf(current as PlanningStage);
   // Past the handover the video is the editors' — show where it got to, but
   // don't offer to drag it back into planning from here.
@@ -83,7 +88,9 @@ export function PlanningStageBar({
           {STATUS_LABELS[current]}
         </span>
         <span className="text-[11px] text-ink-3">
-          Out of planning — the editors have this one now.
+          {carousel
+            ? "Approved — ready to post."
+            : "Out of planning — the editors have this one now."}
         </span>
       </div>
     );

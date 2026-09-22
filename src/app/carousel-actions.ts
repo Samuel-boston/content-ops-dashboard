@@ -290,10 +290,19 @@ const DEFAULT_STYLE =
  * ride along either way. The old file is removed only after the new one is
  * safely registered.
  */
+export type ReferenceLayout = "top-bottom" | "side-by-side" | "diagonal";
+
+const LAYOUT_INSTRUCTIONS: Record<ReferenceLayout, string> = {
+  "top-bottom": "Stack the reference photos: one on top, one on the bottom, split evenly.",
+  "side-by-side": "Place the reference photos side by side, split evenly left and right.",
+  diagonal: "Arrange the reference photos in a diagonal split across the frame.",
+};
+
 export async function generateCarouselSlideAction(
   id: string,
   videoId: string,
-  changeNote?: string
+  changeNote?: string,
+  layout?: ReferenceLayout
 ) {
   await requireRole("owner", "admin", "copywriter");
   const supabase = await supabaseServer();
@@ -322,6 +331,7 @@ export async function generateCarouselSlideAction(
     `The slide must display this text, verbatim, correctly spelled, as the visual centrepiece:\n"${text}"`,
     "Compose safe for a 4:5 crop (keep everything important away from the top and bottom edges).",
     "Keep the look consistent with the rest of the carousel series.",
+    layout ? LAYOUT_INSTRUCTIONS[layout] : null,
     changeNote?.trim() ? `Adjust from the current version: ${changeNote.trim()}` : null,
   ]
     .filter(Boolean)

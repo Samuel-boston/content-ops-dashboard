@@ -129,15 +129,17 @@ export async function libraryFacets(): Promise<{ emotions: string[]; categories:
  * Visual suggestions for one carousel slide: search the index with the
  * slide's own words. Same engine as the Footage page — no separate ranking to
  * reason about — and a handful of results, because this feeds a picker, not
- * a browse.
+ * a browse. Images only: a carousel slide is a still, and the librarian's
+ * "thumbnail" for a video shot is just one extracted frame — not a composed
+ * photo — so it isn't offered here even though it exists in the index.
  */
 export async function suggestSlideVisualsAction(text: string): Promise<LibraryShot[]> {
   await requireUser();
   const cleaned = text.trim();
   if (!cleaned) return [];
-  const results = await searchLibraryShots({ q: cleaned, limit: 8 });
+  const results = await searchLibraryShots({ q: cleaned, media: "image", limit: 8 });
   if (results.length > 0) return results;
   // Websearch found nothing (captions rarely match slide copy word-for-word):
   // fall back to the strongest material so the picker is never a dead end.
-  return searchLibraryShots({ topPicks: true, limit: 8 });
+  return searchLibraryShots({ topPicks: true, media: "image", limit: 8 });
 }

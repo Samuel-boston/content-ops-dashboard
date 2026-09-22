@@ -3,6 +3,7 @@ import { listActiveBoard } from "@/app/actions";
 import { VideoRow } from "@/components/pipeline/VideoRow";
 import { StageMove } from "@/components/pipeline/StageMove";
 import { StageBack } from "@/components/pipeline/StageBack";
+import { ApproveCarouselButton } from "@/components/pipeline/ApproveCarouselButton";
 import { IconCheck } from "@/components/ui/icons";
 import { isCarouselFormat } from "@/lib/taxonomy";
 
@@ -18,11 +19,10 @@ export default async function ScriptReviewPage() {
   const board = await listActiveBoard();
 
   const waiting = board.filter((v) => v.status === "script_review");
-  // Carousels skip Ready to Film — their "just approved" landing spot is
-  // Editor Brief instead, so this section watches both.
-  const approved = board.filter(
-    (v) => v.status === "ready_to_film" || (v.status === "editor_brief" && isCarouselFormat(v.formats))
-  );
+  // A carousel's approval goes straight to Ready to Post (see the Carousels
+  // board), not this "headed to filming" list — only non-carousel work
+  // reaches Ready to Film at all.
+  const approved = board.filter((v) => v.status === "ready_to_film");
   const isManager = viewer.role === "owner" || viewer.role === "admin";
 
   return (
@@ -56,7 +56,7 @@ export default async function ScriptReviewPage() {
                   <StageBack videoId={v.id} status={v.status} compact />
                   {isManager ? (
                     isCarouselFormat(v.formats) ? (
-                      <StageMove videoId={v.id} to="editor_brief" label="Approve — build the brief" />
+                      <ApproveCarouselButton videoId={v.id} />
                     ) : (
                       <StageMove videoId={v.id} to="ready_to_film" label="Approve — ready to film" />
                     )
@@ -76,9 +76,7 @@ export default async function ScriptReviewPage() {
               <VideoRow
                 key={v.id}
                 video={v}
-                href={`/videos/${v.id}/${
-                  !isManager ? "script" : v.status === "editor_brief" ? "editor-brief" : "film"
-                }`}
+                href={`/videos/${v.id}/${isManager ? "film" : "script"}`}
                 showStage={false}
                 showEta={false}
               />

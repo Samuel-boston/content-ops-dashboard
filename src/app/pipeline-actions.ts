@@ -303,6 +303,36 @@ export async function setPlanningStageAction(videoId: string, status: VideoStatu
   return { ok: true };
 }
 
+/**
+ * Approve a carousel's script straight to Ready to Post.
+ *
+ * A carousel never gets filmed, briefed or edited — once the script (slide
+ * text + generated or hand-picked images) is signed off, the deliverable
+ * already exists. Sets status to 'approved', the same transient status a
+ * normal video's In Review approval uses — the existing t25_videos_route_stage
+ * trigger reads script_hooks (always empty for a carousel, which scripts
+ * with captions instead) and routes it straight to 'ready_to_post', reusing
+ * proven routing instead of inventing a parallel path.
+ */
+export async function approveCarouselAction(videoId: string) {
+  await requireRole("owner", "admin");
+  const supabase = await supabaseServer();
+
+  const { data: video } = await supabase
+    .from("videos")
+    .select("formats")
+    .eq("id", videoId)
+    .maybeSingle();
+  if (!video || !isCarouselFormat(video.formats)) {
+    return { error: "Not a carousel." };
+  }
+
+  const { error } = await supabase.from("videos").update({ status: "approved" }).eq("id", videoId);
+  if (error) return { error: error.message };
+  revalidateAll(videoId);
+  return { ok: true };
+}
+
 /** Client marks a Ready to Post video as actually posted. */
 export async function markPostedAction(videoId: string) {
   await requireRole("owner", "admin");

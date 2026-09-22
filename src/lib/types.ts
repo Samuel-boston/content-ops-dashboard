@@ -158,12 +158,14 @@ export const STATUS_ORDER: VideoStatus[] = [...ACTIVE_STATUSES, "posted"];
  * In Review, which is where the decision was actually made.
  */
 export function previousStage(status: VideoStatus, carousel = false): VideoStatus | null {
+  // A carousel skips straight from Script Review to Ready to Post — no
+  // filming, brief, or edit in between — so stepping back from either of
+  // those lands on Script Review, not a stage it never passed through.
+  // Checked first: a plain video's "ready_to_post -> in_review" rule below
+  // would otherwise win and send a carousel somewhere it never was.
+  if (carousel && (status === "editor_brief" || status === "ready_to_post")) return "script_review";
   if (status === "awaiting_variants" || status === "ready_to_post") return "in_review";
   if (status === "revisions") return "in_review";
-  // Carousels skip Ready to Film entirely — there's nothing to film — so
-  // stepping back from Editor Brief lands on Script Review, not a stage the
-  // video never passed through.
-  if (carousel && status === "editor_brief") return "script_review";
   const i = STATUS_ORDER.indexOf(status);
   if (i <= 0) return null;
   const prev = STATUS_ORDER[i - 1];
