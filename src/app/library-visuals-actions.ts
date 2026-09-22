@@ -32,25 +32,76 @@ async function signThumbs(shots: LibraryShot[]): Promise<LibraryShot[]> {
   );
 }
 
+const STOPWORDS = new Set([
+  "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
+  "from", "up", "about", "into", "through", "during", "how", "when", "where", "why", "what",
+  "who", "this", "that", "these", "those", "is", "are", "was", "were", "be", "been", "being",
+  "have", "has", "had", "do", "does", "did", "will", "would", "could", "should", "may", "might",
+  "must", "can", "i", "you", "he", "she", "it", "we", "they", "my", "your", "his", "her", "its",
+  "our", "their", "me", "him", "us", "them", "no", "not", "so", "than", "then", "if", "as",
+]);
+
+/**
+ * A slide caption is a sentence ("Meditation on the beach changed how I
+ * start my mornings"), not a keyword list. `websearch_to_tsquery` ANDs every
+ * significant word by default — so a shot's search_text has to contain the
+ * ENTIRE sentence's vocabulary to match, which basically never happens. This
+ * builds an OR query from the caption's own words instead, so a shot that
+ * hits on "meditation" and "beach" still surfaces even though it obviously
+ * doesn't also mention "changed" or "mornings".
+ */
+function orQuery(text: string): string {
+  const words = [
+    ...new Set(
+      text
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 2 && !STOPWORDS.has(w))
+    ),
+  ];
+  return words.map((w) => `${w}:*`).join(" | ");
+}
+
 export async function searchLibraryShots(filter: VisualsFilter): Promise<LibraryShot[]> {
   await requireUser();
   const supabase = await supabaseServer();
 
   let q = supabase.from("library_shots").select("*");
   const text = filter.q?.trim();
-  if (text) q = q.textSearch("tsv", text, { type: "websearch", config: "english" });
+  const words = text ? orQuery(text) : "";
+  if (words) q = q.textSearch("tsv", words);
   if (filter.media) q = q.eq("media_kind", filter.media);
   if (filter.emotion) q = q.contains("emotions", [filter.emotion]);
   if (filter.category) q = q.ilike("category", `${filter.category}%`);
   if (filter.topPicks) q = q.eq("top_pick", true);
   if (filter.featured) q = q.eq("featured_person", true);
 
+  const limit = Math.min(filter.limit ?? 48, 96);
+  // Over-fetch when text-searching so relevance ranking (below) has more than
+  // the DB's top_pick/synced_at ordering to work with.
   const { data } = await q
     .order("top_pick", { ascending: false })
     .order("synced_at", { ascending: false })
-    .limit(Math.min(filter.limit ?? 48, 96));
+    .limit(words ? Math.min(limit * 4, 96) : limit);
 
-  return signThumbs((data as LibraryShot[]) ?? []);
+  let rows = (data as LibraryShot[]) ?? [];
+  if (words) {
+    const terms = words.split(" | ").map((w) => w.replace(/:\*$/, ""));
+    rows = rows
+      .map((r) => ({
+        r,
+        score: terms.reduce(
+          (n, t) => n + ((r.search_text ?? "").toLowerCase().includes(t) ? 1 : 0),
+          0
+        ),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .map((x) => x.r)
+      .slice(0, limit);
+  }
+
+  return signThumbs(rows);
 }
 
 /** Facet values for the filter chips, computed from what's actually indexed. */

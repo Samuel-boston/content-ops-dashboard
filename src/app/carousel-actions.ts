@@ -219,6 +219,64 @@ export async function setSlideRefsAction(id: string, videoId: string, refShotIds
   return { ok: true };
 }
 
+/**
+ * Put a footage-index shot straight onto a slide as its image — no OpenAI
+ * call. This is how the top/bottom carousel format actually works: the real
+ * photo IS the slide, text overlaid separately, no AI drawing involved. It's
+ * also the free way to test whether the footage index is matching the right
+ * shots to a slide's text, without spending anything on gpt-image-1.
+ *
+ * Uses the librarian's synced thumbnail (`library-thumbs`, 640px) as the
+ * source — this dashboard has no live Drive access to pull the full-res
+ * original, only what `sync-broll-library.mjs` mirrored.
+ */
+export async function setSlideImageFromShotAction(id: string, videoId: string, shotId: string) {
+  const me = await requireRole("owner", "admin", "copywriter");
+  const supabase = await supabaseServer();
+
+  const [{ data: shot }, { data: slide }] = await Promise.all([
+    supabase.from("library_shots").select("thumb_path").eq("id", shotId).single(),
+    supabase.from("carousel_images").select("storage_path").eq("id", id).single(),
+  ]);
+  if (!shot?.thumb_path) return { error: "That shot has no synced image." };
+
+  const { data: blob, error: dlErr } = await supabase.storage
+    .from("library-thumbs")
+    .download(shot.thumb_path);
+  if (dlErr || !blob) return { error: dlErr?.message ?? "Couldn't read that shot's image." };
+
+  const newPath = `${videoId}/${crypto.randomUUID()}.jpg`;
+  const bytes = Buffer.from(await blob.arrayBuffer());
+  const { error: upErr } = await supabase.storage
+    .from("carousels")
+    .upload(newPath, bytes, { contentType: "image/jpeg" });
+  if (upErr) return { error: upErr.message };
+
+  const oldPath = slide?.storage_path as string | null;
+  const { error: setErr } = await supabase
+    .from("carousel_images")
+    .update({
+      storage_path: newPath,
+      size_bytes: bytes.length,
+      uploaded_by: me.id,
+      gen_prompt: null,
+      gen_at: null,
+    })
+    .eq("id", id);
+  if (setErr) {
+    await supabase.storage.from("carousels").remove([newPath]);
+    return { error: setErr.message };
+  }
+  if (oldPath && oldPath !== newPath) await supabase.storage.from("carousels").remove([oldPath]);
+
+  revalidatePath(`/videos/${videoId}`);
+  revalidatePath(`/videos/${videoId}/idea`);
+  revalidatePath(`/videos/${videoId}/script`);
+  revalidatePath(`/videos/${videoId}/editor-brief`);
+  revalidatePath(`/videos/${videoId}/review`);
+  return { ok: true };
+}
+
 const DEFAULT_STYLE =
   "Clean, bold, text-forward Instagram carousel slide. Solid or softly-textured background, " +
   "one strong typographic hierarchy, generous margins, high contrast, no watermark, no border.";

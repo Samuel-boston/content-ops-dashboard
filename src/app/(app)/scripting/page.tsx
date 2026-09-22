@@ -65,11 +65,6 @@ export default async function ScriptingPage() {
                 <span className="flex items-center gap-1">
                   <StageBack videoId={v.id} status={v.status} compact />
                   <StageMove videoId={v.id} to="script_review" label="Submit for review" />
-                  {viewer.role !== "copywriter" ? (
-                    // The client's fast path: skip the review queue when
-                    // they've written (or read) it themselves.
-                    <StageMove videoId={v.id} to="ready_to_film" label="Ready to film" />
-                  ) : null}
                 </span>
               }
             />

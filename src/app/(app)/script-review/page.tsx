@@ -4,6 +4,7 @@ import { VideoRow } from "@/components/pipeline/VideoRow";
 import { StageMove } from "@/components/pipeline/StageMove";
 import { StageBack } from "@/components/pipeline/StageBack";
 import { IconCheck } from "@/components/ui/icons";
+import { isCarouselFormat } from "@/lib/taxonomy";
 
 /**
  * The script sign-off queue. A copywriter submits here from Scripting; the
@@ -17,7 +18,11 @@ export default async function ScriptReviewPage() {
   const board = await listActiveBoard();
 
   const waiting = board.filter((v) => v.status === "script_review");
-  const approved = board.filter((v) => v.status === "ready_to_film");
+  // Carousels skip Ready to Film — their "just approved" landing spot is
+  // Editor Brief instead, so this section watches both.
+  const approved = board.filter(
+    (v) => v.status === "ready_to_film" || (v.status === "editor_brief" && isCarouselFormat(v.formats))
+  );
   const isManager = viewer.role === "owner" || viewer.role === "admin";
 
   return (
@@ -50,7 +55,11 @@ export default async function ScriptReviewPage() {
                 <span className="flex items-center gap-1">
                   <StageBack videoId={v.id} status={v.status} compact />
                   {isManager ? (
-                    <StageMove videoId={v.id} to="ready_to_film" label="Approve — ready to film" />
+                    isCarouselFormat(v.formats) ? (
+                      <StageMove videoId={v.id} to="editor_brief" label="Approve — build the brief" />
+                    ) : (
+                      <StageMove videoId={v.id} to="ready_to_film" label="Approve — ready to film" />
+                    )
                   ) : null}
                 </span>
               }
@@ -67,7 +76,9 @@ export default async function ScriptReviewPage() {
               <VideoRow
                 key={v.id}
                 video={v}
-                href={`/videos/${v.id}/${isManager ? "film" : "script"}`}
+                href={`/videos/${v.id}/${
+                  !isManager ? "script" : v.status === "editor_brief" ? "editor-brief" : "film"
+                }`}
                 showStage={false}
                 showEta={false}
               />

@@ -12,6 +12,7 @@ import {
   saveCarouselStyleAction,
   setSlideRefsAction,
   updateCarouselCaptionAction,
+  setSlideImageFromShotAction,
 } from "@/app/carousel-actions";
 import { suggestSlideVisualsAction } from "@/app/library-visuals-actions";
 import { ShotCard } from "@/components/library/VisualsBrowser";
@@ -224,6 +225,7 @@ function SlideFocus({
   const [picker, setPicker] = useState<LibraryShot[] | null>(null);
   const [refs, setRefs] = useState<string[]>(s.ref_shot_ids ?? []);
   const [generating, setGenerating] = useState(false);
+  const [usingShotId, setUsingShotId] = useState<string | null>(null);
 
   const hasText = Boolean((s.caption ?? "").trim());
 
@@ -256,6 +258,23 @@ function SlideFocus({
     startTransition(async () => {
       const res = await setSlideRefsAction(s.id, videoId, next);
       if (res?.error) toast.error(res.error);
+    });
+  }
+
+  // Puts the real footage-index photo straight onto the slide — no OpenAI
+  // call, free to test. This is the actual top/bottom carousel workflow: a
+  // real photo, not an AI drawing.
+  function applyShotImage(shotId: string) {
+    setUsingShotId(shotId);
+    startTransition(async () => {
+      const res = await setSlideImageFromShotAction(s.id, videoId, shotId);
+      setUsingShotId(null);
+      if (res?.error) toast.error(res.error);
+      else {
+        setPicker(null);
+        toast.success(`Slide ${i + 1} set from the footage index.`);
+        router.refresh();
+      }
     });
   }
 
@@ -410,7 +429,9 @@ function SlideFocus({
               <div>
                 <h3 className="text-sm font-semibold">Visuals for slide {i + 1}</h3>
                 <p className="text-xs text-ink-3">
-                  From the footage index — pick up to 4 frames to ground the design in.
+                  From the footage index — free, no AI call. &ldquo;Use as image&rdquo; puts the
+                  real photo straight on the slide. &ldquo;Reference&rdquo; hands it to Generate as
+                  grounding instead.
                 </p>
               </div>
               <button
@@ -426,16 +447,30 @@ function SlideFocus({
                   key={shot.id}
                   shot={shot}
                   action={
-                    <button
-                      onClick={() => toggleRef(shot.id)}
-                      className={`rounded-md px-2 py-1 text-[10px] font-medium ${
-                        refs.includes(shot.id)
-                          ? "bg-accent text-white"
-                          : "border border-line text-ink-2 hover:border-accent hover:text-ink"
-                      }`}
-                    >
-                      {refs.includes(shot.id) ? "Referenced ✓" : "Use"}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => applyShotImage(shot.id)}
+                        title="Set this photo as the slide's image directly — no AI, free"
+                        className="rounded-md bg-accent px-2 py-1 text-[10px] font-medium text-white hover:bg-accent-hi disabled:opacity-50"
+                      >
+                        {usingShotId === shot.id ? "Setting…" : "Use as image"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => toggleRef(shot.id)}
+                        title="Hand this to Generate as grounding for an AI-designed slide"
+                        className={`rounded-md px-2 py-1 text-[10px] font-medium ${
+                          refs.includes(shot.id)
+                            ? "bg-accent-ghost text-accent-hi"
+                            : "border border-line text-ink-2 hover:border-accent hover:text-ink"
+                        }`}
+                      >
+                        {refs.includes(shot.id) ? "Referenced ✓" : "Reference"}
+                      </button>
+                    </div>
                   }
                 />
               ))}
