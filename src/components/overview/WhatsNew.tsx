@@ -58,7 +58,7 @@ export function WhatsNew({
             >
               <span
                 className="h-1.5 w-1.5 shrink-0 rounded-full"
-                style={{ background: STATUS_COLOR[g.status] }}
+                style={{ background: g.status === "other" ? "var(--color-line-strong)" : STATUS_COLOR[g.status] }}
               />
               <span className="min-w-0 flex-1 truncate text-sm">{g.label}</span>
               <IconChevronRight size={12} className="shrink-0 text-ink-3" />

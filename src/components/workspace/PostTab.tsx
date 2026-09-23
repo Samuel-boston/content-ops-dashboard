@@ -96,6 +96,16 @@ export function PostTab({
 
   return (
     <div className="flex h-full flex-col overflow-y-auto px-3 py-3">
+      {/* The hand-off to the VA comes first — it's the main thing to do with a
+          finished video. Trials are manual by nature (IG's API can't post or
+          read them), so this sits beside the automatic scheduler below. */}
+      <TrialsPanel
+        videoId={video.id}
+        vaNotes={video.va_notes}
+        vaSentAt={video.va_sent_at}
+        hasCover={Boolean(video.cover_path)}
+      />
+
       {/* Caption */}
       <div className="rounded-xl border border-line bg-card">
         <textarea
@@ -274,15 +284,6 @@ export function PostTab({
       >
         {pending ? "Scheduling…" : "Schedule post"}
       </button>
-
-      {/* Hook trials — manual by nature (IG's API can't post or read trial
-          reels), so it lives beside the automatic scheduler, not inside it. */}
-      <TrialsPanel
-        videoId={video.id}
-        vaNotes={video.va_notes}
-        vaSentAt={video.va_sent_at}
-        hasCover={Boolean(video.cover_path)}
-      />
     </div>
   );
 }

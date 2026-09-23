@@ -119,7 +119,7 @@ export function TrialsPanel({
     "rounded-md border border-line bg-raised px-2 py-1 text-xs placeholder:text-ink-3 focus:border-accent focus:outline-none";
 
   return (
-    <section className="mt-4 rounded-xl border border-line bg-card p-3">
+    <section className="mb-4 rounded-xl border border-line bg-card p-3">
       {/* The hand-off: nothing reaches the VA until this is pressed. */}
       <div className="mb-3 space-y-2 rounded-lg border border-accent/30 bg-accent-ghost p-2.5">
         <div className="flex items-center gap-2">

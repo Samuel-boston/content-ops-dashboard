@@ -191,7 +191,8 @@ export async function runway(): Promise<Runway> {
 /* -------------------------------------------------------------- what's new -- */
 
 export interface WhatsNewGroup {
-  status: VideoStatus;
+  /** The stage this line is about, or "other" for the folded-together minor moves. */
+  status: VideoStatus | "other";
   count: number;
   /** "2 videos to review" — already pluralised. */
   label: string;
@@ -216,6 +217,7 @@ const GROUP_ORDER: VideoStatus[] = [
   "creative_review",
   "in_review",
   "final_review",
+  "revisions",
   "ready_to_film",
   "ready_to_post",
   "posted",
@@ -287,9 +289,23 @@ export async function whatsNew(limit = 8): Promise<WhatsNew> {
     const i = GROUP_ORDER.indexOf(s);
     return i === -1 ? GROUP_ORDER.length : i;
   };
-  const groups = [...counts.entries()]
+  // Only the stages that mean something to the client get their own line;
+  // everything else (ideas shuffling, editors picking things up) folds into
+  // one quiet "other" line rather than a wall of small notices.
+  const main = [...counts.entries()].filter(([s]) => GROUP_ORDER.includes(s));
+  const minor = [...counts.entries()].filter(([s]) => !GROUP_ORDER.includes(s));
+  const groups: WhatsNewGroup[] = main
     .sort((a, b) => rank(a[0]) - rank(b[0]))
     .map(([status, count]) => ({ status, count, ...groupLabel(status, count) }));
+  const minorCount = minor.reduce((n, [, c]) => n + c, 0);
+  if (minorCount > 0) {
+    groups.push({
+      status: "other",
+      count: minorCount,
+      label: `${plural(minorCount, "other video", "other videos")} moved along`,
+      href: "/board",
+    });
+  }
 
   return { now: Date.now(), since: me.overview_seen_at, items: rows.slice(0, limit), groups };
 }

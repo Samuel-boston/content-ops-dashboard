@@ -16,6 +16,9 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
   // The posting schedule is the client's concern. An editor works to the ETA
   // they gave, and their own board already carries those dates.
   if (viewer.role === "editor") redirect("/my-work");
+  // The copywriter's world is the planning board; the posting calendar is the
+  // client's (and, view-only, the VA's).
+  if (viewer.role === "copywriter") redirect("/scripting");
   const sp = await searchParams;
   const now = new Date();
   const year = Number(first(sp.y) ?? now.getFullYear());

@@ -189,9 +189,10 @@ export async function setPostDateAction(videoId: string, dateISO: string | null)
 
 /** Bulk stage move, for the board's multi-select. */
 export async function bulkSetStatusAction(ids: string[], status: VideoStatus) {
-  // Not manager-only: the copywriter moves scripts along their own board.
-  // RLS and the guard trigger decide which moves each role may make.
-  await requireUser();
+  // The copywriter moves scripts along their own board, so not manager-only —
+  // but nobody else. RLS and the guard trigger still decide which moves each
+  // of these roles may make.
+  await requireRole("owner", "admin", "copywriter");
   if (!ids.length) return { error: "Nothing selected." };
   const supabase = await supabaseServer();
   const { error } = await supabase.from("videos").update({ status }).in("id", ids);

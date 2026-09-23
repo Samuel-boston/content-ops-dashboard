@@ -335,9 +335,18 @@ async function resolveOneVideo(
   if (!found?.length) return { reply: { ok: true, text: `Nothing matching "${searchText}".` } };
 
   const words = titleWords(searchText);
+  // Whole words beat substrings ("test" is a word in "test carousel" but only
+  // part of "Testimonial"), and the words appearing together in order beats
+  // both — that's what someone means by "the carousel test post".
+  const phrase = words.join(" ");
   const score = (title: string) => {
     const t = title.toLowerCase();
-    return words.filter((w) => t.includes(w)).length;
+    let n = words.reduce(
+      (sum, w) => sum + (new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(t) ? 2 : t.includes(w) ? 1 : 0),
+      0
+    );
+    if (phrase && words.length > 1 && t.includes(phrase)) n += 3;
+    return n;
   };
   const ranked = [...found].sort((x, y) => score(y.title) - score(x.title));
   const best = score(ranked[0].title);
