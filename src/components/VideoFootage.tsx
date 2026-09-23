@@ -37,6 +37,9 @@ export function VideoFootage({
   const [link, setLink] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [, startTransition] = useTrackedTransition();
+  // Finished-video links are the deliverable, not source material — they have
+  // their own panel.
+  assets = assets.filter((a) => a.kind !== "delivery");
 
   async function upload(file: File) {
     setProgress(0);

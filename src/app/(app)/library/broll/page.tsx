@@ -1,14 +1,9 @@
-import { requireUser } from "@/lib/auth";
-import { listBrollCategories } from "@/app/editor-actions";
-import { BrollLibrary } from "@/components/BrollLibrary";
+import { redirect } from "next/navigation";
 
-export default async function BrollPage() {
-  const viewer = await requireUser();
-  const categories = await listBrollCategories();
-  return (
-    <BrollLibrary
-      categories={categories}
-      canEdit={viewer.role === "owner" || viewer.role === "admin"}
-    />
-  );
+/**
+ * The Drive-folder map was folded into the footage index — the shot-level
+ * catalog covers the same ground. Old links and bookmarks land there.
+ */
+export default function BrollPage() {
+  redirect("/library/visuals");
 }

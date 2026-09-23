@@ -29,7 +29,7 @@ const MANAGER_LINKS_AFTER = [
   { href: "/calendar", label: "Calendar" },
   { href: "/team", label: "Team" },
   { href: "/analytics", label: "Analytics" },
-  { href: "/library/music", label: "Library" },
+  { href: "/library/visuals", label: "Library" },
 ];
 
 /**
@@ -42,6 +42,7 @@ const MORE_LINKS = [
   { href: "/archive", label: "Archive" },
   { href: "/parked", label: "Later" },
   { href: "/publishing", label: "Publishing" },
+  { href: "/tasks", label: "VA Tasks" },
 ];
 
 /**
@@ -52,7 +53,7 @@ const MORE_LINKS = [
 const EDITOR_LINKS = [
   { href: "/my-work", label: "My Work" },
   { href: "/editing-bay", label: "Editing Bay" },
-  { href: "/library/broll", label: "Library" },
+  { href: "/library/visuals", label: "Library" },
 ];
 
 /** An editor's nav is already short — these two stay in the user menu rather than earning a dropdown of their own. */
@@ -62,20 +63,26 @@ const EDITOR_SECONDARY_LINKS = [
 ];
 
 /**
- * The copywriter lives in the planning half only: ideas in, scripts out.
- * Script Review is their "submitted, waiting on the client" column, and the
- * footage index is there because good scripts get written against footage
- * that actually exists.
+ * The copywriter lives in the planning half only: ideas in, scripts out — all
+ * on one board (Ideation through Ready to Film). The library is there because
+ * good scripts get written against footage that actually exists.
  */
 const COPYWRITER_LINKS = [
-  { href: "/ideation", label: "Ideation" },
-  { href: "/scripting", label: "Scripting" },
-  { href: "/script-review", label: "Script Review" },
-  { href: "/library/visuals", label: "Footage" },
+  { href: "/scripting", label: "Board" },
+  { href: "/library/visuals", label: "Library" },
 ];
 
-/** The VA sees one thing: what to post. Everything else stays out of reach. */
-const VA_LINKS = [{ href: "/posting", label: "Posting" }];
+/**
+ * The VA posts, and can look at the calendar and library — the calendar
+ * read-only. "Other" is the miscellaneous task board the client fills in for
+ * anything that isn't posting.
+ */
+const VA_LINKS = [
+  { href: "/posting", label: "Posting" },
+  { href: "/calendar", label: "Calendar" },
+  { href: "/tasks", label: "Other" },
+  { href: "/library/visuals", label: "Library" },
+];
 
 /**
  * Inline pending indicator for a nav link — a dot beside the label while the

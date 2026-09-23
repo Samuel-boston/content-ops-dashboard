@@ -4,8 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const TABS = [
-  { href: "/library/visuals", label: "Footage index" },
-  { href: "/library/broll", label: "B-roll folders" },
+  { href: "/library/visuals", label: "Footage" },
   { href: "/library/music", label: "Music" },
   { href: "/library/references", label: "References" },
   { href: "/library/sop", label: "SOP / Playbook" },

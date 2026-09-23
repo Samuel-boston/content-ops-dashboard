@@ -95,6 +95,7 @@ export function ClaimButton({
         videoId={videoId}
         title={videoTitle}
         mode="claim"
+        goToVideo
         currentEta={currentEta ?? null}
         onClose={() => setClaiming(false)}
       />

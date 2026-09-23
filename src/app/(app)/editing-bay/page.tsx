@@ -63,8 +63,8 @@ export default async function EditingBayPage({ searchParams }: PageProps<"/editi
 
       {!isManager ? (
         <p className="rounded-lg border border-line bg-card px-3 py-2 text-xs text-ink-3">
-          Taking one asks for a delivery date. It doesn&rsquo;t have to be exact — it&rsquo;s so
-          the client can plan around you, and you can change it later.
+          Taking one asks for a delivery day — by the end of that day. It doesn&rsquo;t have to be
+          exact; it&rsquo;s so the client can plan around you, and you can change it later.
         </p>
       ) : null}
 

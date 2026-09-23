@@ -10,33 +10,9 @@ import { TaskBoard } from "@/components/editor/TaskBoard";
 import { MonthPanel } from "@/components/editor/MonthPanel";
 import { WhatsNew } from "@/components/overview/WhatsNew";
 import { markOverviewSeenAction, whatsNew } from "@/app/overview-actions";
-import { IconChevronRight, IconFolder, IconLayers, IconSection } from "@/components/ui/icons";
+import { IconLayers } from "@/components/ui/icons";
 import { money } from "@/lib/format";
 import { timeGreeting } from "@/lib/greeting";
-
-const RESOURCES = [
-  {
-    href: "/library/broll",
-    label: "B-roll library",
-    hint: "The client's Drive folders",
-    tone: "var(--color-stage-progress)",
-    icon: <IconFolder size={16} />,
-  },
-  {
-    href: "/library/music",
-    label: "Music library",
-    hint: "Cleared tracks, by mood",
-    tone: "var(--color-accent)",
-    icon: <IconLayers size={16} />,
-  },
-  {
-    href: "/library/sop",
-    label: "How we work",
-    hint: "Specs and conventions",
-    tone: "var(--color-stage-variants)",
-    icon: <IconSection size={16} />,
-  },
-];
 
 /**
  * The editor's home.
@@ -118,13 +94,13 @@ export default async function MyWorkPage() {
       {/* 1 — what to do next, grouped by task type */}
       <section>
         <h2 className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
-          Your tasks
+          Your board
         </h2>
         <TaskBoard groups={taskGroups} />
       </section>
 
       {/* 2 — what moved while they were away */}
-      {news.items.length > 0 ? <WhatsNew data={news} /> : null}
+      {news.groups.length > 0 ? <WhatsNew data={news} /> : null}
 
       {!board.hasRates ? (
         <p className="rounded-xl bg-warn/10 px-4 py-3 text-xs leading-snug text-warn">
@@ -147,49 +123,18 @@ export default async function MyWorkPage() {
             and it&rsquo;ll appear here under this month.
           </p>
         ) : (
-          board.months.map((m, i) => (
+          board.months.map((m) => (
             <MonthPanel
               key={m.month}
               data={m}
               currency={board.currency}
-              defaultOpen={i === 0}
+              defaultOpen={false}
               defaultLink={board.lastKnownPaymentLink}
               overdueIds={overdueIds}
               editorId={viewer.id}
             />
           ))
         )}
-      </section>
-
-      {/* 4 — everything else they need */}
-      <section>
-        <h2 className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
-          Everything you need
-        </h2>
-        <div className="grid gap-2 sm:grid-cols-3">
-          {RESOURCES.map((l) => (
-            <Link
-              key={l.href}
-              href={l.href}
-              className="group flex items-center gap-3 rounded-xl border border-line bg-card p-3.5 transition hover:border-line-strong hover:bg-raised"
-            >
-              <span
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-                style={{ color: l.tone, background: `color-mix(in srgb, ${l.tone} 14%, transparent)` }}
-              >
-                {l.icon}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-xs font-medium">{l.label}</span>
-                <span className="block truncate text-[10px] text-ink-3">{l.hint}</span>
-              </span>
-              <IconChevronRight
-                size={12}
-                className="shrink-0 text-ink-3 transition group-hover:translate-x-0.5"
-              />
-            </Link>
-          ))}
-        </div>
       </section>
     </div>
   );

@@ -55,8 +55,8 @@ export async function registerAssetAction(input: {
   sizeBytes?: number | null;
   /** "raw" (default) mirrors to Drive like any source file; "other" is a
    * supporting asset — a screen recording for the editors, say — that stays
-   * in Storage only. */
-  kind?: "raw" | "other";
+   * in Storage only. "delivery" is a finished-video link from the editor. */
+  kind?: "raw" | "other" | "delivery";
 }) {
   const me = await requireUser();
   const kind = input.kind ?? "raw";
@@ -64,7 +64,9 @@ export async function registerAssetAction(input: {
   const { error } = await supabase.from("video_assets").insert({
     video_id: input.videoId,
     kind,
-    label: input.label.trim() || (kind === "raw" ? "Raw footage" : "Attachment"),
+    label:
+      input.label.trim() ||
+      (kind === "raw" ? "Raw footage" : kind === "delivery" ? "Finished video" : "Attachment"),
     storage_path: input.storagePath ?? null,
     external_url: input.externalUrl ?? null,
     size_bytes: input.sizeBytes ?? null,
@@ -72,7 +74,9 @@ export async function registerAssetAction(input: {
   });
   if (error) return { error: error.message };
 
-  await logActivity(input.videoId, me.id, "version", `Added ${kind === "raw" ? "footage" : "an attachment"} “${input.label.trim() || "Untitled"}”`);
+  await logActivity(input.videoId, me.id, "version", `Added ${
+      kind === "raw" ? "footage" : kind === "delivery" ? "a finished-video link" : "an attachment"
+    } “${input.label.trim() || "Untitled"}”`);
 
   // If Drive is configured, mirror it across in the background so raw footage
   // ends up where the infrastructure plan says it should live. Supporting

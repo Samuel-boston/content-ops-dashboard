@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { listActiveBoard } from "@/app/actions";
 import { VideoRow } from "@/components/pipeline/VideoRow";
@@ -16,6 +17,8 @@ import { isCarouselFormat } from "@/lib/taxonomy";
  */
 export default async function ScriptReviewPage() {
   const viewer = await requireRole("owner", "admin", "copywriter");
+  // The copywriter works from the single planning board now.
+  if (viewer.role === "copywriter") redirect("/scripting");
   const board = await listActiveBoard();
 
   const waiting = board.filter((v) => v.status === "script_review");

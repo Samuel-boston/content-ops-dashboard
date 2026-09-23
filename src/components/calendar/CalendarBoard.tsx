@@ -215,6 +215,8 @@ export function CalendarBoard({
 
   function onDragEnd(e: DragEndEvent) {
     setDragId(null);
+    // View-only seats (the VA) can look but not reschedule.
+    if (!canEdit) return;
     const id = String(e.active.id);
     if (!e.over) return;
     const target = String(e.over.id);
@@ -350,9 +352,10 @@ export function CalendarBoard({
               ) : (
                 <div className="space-y-2">
                   {dayVideos.map((v) => (
-                    <Link
+                    <VideoLink
                       key={v.id}
-                      href={`/videos/${v.id}`}
+                      id={v.id}
+                      canOpen={canEdit}
                       className="block rounded-lg border border-line bg-panel p-2.5 transition hover:border-line-strong"
                     >
                       <span className="flex items-center gap-1.5">
@@ -381,7 +384,7 @@ export function CalendarBoard({
                           Editor&rsquo;s ETA is {dayMonth(v.eta_at)} — after this post date
                         </span>
                       ) : null}
-                    </Link>
+                    </VideoLink>
                   ))}
                 </div>
               )}
@@ -400,6 +403,30 @@ export function CalendarBoard({
         ) : null}
       </DragOverlay>
     </DndContext>
+  );
+}
+
+/**
+ * A row that opens the video — unless the viewer can't. The VA sees the
+ * calendar but has no access to the video page behind it, so for them it's
+ * just a label rather than a link into a "not found".
+ */
+function VideoLink({
+  id,
+  canOpen,
+  className,
+  children,
+}: {
+  id: string;
+  canOpen: boolean;
+  className: string;
+  children: React.ReactNode;
+}) {
+  if (!canOpen) return <div className={className}>{children}</div>;
+  return (
+    <Link href={`/videos/${id}`} className={className}>
+      {children}
+    </Link>
   );
 }
 
@@ -444,13 +471,14 @@ function UnscheduledRail({
           {videos.map((v) => (
             <div key={v.id} className="rounded-md hover:bg-panel">
               <DraggableChip video={v} colourBy={colourBy} />
-              <Link
-                href={`/videos/${v.id}`}
+              <VideoLink
+                id={v.id}
+                canOpen={canEdit}
                 className="block px-1.5 pb-1 text-[10px] text-ink-3 hover:text-ink-2"
               >
                 {STATUS_LABELS[v.status]}
                 {v.assigned_editor ? ` · ${displayName(v.assigned_editor)}` : ""}
-              </Link>
+              </VideoLink>
             </div>
           ))}
         </div>

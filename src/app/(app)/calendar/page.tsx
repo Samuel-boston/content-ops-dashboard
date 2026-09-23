@@ -80,7 +80,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
           "platform",
           customs.filter((c) => c.kind === "platform").map((c) => c.value)
         )}
-        canEdit
+        canEdit={viewer.role !== "va"}
       />
     </div>
   );

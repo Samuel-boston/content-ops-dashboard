@@ -142,14 +142,14 @@ export function VisualsBrowser({
       </form>
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <button className={chip(!initial.media)} onClick={() => apply({ media: "" })}>
-          All
-        </button>
         <button className={chip(initial.media === "video")} onClick={() => apply({ media: "video" })}>
-          Video
+          Videos
         </button>
         <button className={chip(initial.media === "image")} onClick={() => apply({ media: "image" })}>
-          Photos
+          Images
+        </button>
+        <button className={chip(!initial.media)} onClick={() => apply({ media: "" })}>
+          All
         </button>
         <button className={chip(initial.topPicks)} onClick={() => apply({ topPicks: !initial.topPicks })}>
           ⭐ Top picks

@@ -8,7 +8,7 @@ import { VideoQuickView } from "@/components/board/VideoQuickView";
 import { isCarouselFormat } from "@/lib/taxonomy";
 import type { BoardCard, Profile, Series, VideoStatus } from "@/lib/types";
 
-type BoardScope = "videos" | "carousels" | "scripting" | "filming";
+export type BoardScope = "videos" | "carousels" | "scripting" | "filming";
 
 /**
  * One continuous 12-column board reads as "everything, always" — nothing
@@ -69,15 +69,24 @@ export function BoardPageClient({
   customs,
   seriesOptions,
   viewerId,
+  scopes = SCOPE_ORDER,
+  basePath = "/board",
+  extraActions,
 }: {
   cards: BoardCard[];
   editors: Pick<Profile, "id" | "full_name" | "email">[];
   customs: { content_pillar: string[]; format: string[]; platform: string[] };
   seriesOptions: Series[];
   viewerId: string;
+  /** Which scope tabs to offer — the copywriter only ever gets Scripting. */
+  scopes?: BoardScope[];
+  /** The route this board lives on, so closing the quick view stays put. */
+  basePath?: string;
+  /** Extra controls on the right of the tab row (idea tools, for the copywriter). */
+  extraActions?: React.ReactNode;
 }) {
   const [creating, setCreating] = useState(false);
-  const [scope, setScope] = useState<BoardScope>("videos");
+  const [scope, setScope] = useState<BoardScope>(scopes[0]);
   const router = useRouter();
   const searchParams = useSearchParams();
   const openId = searchParams.get("open");
@@ -89,25 +98,32 @@ export function BoardPageClient({
     const next = new URLSearchParams(searchParams.toString());
     next.delete("open");
     const qs = next.toString();
-    router.replace(qs ? `/board?${qs}` : "/board", { scroll: false });
+    router.replace(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="mb-3 flex w-fit shrink-0 items-center gap-0.5 rounded-lg border border-line bg-card p-0.5">
-        {SCOPE_ORDER.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setScope(s)}
-            aria-pressed={scope === s}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-              scope === s ? "bg-accent text-white" : "text-ink-2 hover:bg-hover hover:text-ink"
-            }`}
-          >
-            {SCOPES[s].label}
-          </button>
-        ))}
+      <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-2">
+        {scopes.length > 1 ? (
+          <div className="flex w-fit items-center gap-0.5 rounded-lg border border-line bg-card p-0.5">
+            {scopes.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setScope(s)}
+                aria-pressed={scope === s}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                  scope === s ? "bg-accent text-white" : "text-ink-2 hover:bg-hover hover:text-ink"
+                }`}
+              >
+                {SCOPES[s].label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <span />
+        )}
+        {extraActions ? <div className="flex items-center gap-2">{extraActions}</div> : null}
       </div>
       <div className="min-h-0 flex-1">
         <BoardShell

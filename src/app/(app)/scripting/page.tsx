@@ -1,27 +1,30 @@
 import { requireRole } from "@/lib/auth";
-import { listActiveBoard, listEditors, listTaxonomyCustoms } from "@/app/actions";
-import { VideoRow } from "@/components/pipeline/VideoRow";
-import { StageMove } from "@/components/pipeline/StageMove";
-import { StageBack } from "@/components/pipeline/StageBack";
-import { CreateVideoButton } from "@/components/CreateVideoButton";
-import { IconCheck } from "@/components/ui/icons";
+import { listEditors, listTaxonomyCustoms } from "@/app/actions";
+import { listBoardCards } from "@/app/board-actions";
+import { listSeriesOptions } from "@/app/series-actions";
+import { BoardPageClient } from "@/components/board/BoardPageClient";
+import { IdeaGeneratorButton } from "@/components/script/IdeaGeneratorButton";
+import { IdeaVoiceCapture } from "@/components/script/IdeaVoiceCapture";
 
 /**
- * Scripts in progress. A video only leaves here for Ready to Edit, which is the
- * moment the editors first see it — so the "Send to editors" button is the
- * meaningful action on this page.
+ * The planning board — Ideation through Ready to Film in one place, for the
+ * copywriter's desk and (as the same Scripting tab) the client's board.
+ *
+ * It replaces separate Ideation / Scripting / Script Review lists: a video's
+ * whole life on the writing side is one row of columns, and dragging a card
+ * is the way it moves. The database still decides who may make which move —
+ * a copywriter can go up to Script Review and back, but only the client can
+ * approve a script for filming.
  */
 export default async function ScriptingPage() {
   const viewer = await requireRole("owner", "admin", "copywriter");
-  const [board, editors, customs] = await Promise.all([
-    listActiveBoard(),
+  const [cards, editors, customs, seriesOptions] = await Promise.all([
+    listBoardCards(),
     listEditors(),
     listTaxonomyCustoms(),
+    listSeriesOptions(),
   ]);
 
-  const scripting = board.filter((v) => v.status === "scripting");
-  // Written enough to hand over: a body, or at least one hook.
-  const ready = scripting.filter((v) => v.script_body?.trim() || v.script_hooks?.length);
   const customsBy = {
     content_pillar: customs.filter((c) => c.kind === "content_pillar").map((c) => c.value),
     format: customs.filter((c) => c.kind === "format").map((c) => c.value),
@@ -29,48 +32,27 @@ export default async function ScriptingPage() {
   };
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Scripting</h1>
-          <p className="text-sm text-ink-2">
-            {scripting.length} being written · {ready.length} ready to film
-          </p>
-        </div>
-        <CreateVideoButton editors={editors} customs={customsBy} viewerId={viewer.id} />
-      </div>
-
-      <p className="rounded-lg border border-line bg-card px-3 py-2 text-xs text-ink-3">
-        More than one hook in a script means hook variants are expected, and the video will route
-        through Awaiting Variants after you approve it. One hook means it won&rsquo;t.
-      </p>
-
-      {scripting.length === 0 ? (
-        <div className="rounded-xl border border-line bg-card px-4 py-12 text-center">
-          <span className="text-ok">
-            <IconCheck size={18} />
-          </span>
-          <p className="mt-2 text-sm text-ink-2">Nothing waiting to be written.</p>
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-line bg-app">
-          {scripting.map((v) => (
-            <VideoRow
-              key={v.id}
-              video={v}
-              href={`/videos/${v.id}/script`}
-              showStage={false}
-              showEta={false}
-              action={
-                <span className="flex items-center gap-1">
-                  <StageBack videoId={v.id} status={v.status} compact />
-                  <StageMove videoId={v.id} to="script_review" label="Submit for review" />
-                </span>
-              }
-            />
-          ))}
-        </div>
-      )}
+    <div className="h-[calc(100dvh-7rem)]">
+      <BoardPageClient
+        cards={cards}
+        // Assigning editors is the client's call — an empty list hides that control.
+        editors={
+          viewer.role === "copywriter"
+            ? []
+            : editors.map((e) => ({ id: e.id, full_name: e.full_name, email: e.email }))
+        }
+        customs={customsBy}
+        seriesOptions={seriesOptions}
+        viewerId={viewer.id}
+        scopes={["scripting"]}
+        basePath="/scripting"
+        extraActions={
+          <>
+            <IdeaVoiceCapture viewerId={viewer.id} />
+            <IdeaGeneratorButton />
+          </>
+        }
+      />
     </div>
   );
 }

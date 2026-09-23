@@ -2,7 +2,7 @@
 
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth";
-import type { VideoActivity, VideoMetrics } from "@/lib/types";
+import { STATUS_LABELS, type VideoActivity, type VideoMetrics, type VideoStatus } from "@/lib/types";
 
 /* ------------------------------------------------------------ performance -- */
 
@@ -190,17 +190,67 @@ export async function runway(): Promise<Runway> {
 
 /* -------------------------------------------------------------- what's new -- */
 
+export interface WhatsNewGroup {
+  status: VideoStatus;
+  count: number;
+  /** "2 videos to review" — already pluralised. */
+  label: string;
+  href: string;
+}
+
 export interface WhatsNew {
   /** Clock stamped at fetch time, so the view never reads it during render. */
   now: number;
   since: string | null;
+  /** Raw recent moves — kept for Andreas's ranking, not shown one-by-one. */
   items: (VideoActivity & { video_title: string | null })[];
+  /** The same moves rolled up: one line per destination stage, with a count. */
+  groups: WhatsNewGroup[];
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** Stages that mean "your turn" come first, then the rest in pipeline order. */
+const GROUP_ORDER: VideoStatus[] = [
+  "script_review",
+  "creative_review",
+  "in_review",
+  "final_review",
+  "ready_to_film",
+  "ready_to_post",
+  "posted",
+];
+
+function groupLabel(status: VideoStatus, n: number): { label: string; href: string } {
+  switch (status) {
+    case "script_review":
+      return { label: plural(n, "script to review", "scripts to review"), href: "/script-review" };
+    case "creative_review":
+      return { label: plural(n, "creative to review", "creatives to review"), href: "/board" };
+    case "in_review":
+      return { label: plural(n, "video to review", "videos to review"), href: "/review" };
+    case "final_review":
+      return { label: plural(n, "video ready for final review", "videos ready for final review"), href: "/review" };
+    case "ready_to_film":
+      return { label: plural(n, "video ready to film", "videos ready to film"), href: "/filming" };
+    case "ready_to_post":
+      return { label: plural(n, "video ready to post", "videos ready to post"), href: "/board" };
+    case "posted":
+      return { label: plural(n, "video posted", "videos posted"), href: "/archive" };
+    default:
+      return {
+        label: `${plural(n, "video", "videos")} moved to ${STATUS_LABELS[status]}`,
+        href: "/board",
+      };
+  }
 }
 
 /**
  * Movement since this person last opened the Overview.
  *
  * Own actions are filtered out — you don't need telling what you just did.
+ * Moves are rolled up per stage ("3 videos to review") rather than listed per
+ * video, and a video that moved several times counts once, at where it landed.
  * The watermark is only advanced by `markOverviewSeenAction`, called from the
  * page after render, so the list survives the render that displays it.
  */
@@ -217,13 +267,31 @@ export async function whatsNew(limit = 8): Promise<WhatsNew> {
     .gt("created_at", since)
     .neq("actor_id", me.id)
     .order("created_at", { ascending: false })
-    .limit(limit);
+    .limit(300);
 
-  const items = ((data as (VideoActivity & { video: { title: string } | null })[]) ?? []).map(
+  const rows = ((data as (VideoActivity & { video: { title: string } | null })[]) ?? []).map(
     (a) => ({ ...a, video_title: a.video?.title ?? null })
   );
 
-  return { now: Date.now(), since: me.overview_seen_at, items };
+  // Newest first, so the first status move seen for a video is where it ended up.
+  const landed = new Map<string, VideoStatus>();
+  for (const a of rows) {
+    if (a.kind !== "status" || landed.has(a.video_id)) continue;
+    const to = a.summary.match(/→ (\w+)$/)?.[1] as VideoStatus | undefined;
+    if (to && STATUS_LABELS[to]) landed.set(a.video_id, to);
+  }
+  const counts = new Map<VideoStatus, number>();
+  for (const to of landed.values()) counts.set(to, (counts.get(to) ?? 0) + 1);
+
+  const rank = (s: VideoStatus) => {
+    const i = GROUP_ORDER.indexOf(s);
+    return i === -1 ? GROUP_ORDER.length : i;
+  };
+  const groups = [...counts.entries()]
+    .sort((a, b) => rank(a[0]) - rank(b[0]))
+    .map(([status, count]) => ({ status, count, ...groupLabel(status, count) }));
+
+  return { now: Date.now(), since: me.overview_seen_at, items: rows.slice(0, limit), groups };
 }
 
 /** Move the watermark forward. Called once the Overview has been rendered. */

@@ -3,7 +3,6 @@ import { Chip, PriorityPill } from "@/components/badges";
 import { EtaBadge } from "@/components/pipeline/Eta";
 import {
   IconCheck,
-  IconChevronRight,
   IconClock,
   IconFile,
   IconLayers,
@@ -14,76 +13,102 @@ import { STATUS_COLOR, STATUS_LABELS } from "@/lib/types";
 import { agingTone, type TaskGroups, type TaskItem } from "@/lib/tasks";
 
 /**
- * "What do I need to do right now" — the editor's task board.
+ * The editor's board — "what do I need to do right now", as columns.
  *
- * Grouped by task type rather than by month or by raw stage label, because
- * that's the question an editor actually has: which of my videos need a
- * first cut, which need revisions, which are owed hook variants — not "go
- * into September and read the badges."
+ * Columns are task types rather than raw stage labels, because that's the
+ * question an editor actually has: which of my videos need a first cut, which
+ * need revisions, which are owed hook variants. A last column shows what's
+ * already with the client, so nothing on the plate is invisible.
  */
 export function TaskBoard({ groups }: { groups: TaskGroups }) {
-  const empty =
-    groups.revisions.length === 0 &&
-    groups.firstCut.length === 0 &&
-    groups.variants.length === 0 &&
-    groups.inProgress.length === 0 &&
-    groups.other.length === 0;
+  const columns: {
+    key: string;
+    title: string;
+    hint: string;
+    icon: React.ReactNode;
+    tone: string;
+    items: TaskItem[];
+    meta: (it: TaskItem) => React.ReactNode;
+  }[] = [
+    {
+      key: "revisions",
+      title: "Needs revisions",
+      hint: "The client asked for changes",
+      icon: <IconRevisions size={13} />,
+      tone: "var(--color-stage-revisions)",
+      items: groups.revisions,
+      meta: (it) => <EtaMeta item={it} emptyLabel="No ETA set" />,
+    },
+    {
+      key: "firstCut",
+      title: "Needs a first cut",
+      hint: "Claimed — nothing uploaded yet",
+      icon: <IconFile size={13} />,
+      tone: "var(--color-stage-progress)",
+      items: groups.firstCut,
+      meta: (it) => <EtaMeta item={it} emptyLabel="No ETA set" />,
+    },
+    {
+      key: "inProgress",
+      title: "Still editing",
+      hint: "Draft up — finish and submit",
+      icon: <IconPlay size={13} />,
+      tone: "var(--color-accent)",
+      items: groups.inProgress,
+      meta: (it) => <EtaMeta item={it} emptyLabel="No ETA set" />,
+    },
+    {
+      key: "variants",
+      title: "Needs hook variants",
+      hint: "Approved — variants still to cut",
+      icon: <IconLayers size={13} />,
+      tone: "var(--color-stage-variants)",
+      items: groups.variants,
+      meta: (it) => <AgingMeta item={it} />,
+    },
+    ...(groups.other.length > 0
+      ? [
+          {
+            key: "other",
+            title: "Needs your attention",
+            hint: "With you right now",
+            icon: <IconClock size={13} />,
+            tone: "var(--color-ink-2)",
+            items: groups.other,
+            meta: () => null,
+          },
+        ]
+      : []),
+    {
+      key: "waiting",
+      title: "With the client",
+      hint: "Submitted — waiting on their review",
+      icon: <IconCheck size={13} />,
+      tone: "var(--color-stage-review)",
+      items: groups.waiting,
+      meta: (it) => <AgingMeta item={it} label="waiting" />,
+    },
+  ];
 
-  if (empty) {
-    return (
-      <div className="flex items-center gap-2.5 rounded-xl border border-ok/30 bg-ok/5 px-4 py-3">
-        <span className="text-ok">
-          <IconCheck size={16} />
-        </span>
-        <p className="text-sm text-ink-2">
-          Nothing needs you right now. Take something from the Editing Bay when you&rsquo;re ready.
-        </p>
-      </div>
-    );
-  }
+  const nothingToDo = columns.every((c) => c.key === "waiting" || c.items.length === 0);
 
   return (
-    <div className="space-y-4">
-      <TaskSection
-        title="Needs revisions"
-        hint="The client asked for changes"
-        icon={<IconRevisions size={13} />}
-        tone="var(--color-stage-revisions)"
-        items={groups.revisions}
-        meta={(it) => <EtaMeta item={it} emptyLabel="No ETA set" />}
-      />
-      <TaskSection
-        title="Needs a first cut"
-        hint="Claimed — nothing uploaded yet"
-        icon={<IconFile size={13} />}
-        tone="var(--color-stage-progress)"
-        items={groups.firstCut}
-        meta={(it) => <EtaMeta item={it} emptyLabel="No ETA set" />}
-      />
-      <TaskSection
-        title="Needs hook variants"
-        hint="Approved — no formal ETA, but ageing shows here"
-        icon={<IconLayers size={13} />}
-        tone="var(--color-stage-variants)"
-        items={groups.variants}
-        meta={(it) => <AgingMeta item={it} />}
-      />
-      <TaskSection
-        title="Still editing"
-        hint="Draft uploaded — finish up and submit when ready"
-        icon={<IconPlay size={13} />}
-        tone="var(--color-accent)"
-        items={groups.inProgress}
-        meta={(it) => <EtaMeta item={it} emptyLabel="No ETA set" />}
-      />
-      <TaskSection
-        title="Needs your attention"
-        hint="With you right now"
-        icon={<IconClock size={13} />}
-        tone="var(--color-ink-2)"
-        items={groups.other}
-        meta={() => null}
-      />
+    <div className="space-y-3">
+      {nothingToDo ? (
+        <div className="flex items-center gap-2.5 rounded-xl border border-ok/30 bg-ok/5 px-4 py-3">
+          <span className="text-ok">
+            <IconCheck size={16} />
+          </span>
+          <p className="text-sm text-ink-2">
+            Nothing needs you right now. Take something from the Editing Bay when you&rsquo;re ready.
+          </p>
+        </div>
+      ) : null}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {columns.map(({ key, ...c }) => (
+          <TaskColumn key={key} {...c} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -112,12 +137,18 @@ const AGING_STYLE: Record<
  * No priority field is invented here — the tone comes purely from time in
  * stage, ramping from unremarkable to unmissable as it ages.
  */
-function AgingMeta({ item }: { item: TaskItem }) {
+function AgingMeta({ item, label: kind = "approval" }: { item: TaskItem; label?: "approval" | "waiting" }) {
   const days = item.daysInStage;
   const tone = agingTone(days);
-  const style = AGING_STYLE[tone];
+  const style = AGING_STYLE[kind === "waiting" ? "subtle" : tone];
   const label =
-    days <= 0 ? "Approved today" : `${days} day${days === 1 ? "" : "s"} since approval`;
+    kind === "waiting"
+      ? days <= 0
+        ? "Submitted today"
+        : `${days} day${days === 1 ? "" : "s"} waiting`
+      : days <= 0
+        ? "Approved today"
+        : `${days} day${days === 1 ? "" : "s"} since approval`;
 
   return (
     <span className={`inline-flex items-center gap-1.5 text-[11px] ${style.wrap}`}>
@@ -127,7 +158,7 @@ function AgingMeta({ item }: { item: TaskItem }) {
   );
 }
 
-function TaskSection({
+function TaskColumn({
   title,
   hint,
   icon,
@@ -142,47 +173,48 @@ function TaskSection({
   items: TaskItem[];
   meta: (item: TaskItem) => React.ReactNode;
 }) {
-  if (items.length === 0) return null;
-
   return (
-    <section>
-      <div className="mb-2 flex items-baseline gap-2 px-0.5">
-        <span style={{ color: tone }}>{icon}</span>
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <span className="rounded-md bg-raised px-1.5 py-0.5 text-[11px] tabular-nums text-ink-3">
-          {items.length}
-        </span>
-        <span className="ml-auto hidden text-[11px] text-ink-3 sm:inline">{hint}</span>
+    <section className="flex min-h-[8rem] flex-col rounded-xl border border-line bg-panel p-2">
+      <div className="mb-2 px-1.5 pt-1">
+        <div className="flex items-center gap-2">
+          <span style={{ color: tone }}>{icon}</span>
+          <h3 className="text-sm font-semibold">{title}</h3>
+          <span className="ml-auto rounded-md bg-raised px-1.5 py-0.5 text-[11px] tabular-nums text-ink-3">
+            {items.length}
+          </span>
+        </div>
+        <p className="mt-0.5 text-[11px] text-ink-3">{hint}</p>
       </div>
-      <div className="overflow-hidden rounded-xl border border-line bg-card">
-        {items.map((it, i) => (
-          <Link
-            key={it.video.id}
-            href={`/videos/${it.video.id}`}
-            className={`flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 transition hover:bg-hover/40 ${
-              i !== items.length - 1 ? "border-b border-line" : ""
-            }`}
-          >
-            <span className="min-w-[140px] flex-1 truncate text-sm font-medium">
-              {it.video.title}
-            </span>
-            {it.video.priority !== "standard" ? <PriorityPill priority={it.video.priority} /> : null}
-            <span className="hidden gap-1 sm:flex">
-              {(it.video.formats ?? []).slice(0, 1).map((t) => (
-                <Chip key={t}>{t}</Chip>
-              ))}
-            </span>
-            <span className="flex items-center gap-1.5 text-[11px] text-ink-3">
-              <span
-                className="h-1.5 w-1.5 rounded-full"
-                style={{ background: STATUS_COLOR[it.video.status] }}
-              />
-              {STATUS_LABELS[it.video.status]}
-            </span>
-            {meta(it)}
-            <IconChevronRight size={12} className="ml-auto shrink-0 text-ink-3 sm:ml-0" />
-          </Link>
-        ))}
+      <div className="flex-1 space-y-1.5">
+        {items.length === 0 ? (
+          <p className="px-2 py-4 text-center text-[11px] text-ink-3">Nothing here</p>
+        ) : (
+          items.map((it) => (
+            <Link
+              key={it.video.id}
+              href={`/videos/${it.video.id}`}
+              className="block space-y-1.5 rounded-lg border border-line bg-card px-3 py-2.5 transition hover:border-line-strong hover:bg-raised"
+            >
+              <span className="block truncate text-sm font-medium">{it.video.title}</span>
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                {it.video.priority !== "standard" ? (
+                  <PriorityPill priority={it.video.priority} />
+                ) : null}
+                {(it.video.formats ?? []).slice(0, 1).map((t) => (
+                  <Chip key={t}>{t}</Chip>
+                ))}
+                <span className="flex items-center gap-1.5 text-[11px] text-ink-3">
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ background: STATUS_COLOR[it.video.status] }}
+                  />
+                  {STATUS_LABELS[it.video.status]}
+                </span>
+              </span>
+              <span className="block">{meta(it)}</span>
+            </Link>
+          ))
+        )}
       </div>
     </section>
   );

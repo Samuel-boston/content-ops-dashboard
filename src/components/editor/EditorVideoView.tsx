@@ -13,6 +13,7 @@ import { ReturnToBay } from "@/components/pipeline/ReturnToBay";
 import { StageActions } from "@/components/pipeline/StageActions";
 import { UploadDropzone } from "@/components/engine/UploadDropzone";
 import { CarouselDeliver } from "@/components/editor/CarouselDeliver";
+import { FinishedLinks } from "@/components/editor/FinishedLinks";
 import { MusicPicker } from "@/components/workspace/MusicPicker";
 import { SeriesPicker } from "@/components/workspace/SeriesPicker";
 import { VoicePlayer } from "@/components/workspace/Voice";
@@ -193,6 +194,30 @@ export function EditorVideoView({
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/* ---- Left: what to make ---- */}
         <div className="min-w-0 space-y-4">
+          {/* The brief — first, because it's what everything below is measured against. */}
+          <section className="rounded-xl border border-line bg-card p-4">
+            <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+              Brief
+            </h2>
+            {video.brief ? (
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-2">
+                {video.brief}
+              </p>
+            ) : !briefVoiceUrl ? (
+              <p className="text-xs text-ink-3">
+                No brief written for this one — check the script, or ask the client below.
+              </p>
+            ) : null}
+            {briefVoiceUrl ? (
+              <div className={video.brief ? "mt-2" : ""}>
+                <span className="mb-1 block text-[10px] uppercase tracking-wider text-ink-3">
+                  Spoken brief — the client&rsquo;s own recording, not a summary
+                </span>
+                <audio src={briefVoiceUrl} controls className="h-9 w-full" />
+              </div>
+            ) : null}
+          </section>
+
           {/*
             Delivering the cut — the editor's whole job, and until now the one
             thing this page couldn't do. The upload dropzone lived only in the
@@ -202,14 +227,14 @@ export function EditorVideoView({
             <section className="rounded-xl border border-accent/30 bg-accent-ghost p-4">
               <div className="mb-2 flex flex-wrap items-baseline gap-2">
                 <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
-                  Deliver
+                  Finished video
                 </h2>
                 <span className="text-[11px] text-ink-3">
                   {carousel
                     ? "Drop the carousel images here, then submit it for review."
                     : video.status === "awaiting_variants"
                       ? "Upload a variant for each extra hook, then submit."
-                      : "Drop the cut here, then submit it for review."}
+                      : "Upload it here or add a link, then submit it for review."}
                 </span>
               </div>
 
@@ -226,7 +251,10 @@ export function EditorVideoView({
                     return (
                       <div key={cut.id} className="rounded-lg bg-card p-2.5">
                         <div className="mb-1.5 flex flex-wrap items-baseline gap-2">
-                          <span className="text-xs font-medium">{cut.label}</span>
+                          {/* One cut needs no name — "Main cut" was just noise. */}
+                          {cuts.length > 1 ? (
+                            <span className="text-xs font-medium">{cut.label}</span>
+                          ) : null}
                           {latest ? (
                             <span className="text-[10px] text-ink-3">
                               v{latest.version}
@@ -260,6 +288,12 @@ export function EditorVideoView({
                   })}
                 </div>
               )}
+
+              {!carousel ? (
+                <div className="mt-2.5">
+                  <FinishedLinks videoId={video.id} assets={assets} canEdit />
+                </div>
+              ) : null}
 
               {/* A scripted video with more than one hook needs a cut for
                   each — this is the only place an editor can add one.
@@ -449,7 +483,7 @@ export function EditorVideoView({
 
             {!hasScript ? (
               <p className="rounded-lg bg-panel px-3 py-2.5 text-xs text-ink-3">
-                No script on this one — work from the brief below.
+                No script on this one — work from the brief above.
               </p>
             ) : (
               <div className="space-y-3">
@@ -500,28 +534,6 @@ export function EditorVideoView({
               </div>
             )}
           </section>
-
-          {/* The brief */}
-          {video.brief || briefVoiceUrl ? (
-            <section className="rounded-xl border border-line bg-card p-4">
-              <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
-                Brief
-              </h2>
-              {video.brief ? (
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-2">
-                  {video.brief}
-                </p>
-              ) : null}
-              {briefVoiceUrl ? (
-                <div className="mt-2">
-                  <span className="mb-1 block text-[10px] uppercase tracking-wider text-ink-3">
-                    Spoken brief — the client&rsquo;s own recording, not a summary
-                  </span>
-                  <audio src={briefVoiceUrl} controls className="h-9 w-full" />
-                </div>
-              ) : null}
-            </section>
-          ) : null}
 
           {/* Footage */}
           <section className="rounded-xl border border-line bg-card p-4">

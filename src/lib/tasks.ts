@@ -32,6 +32,8 @@ export interface TaskGroups {
   inProgress: TaskItem[];
   /** Any other stage where the ball is genuinely in this editor's court. */
   other: TaskItem[];
+  /** Submitted — the ball is with the client. Shown so the board reads as the whole picture. */
+  waiting: TaskItem[];
 }
 
 export function totalTasks(g: TaskGroups): number {
@@ -55,7 +57,7 @@ export function buildTaskGroups(
   // between the server pass and hydration).
   now: number = Date.now()
 ): TaskGroups {
-  const groups: TaskGroups = { revisions: [], firstCut: [], variants: [], inProgress: [], other: [] };
+  const groups: TaskGroups = { revisions: [], firstCut: [], variants: [], inProgress: [], other: [], waiting: [] };
 
   for (const v of videos) {
     const item: TaskItem = {
@@ -72,6 +74,8 @@ export function buildTaskGroups(
       else groups.firstCut.push({ ...item, kind: "first_cut" });
     } else if (v.status === "awaiting_variants") {
       groups.variants.push({ ...item, kind: "variants" });
+    } else if (v.status === "in_review" || v.status === "final_review") {
+      groups.waiting.push(item);
     } else if (STATUS_OWNER[v.status as VideoStatus] === "editor") {
       // Future-proofing: a pipeline stage added later that puts the ball back
       // in the editor's court lands here rather than vanishing from the board.
@@ -88,6 +92,7 @@ export function buildTaskGroups(
   groups.firstCut.sort(bySeverity);
   groups.inProgress.sort(bySeverity);
   groups.other.sort(bySeverity);
+  groups.waiting.sort((a, b) => b.daysInStage - a.daysInStage);
   // Variants have no formal ETA — longest-waiting is the only signal, always.
   groups.variants.sort((a, b) => b.daysInStage - a.daysInStage);
 

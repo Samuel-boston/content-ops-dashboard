@@ -9,15 +9,22 @@ import { claimVideoAction, nudgeAction, setEtaAction } from "@/app/pipeline-acti
 import { NUDGES, type NudgeKind } from "@/lib/nudges";
 import type { VideoStatus } from "@/lib/types";
 
-/** Local datetime string for a date `days` from now at 18:00, for the presets. */
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/** Local YYYY-MM-DD for a date `days` from now — what a date input wants. */
 function inDays(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  d.setHours(18, 0, 0, 0);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
-    d.getMinutes()
-  )}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * A delivery promise is a day, not a moment — picking an hour is fussy and
+ * means different things across time zones. The day picked means "by the end
+ * of it", so the stored instant is 23:59 local on that date.
+ */
+function endOfDayISO(day: string): string {
+  return new Date(`${day}T23:59`).toISOString();
 }
 
 const PRESETS: { label: string; days: number }[] = [
@@ -38,6 +45,7 @@ export function ClaimDialog({
   title,
   mode,
   currentEta,
+  goToVideo = false,
   onClose,
 }: {
   open: boolean;
@@ -46,6 +54,8 @@ export function ClaimDialog({
   /** "claim" also assigns the video; "eta" only (re)sets the date. */
   mode: "claim" | "eta";
   currentEta?: string | null;
+  /** After a successful claim, open the video instead of staying on the list. */
+  goToVideo?: boolean;
   onClose: () => void;
 }) {
   const toast = useToast();
@@ -55,10 +65,7 @@ export function ClaimDialog({
     currentEta
       ? (() => {
           const d = new Date(currentEta);
-          const pad = (n: number) => String(n).padStart(2, "0");
-          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-            d.getHours()
-          )}:${pad(d.getMinutes())}`;
+          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
         })()
       : ""
   );
@@ -67,13 +74,15 @@ export function ClaimDialog({
 
   const submit = () =>
     startTransition(async () => {
+      const iso = endOfDayISO(when);
       const res =
-        mode === "claim" ? await claimVideoAction(videoId, when) : await setEtaAction(videoId, when);
+        mode === "claim" ? await claimVideoAction(videoId, iso) : await setEtaAction(videoId, iso);
       if (res?.error) toast.error(res.error);
       else {
         toast.success(mode === "claim" ? "Picked up — the client can see your ETA." : "ETA updated.");
         onClose();
-        router.refresh();
+        if (mode === "claim" && goToVideo) router.push(`/videos/${videoId}`);
+        else router.refresh();
       }
     });
 
@@ -121,11 +130,14 @@ export function ClaimDialog({
             Delivering by
           </span>
           <input
-            type="datetime-local"
+            type="date"
             value={when}
             onChange={(e) => setWhen(e.target.value)}
             className="w-full rounded-lg border border-line bg-raised px-3 py-2 [color-scheme:dark] focus:border-accent focus:outline-none"
           />
+          <span className="mt-1 block text-[11px] text-ink-3">
+            By the end of that day. Not sure? Pick your best guess — you can change it later.
+          </span>
         </label>
 
         <div className="flex justify-end gap-2">

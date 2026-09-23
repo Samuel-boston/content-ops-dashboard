@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireRole, requireUser } from "@/lib/auth";
 import { annotateOverdue } from "@/lib/priorities";
 import type { VideoStatus, VideoWithEditor } from "@/lib/types";
@@ -41,9 +42,32 @@ function decorate(rows: VideoWithEditor[]): CalendarVideo[] {
   }));
 }
 
+/**
+ * A VA has no row access under RLS (see posting-actions.ts), so their calendar
+ * is served with the service role — and the rows are stripped down to what a
+ * calendar shows. Scripts, briefs and notes never leave this function.
+ */
+function forViewOnly(rows: VideoWithEditor[] | null): VideoWithEditor[] {
+  return (rows ?? []).map(
+    (v) =>
+      ({
+        ...v,
+        script_hooks: [],
+        script_body: null,
+        script_cta: null,
+        brief: null,
+        idea_notes: null,
+        frameio_url: null,
+        raw_footage_url: null,
+        drive_file_url: null,
+      }) as VideoWithEditor
+  );
+}
+
 export async function calendarData(fromISO: string, toISO: string): Promise<CalendarData> {
-  await requireUser();
-  const supabase = await supabaseServer();
+  const viewer = await requireUser();
+  const viewOnly = viewer.role === "va";
+  const supabase = viewOnly ? supabaseAdmin() : await supabaseServer();
 
   const [{ data: dated }, { data: undated }] = await Promise.all([
     supabase
@@ -64,9 +88,11 @@ export async function calendarData(fromISO: string, toISO: string): Promise<Cale
       .order("stage_entered_at"),
   ]);
 
+  const pick = (rows: unknown) =>
+    viewOnly ? forViewOnly(rows as VideoWithEditor[] | null) : ((rows as VideoWithEditor[]) ?? []);
   return {
-    scheduled: decorate((dated as VideoWithEditor[]) ?? []),
-    unscheduled: decorate((undated as VideoWithEditor[]) ?? []),
+    scheduled: decorate(pick(dated)),
+    unscheduled: decorate(pick(undated)),
   };
 }
 
@@ -88,8 +114,8 @@ export interface CadenceSlot {
  * never moves on its own.
  */
 export async function listCadenceSlots(): Promise<CadenceSlot[]> {
-  await requireUser();
-  const supabase = await supabaseServer();
+  const viewer = await requireUser();
+  const supabase = viewer.role === "va" ? supabaseAdmin() : await supabaseServer();
   const { data } = await supabase
     .from("cadence_slots")
     .select("id, weekday, format, platform, note, position")
@@ -163,7 +189,9 @@ export async function setPostDateAction(videoId: string, dateISO: string | null)
 
 /** Bulk stage move, for the board's multi-select. */
 export async function bulkSetStatusAction(ids: string[], status: VideoStatus) {
-  await requireRole("owner", "admin");
+  // Not manager-only: the copywriter moves scripts along their own board.
+  // RLS and the guard trigger decide which moves each role may make.
+  await requireUser();
   if (!ids.length) return { error: "Nothing selected." };
   const supabase = await supabaseServer();
   const { error } = await supabase.from("videos").update({ status }).in("id", ids);

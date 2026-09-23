@@ -1,5 +1,6 @@
 "use client";
 
+import { FinishedLinks } from "@/components/editor/FinishedLinks";
 import { VideoFootage } from "@/components/VideoFootage";
 import { VideoReferences } from "@/components/VideoReferences";
 import { ShareLinks } from "@/components/workspace/ShareLinks";
@@ -42,6 +43,15 @@ export function FilesTab({
 }) {
   return (
     <div className="h-full space-y-5 overflow-y-auto px-3 py-3">
+      {assets.some((a) => a.kind === "delivery") ? (
+        <section>
+          <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+            Finished video links
+          </h3>
+          <FinishedLinks videoId={videoId} assets={assets} canEdit={false} />
+        </section>
+      ) : null}
+
       <CutManager
         video={video}
         videoId={videoId}

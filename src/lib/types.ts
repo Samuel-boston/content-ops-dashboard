@@ -346,7 +346,7 @@ export interface EditorRate {
 export interface VideoAsset {
   id: string;
   video_id: string;
-  kind: "raw" | "other";
+  kind: "raw" | "other" | "delivery";
   label: string;
   storage_path: string | null;
   drive_url: string | null;

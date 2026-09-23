@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { listActiveBoard, listEditors, listTaxonomyCustoms } from "@/app/actions";
 import { VideoRow } from "@/components/pipeline/VideoRow";
@@ -13,6 +14,8 @@ import { IdeaVoiceCapture } from "@/components/script/IdeaVoiceCapture";
  */
 export default async function IdeationPage() {
   const viewer = await requireRole("owner", "admin", "copywriter");
+  // The copywriter works from the single planning board now.
+  if (viewer.role === "copywriter") redirect("/scripting");
   const [board, editors, customs] = await Promise.all([
     listActiveBoard(),
     listEditors(),
