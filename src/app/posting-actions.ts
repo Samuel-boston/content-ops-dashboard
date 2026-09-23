@@ -25,6 +25,12 @@ export interface PostingTrialItem {
   videoTitle: string;
   label: string;
   caption: string | null;
+  /** Instagram trial reel, or straight to the main feed. */
+  postAs: "trial" | "main";
+  /** Instructions from whoever sent it over. */
+  notes: string | null;
+  /** Signed link to the cover image, when one was uploaded. */
+  coverUrl: string | null;
   status: TrialStatus;
   scheduled_for: string | null;
   posted_at: string | null;
@@ -63,7 +69,7 @@ export async function listPostingWork(): Promise<{
   const [{ data: trials }, { data: jobs }] = await Promise.all([
     db
       .from("trial_posts")
-      .select("*, video:videos (title)")
+      .select("*, video:videos (title, va_notes, cover_path)")
       .in("status", ["planned", "posted"])
       .order("scheduled_for", { ascending: true, nullsFirst: false }),
     db
@@ -75,12 +81,23 @@ export async function listPostingWork(): Promise<{
   ]);
 
   return {
-    trials: ((trials as (TrialPost & { video: { title: string } | null })[]) ?? []).map((t) => ({
+    trials: await Promise.all(((trials as (TrialPost & {
+      video: { title: string; va_notes: string | null; cover_path: string | null } | null;
+    })[]) ?? []).map(async (t) => {
+      let coverUrl: string | null = null;
+      if (t.video?.cover_path) {
+        const { data: signed } = await db.storage.from("footage").createSignedUrl(t.video.cover_path, 3600);
+        coverUrl = signed?.signedUrl ?? null;
+      }
+      return {
       id: t.id,
       videoId: t.video_id,
       videoTitle: t.video?.title ?? "Untitled",
       label: t.label,
       caption: t.caption,
+      postAs: t.post_as ?? "trial",
+      notes: t.notes ?? t.video?.va_notes ?? null,
+      coverUrl,
       status: t.status,
       scheduled_for: t.scheduled_for,
       posted_at: t.posted_at,
@@ -92,6 +109,7 @@ export async function listPostingWork(): Promise<{
       comments: t.comments,
       shares: t.shares,
       saves: t.saves,
+      };
     })),
     jobs: (
       (jobs as unknown as {
@@ -199,5 +217,19 @@ export async function vaSaveTrialMetricsAction(
   if (error) return { error: error.message };
   revalidatePath("/posting");
   revalidatePath("/analytics");
+  return { ok: true };
+}
+
+/** The VA (or a manager) flips a variant between trial reel and main feed. */
+export async function vaSetPostAsAction(trialId: string, postAs: "trial" | "main") {
+  await requireRole("va", "owner", "admin");
+  if (postAs !== "trial" && postAs !== "main") return { error: "Pick trial or main feed." };
+  const { error } = await supabaseAdmin()
+    .from("trial_posts")
+    .update({ post_as: postAs })
+    .eq("id", trialId)
+    .eq("status", "planned");
+  if (error) return { error: error.message };
+  revalidatePath("/posting");
   return { ok: true };
 }

@@ -56,7 +56,11 @@ export default async function ScriptReviewPage() {
               showEta={false}
               action={
                 <span className="flex items-center gap-1">
-                  <StageBack videoId={v.id} status={v.status} compact />
+                  {isManager ? (
+                    <StageMove videoId={v.id} to="script_revisions" label="Needs revisions" />
+                  ) : (
+                    <StageBack videoId={v.id} status={v.status} compact />
+                  )}
                   {isManager ? (
                     isCarouselFormat(v.formats) ? (
                       <ApproveCarouselButton videoId={v.id} />

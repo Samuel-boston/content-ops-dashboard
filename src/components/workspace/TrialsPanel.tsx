@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTrackedTransition } from "@/components/ui/Pending";
 import { useToast } from "@/components/ui/Toast";
@@ -10,11 +10,13 @@ import {
   markTrialPostedAction,
   markTrialWinnerAction,
   promoteTrialAction,
-  queueAllVariantsAction,
   queueTrialAction,
   saveTrialMetricsAction,
+  sendToVaAction,
+  setPostAsAction,
   updateTrialAction,
 } from "@/app/trial-actions";
+import { createFootageUploadUrlAction } from "@/app/asset-actions";
 import { IconClock, IconTrash } from "@/components/ui/icons";
 import { TRIAL_STATUS_LABELS, type TrialPost } from "@/lib/types";
 
@@ -26,13 +28,51 @@ import { TRIAL_STATUS_LABELS, type TrialPost } from "@/lib/types";
  * cut to the ordinary publish pipeline. This panel is the manager's view of
  * that whole loop, scoped to one video.
  */
-export function TrialsPanel({ videoId }: { videoId: string }) {
+export function TrialsPanel({
+  videoId,
+  vaNotes = null,
+  vaSentAt = null,
+  hasCover = false,
+}: {
+  videoId: string;
+  vaNotes?: string | null;
+  vaSentAt?: string | null;
+  hasCover?: boolean;
+}) {
   const toast = useToast();
   const router = useRouter();
   const [pending, startTransition] = useTrackedTransition();
   const [trials, setTrials] = useState<TrialPost[] | null>(null);
   const [cuts, setCuts] = useState<{ id: string; label: string; kind: string }[]>([]);
   const [pickCut, setPickCut] = useState("");
+  const [notes, setNotes] = useState(vaNotes ?? "");
+  const [coverPath, setCoverPath] = useState<string | null>(null);
+  const [coverName, setCoverName] = useState<string | null>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const coverInput = useRef<HTMLInputElement>(null);
+
+  async function uploadCover(file: File) {
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("Keep the cover under 20 MB.");
+      return;
+    }
+    setUploadingCover(true);
+    const up = await createFootageUploadUrlAction(videoId, file.name);
+    if (!up?.ok) {
+      toast.error(up?.error ?? "Could not start the upload.");
+      setUploadingCover(false);
+      return;
+    }
+    try {
+      const put = await fetch(up.signedUrl, { method: "PUT", body: file, headers: { "x-upsert": "true" } });
+      if (!put.ok) throw new Error(`Upload failed (${put.status}).`);
+      setCoverPath(up.path);
+      setCoverName(file.name);
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+    setUploadingCover(false);
+  }
 
   async function reload() {
     const res = await listVideoTrials(videoId);
@@ -80,33 +120,73 @@ export function TrialsPanel({ videoId }: { videoId: string }) {
 
   return (
     <section className="mt-4 rounded-xl border border-line bg-card p-3">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
-        <h3 className="text-sm font-semibold">Hook trials</h3>
-        <span className="text-xs text-ink-3">{trials.length}</span>
-        <div className="ml-auto flex items-center gap-2">
-          {unqueued.length > 0 ? (
-            <button
-              onClick={() => run(() => queueAllVariantsAction(videoId))}
-              disabled={pending}
-              className="rounded-lg border border-line px-2.5 py-1 text-[11px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
-            >
-              Queue all variants ({unqueued.length})
-            </button>
+      {/* The hand-off: nothing reaches the VA until this is pressed. */}
+      <div className="mb-3 space-y-2 rounded-lg border border-accent/30 bg-accent-ghost p-2.5">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold">Send to the VA</h3>
+          {vaSentAt ? (
+            <span className="rounded-md bg-ok/15 px-1.5 py-0.5 text-[10px] font-medium text-ok">
+              Sent {new Date(vaSentAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+            </span>
           ) : null}
         </div>
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          rows={3}
+          placeholder="Notes for the VA — what to say, when to post, anything specific."
+          className="w-full resize-y rounded-md border border-line bg-raised px-2.5 py-2 text-xs placeholder:text-ink-3 focus:border-accent focus:outline-none"
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => coverInput.current?.click()}
+            disabled={uploadingCover}
+            className="rounded-md border border-line bg-card px-2.5 py-1.5 text-[11px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
+          >
+            {uploadingCover ? "Uploading…" : coverName ? `Cover: ${coverName}` : hasCover ? "Replace the cover" : "Upload a cover"}
+          </button>
+          <input
+            ref={coverInput}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void uploadCover(f);
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            disabled={pending || uploadingCover}
+            onClick={() =>
+              run(() => sendToVaAction({ videoId, notes, coverPath }), () => {
+                toast.success(vaSentAt ? "Updated for the VA." : "Sent to the VA.");
+              })
+            }
+            className="ml-auto rounded-md bg-accent px-3 py-1.5 text-[11px] font-medium text-white hover:bg-accent-hi disabled:opacity-50"
+          >
+            {vaSentAt ? "Send again / update" : "Send to the VA"}
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <h3 className="text-sm font-semibold">Variants</h3>
+        <span className="text-xs text-ink-3">{trials.length}</span>
       </div>
       <p className="mb-3 text-[11px] leading-relaxed text-ink-3">
-        Trials post by hand from the Posting desk (Instagram&rsquo;s API can&rsquo;t touch trial
-        reels); numbers come from the app&rsquo;s insights. Star the winner, then promote it to the
-        main feed.
+        Each variant is either posted as a trial reel or straight to the main feed — pick per
+        variant; the VA sees the same choice. Trials post by hand (Instagram&rsquo;s API can&rsquo;t
+        touch them). Star a winner, then promote it to the main feed.
       </p>
 
       {trials.length === 0 ? (
         <div className="rounded-lg border border-dashed border-line px-3 py-6 text-center text-xs text-ink-3">
           No trials yet.{" "}
-          {hookCuts.length === 0
-            ? "Add hook variant cuts first — each one becomes a trial."
-            : "Queue the variants and they land on the VA's Posting desk."}
+          Press &ldquo;Send to the VA&rdquo; above and the main cut and every variant land on their
+          Posting desk.
         </div>
       ) : (
         <div className="space-y-2">
@@ -191,6 +271,22 @@ function TrialRow({
           🏆
         </button>
         <p className="min-w-0 flex-1 truncate text-xs font-medium">{t.label}</p>
+        {t.status === "planned" ? (
+          <select
+            value={t.post_as ?? "trial"}
+            disabled={pending}
+            onChange={(e) => run(() => setPostAsAction(t.id, videoId, e.target.value as "trial" | "main"))}
+            aria-label="Post as"
+            className={field}
+          >
+            <option value="trial">Trial reel</option>
+            <option value="main">Post to main feed</option>
+          </select>
+        ) : (
+          <span className="rounded-md bg-raised px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-3">
+            {t.post_as === "main" ? "Main feed" : "Trial"}
+          </span>
+        )}
         <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${chip}`}>
           {TRIAL_STATUS_LABELS[t.status]}
         </span>

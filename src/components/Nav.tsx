@@ -56,12 +56,6 @@ const EDITOR_LINKS = [
   { href: "/library/visuals", label: "Library" },
 ];
 
-/** An editor's nav is already short — these two stay in the user menu rather than earning a dropdown of their own. */
-const EDITOR_SECONDARY_LINKS = [
-  { href: "/parked", label: "Later" },
-  { href: "/publishing", label: "Publishing" },
-];
-
 /**
  * The copywriter lives in the planning half only: ideas in, scripts out — all
  * on one board (Ideation through Ready to Film). The library is there because
@@ -74,13 +68,12 @@ const COPYWRITER_LINKS = [
 
 /**
  * The VA posts, and can look at the calendar and library — the calendar
- * read-only. "Other" is the miscellaneous task board the client fills in for
- * anything that isn't posting.
+ * read-only. Their "Other" tasks sit under Posting on the same page, so
+ * they can't be missed behind a separate tab.
  */
 const VA_LINKS = [
   { href: "/posting", label: "Posting" },
   { href: "/calendar", label: "Calendar" },
-  { href: "/tasks", label: "Other" },
   { href: "/library/visuals", label: "Library" },
 ];
 
@@ -346,16 +339,15 @@ export function Nav({
                     </p>
                     <p className="text-xs capitalize text-ink-3">{profile.role}</p>
                   </div>
-                  {(profile.role === "editor" ? EDITOR_SECONDARY_LINKS : []).map((l) => (
+                  {!isManager ? (
                     <Link
-                      key={l.href}
-                      href={l.href}
+                      href="/time-off"
                       onClick={() => setUserOpen(false)}
                       className="block px-3 py-1.5 text-ink-2 hover:bg-hover"
                     >
-                      {l.label}
+                      Time off
                     </Link>
-                  ))}
+                  ) : null}
                   <Link
                     href="/ai-connect"
                     onClick={() => setUserOpen(false)}

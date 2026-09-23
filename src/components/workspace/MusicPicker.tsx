@@ -81,10 +81,11 @@ export function MusicPicker({
           <button
             type="button"
             onClick={() => setPicking((v) => !v)}
-            aria-label="Add a track"
-            className="ml-auto rounded p-1 text-ink-3 hover:bg-hover hover:text-ink"
+            aria-label={picking ? "Close the track list" : "Add a track"}
+            className="ml-auto flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-ink-2 hover:border-accent hover:text-ink"
           >
-            {picking ? <IconX size={13} /> : <IconPlus size={13} />}
+            {picking ? <IconX size={12} /> : <IconPlus size={12} />}
+            {picking ? "Close" : "Tag a track"}
           </button>
         ) : null}
       </div>

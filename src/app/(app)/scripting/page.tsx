@@ -3,8 +3,6 @@ import { listEditors, listTaxonomyCustoms } from "@/app/actions";
 import { listBoardCards } from "@/app/board-actions";
 import { listSeriesOptions } from "@/app/series-actions";
 import { BoardPageClient } from "@/components/board/BoardPageClient";
-import { IdeaGeneratorButton } from "@/components/script/IdeaGeneratorButton";
-import { IdeaVoiceCapture } from "@/components/script/IdeaVoiceCapture";
 
 /**
  * The planning board — Ideation through Ready to Film in one place, for the
@@ -46,12 +44,6 @@ export default async function ScriptingPage() {
         viewerId={viewer.id}
         scopes={["scripting"]}
         basePath="/scripting"
-        extraActions={
-          <>
-            <IdeaVoiceCapture viewerId={viewer.id} />
-            <IdeaGeneratorButton />
-          </>
-        }
       />
     </div>
   );

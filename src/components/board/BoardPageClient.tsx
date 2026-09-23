@@ -26,6 +26,7 @@ const SCOPES: Record<
   videos: {
     label: "Videos",
     columns: [
+      "ideation",
       "ready_to_edit",
       "in_progress",
       "in_review",
@@ -43,7 +44,7 @@ const SCOPES: Record<
     // made outside this dashboard (on the platform itself, no editor
     // involved), reviewed here, and posted. No Editor Brief, Ready to Edit,
     // Editing, In Review, Revisions or Final Review — none of that applies.
-    columns: ["creative_review", "creative_revisions", "ready_to_post"],
+    columns: ["ideation", "creative_review", "creative_revisions", "ready_to_post"],
     match: (c) => isCarouselFormat(c.formats),
   },
   scripting: {

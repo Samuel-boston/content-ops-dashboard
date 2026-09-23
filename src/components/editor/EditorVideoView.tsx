@@ -14,6 +14,7 @@ import { StageActions } from "@/components/pipeline/StageActions";
 import { UploadDropzone } from "@/components/engine/UploadDropzone";
 import { CarouselDeliver } from "@/components/editor/CarouselDeliver";
 import { FinishedLinks } from "@/components/editor/FinishedLinks";
+import { BriefAttachments } from "@/components/BriefAttachments";
 import { MusicPicker } from "@/components/workspace/MusicPicker";
 import { SeriesPicker } from "@/components/workspace/SeriesPicker";
 import { VoicePlayer } from "@/components/workspace/Voice";
@@ -21,7 +22,6 @@ import { VideoReferences } from "@/components/VideoReferences";
 import { VideoFootage } from "@/components/VideoFootage";
 import { VideoChat } from "@/components/VideoChat";
 import { addHookVariantAction } from "@/app/engine-actions";
-import { summarizeRevisionsAction } from "@/app/ai-actions";
 import { isCarouselFormat } from "@/lib/taxonomy";
 import {
   IconChevronRight,
@@ -31,7 +31,6 @@ import {
   IconFile,
   IconPlay,
   IconPlus,
-  IconSparkles,
 } from "@/components/ui/icons";
 import { dayMonth, displayName, readTime, timecode } from "@/lib/format";
 import {
@@ -100,8 +99,6 @@ export function EditorVideoView({
   const [addingHook, setAddingHook] = useState(false);
   const [hookLabel, setHookLabel] = useState("");
   const [hookNotes, setHookNotes] = useState("");
-  const [summarizing, setSummarizing] = useState(false);
-  const [revisionSummary, setRevisionSummary] = useState<string | null>(null);
 
   const mine = video.assigned_editor_id === viewer.id;
   const carousel = isCarouselFormat(video.formats);
@@ -214,6 +211,15 @@ export function EditorVideoView({
                   Spoken brief — the client&rsquo;s own recording, not a summary
                 </span>
                 <audio src={briefVoiceUrl} controls className="h-9 w-full" />
+              </div>
+            ) : null}
+            {/* Screenshots, clips and screen recordings the client attached to the brief. */}
+            {assets.some((a) => a.kind === "other") ? (
+              <div className="mt-3">
+                <span className="mb-1 block text-[10px] uppercase tracking-wider text-ink-3">
+                  Attached to the brief
+                </span>
+                <BriefAttachments videoId={video.id} assets={assets} />
               </div>
             ) : null}
           </section>
@@ -382,32 +388,7 @@ export function EditorVideoView({
                 <IconComment size={12} />
                 Open notes from the client
                 <span className="text-ink-3">{openNotes.length}</span>
-                {openNotes.length > 1 ? (
-                  <button
-                    type="button"
-                    disabled={summarizing}
-                    onClick={() => {
-                      setSummarizing(true);
-                      startTransition(async () => {
-                        const res = await summarizeRevisionsAction(video.id);
-                        setSummarizing(false);
-                        if (res?.error) toast.error(res.error);
-                        else if (res?.ok) setRevisionSummary(res.summary);
-                      });
-                    }}
-                    className="ml-auto flex items-center gap-1 rounded-md border border-line bg-card px-2 py-1 text-[10px] font-medium normal-case tracking-normal text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
-                  >
-                    <IconSparkles size={10} />
-                    {summarizing ? "Reading…" : "Summarize"}
-                  </button>
-                ) : null}
               </h2>
-
-              {revisionSummary ? (
-                <div className="mb-2.5 whitespace-pre-wrap rounded-lg border border-line bg-card px-2.5 py-2 text-xs leading-relaxed text-ink-2">
-                  {revisionSummary}
-                </div>
-              ) : null}
 
               <div className="space-y-1.5">
                 {openNotes.slice(0, 6).map((c) => (

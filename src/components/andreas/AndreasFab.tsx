@@ -35,6 +35,7 @@ export function AndreasFab() {
   // The full-screen page IS this, at full size — a launcher on top of it
   // would just open a smaller copy of the page already on screen.
   if (pathname.startsWith("/andreas")) return null;
+  const onVideoPage = pathname.startsWith("/videos/");
 
   return (
     <>
@@ -42,7 +43,11 @@ export function AndreasFab() {
         onClick={() => openWith()}
         aria-label="Ask Andreas"
         title="Ask Andreas — about a video, a list, or top performers"
-        className={`fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-2xl transition hover:bg-accent-hi hover:scale-105 ${
+        className={`fixed right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-2xl transition hover:bg-accent-hi hover:scale-105 ${
+          // On a video page the bottom-right corner is the comment box's Send
+          // button — sit above it instead of on top of it.
+          onVideoPage ? "bottom-44" : "bottom-6"
+        } ${
           open ? "pointer-events-none scale-90 opacity-0" : ""
         }`}
       >

@@ -311,6 +311,12 @@ export interface Video {
    *  (see `briefVoiceUrl()` in script-actions.ts) and passed down explicitly
    *  as a prop — never stored, and never a field on this type. */
   brief_voice_path: string | null;
+  /** Instructions for the VA, written when the video is sent to them to post. */
+  va_notes: string | null;
+  /** Cover image (footage bucket) the VA uses when posting. */
+  cover_path: string | null;
+  /** When it was sent to the VA — null until then. */
+  va_sent_at: string | null;
   brief_voice_duration_seconds: number | null;
   brief_voice_peaks: number[] | null;
 
@@ -860,6 +866,8 @@ export interface TrialPost {
   winner: boolean;
   promoted_job_id: string | null;
   notes: string | null;
+  /** Where this variant goes: an Instagram trial reel, or straight to the main feed. */
+  post_as: "trial" | "main";
   created_by: string | null;
   created_at: string;
 }

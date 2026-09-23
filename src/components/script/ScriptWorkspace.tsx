@@ -25,20 +25,12 @@ import {
   IconTrash,
   IconX,
 } from "@/components/ui/icons";
-import { saveBriefVoiceAction, saveScriptAction, transcribeBriefAction } from "@/app/script-actions";
+import { saveBriefVoiceAction, saveScriptAction } from "@/app/script-actions";
 import { approveCarouselScriptAction, requestScriptRevisionsAction } from "@/app/pipeline-actions";
-import {
-  draftScriptAction,
-  finishScriptAction,
-  generateCtaAction,
-  generateHooksAction,
-  rephraseSelectionAction,
-  structureBriefAction,
-} from "@/app/ai-actions";
 import { updateVideoAction } from "@/app/actions";
 import { uploadCommentMedia } from "@/lib/upload-client";
 import { readTime } from "@/lib/format";
-import { type CarouselImage, type HookSnippet, type Profile, type Video } from "@/lib/types";
+import { PLANNING_STAGES, type CarouselImage, type HookSnippet, type Profile, type Video } from "@/lib/types";
 
 /**
  * The client's writing room. Deliberately one job per pane: the script on the
@@ -77,7 +69,6 @@ export function ScriptWorkspace({
   const [saving, setSaving] = useState(false);
 
   const [recording, setRecording] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
   const [voiceUrl, setVoiceUrl] = useState(briefVoiceUrl);
   const [voiceMeta, setVoiceMeta] = useState<{ duration: number | null; peaks: number[] | null }>({
     duration: video.brief_voice_duration_seconds,
@@ -85,24 +76,6 @@ export function ScriptWorkspace({
   });
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [prompting, setPrompting] = useState(false);
-  const [generatingHooks, setGeneratingHooks] = useState(false);
-  const [hookOptions, setHookOptions] = useState<string[] | null>(null);
-  const [addedOptions, setAddedOptions] = useState<Set<number>>(new Set());
-  const [refinement, setRefinement] = useState("");
-  const [drafting, setDrafting] = useState(false);
-  const [structuring, setStructuring] = useState(false);
-  const [bodySelection, setBodySelection] = useState<{ start: number; end: number; text: string } | null>(
-    null
-  );
-  const [rephrasing, setRephrasing] = useState(false);
-  const [rephraseInstruction, setRephraseInstruction] = useState("");
-  const [rephraseSuggestion, setRephraseSuggestion] = useState<string | null>(null);
-  const [finishing, setFinishing] = useState(false);
-  const [addingCta, setAddingCta] = useState(false);
-  const [needsContext, setNeedsContext] = useState(false);
-  const [savingContext, setSavingContext] = useState(false);
-  const [showDraftPrompt, setShowDraftPrompt] = useState(false);
-  const [draftPrompt, setDraftPrompt] = useState("");
 
   const bodyTime = readTime(body);
   const fullTime = readTime([hooks[0] ?? "", body, cta].filter(Boolean).join(" "));
@@ -127,32 +100,6 @@ export function ScriptWorkspace({
     },
     [hooks, body, cta, video.id, toast, router, startTransition]
   );
-
-  function runDraft() {
-    setDrafting(true);
-    startTransition(async () => {
-      const res = await draftScriptAction(video.id, hooks[0], draftPrompt.trim() || undefined);
-      setDrafting(false);
-      if (res?.error) {
-        // A specific, recoverable failure — no brief/idea notes to draft
-        // from yet — gets its own prompt instead of a dead-end toast, since
-        // the fix is one text box away.
-        if (res.error.includes("Add a brief or idea notes")) {
-          setShowDraftPrompt(false);
-          setNeedsContext(true);
-        } else {
-          toast.error(res.error);
-        }
-      } else if (res?.ok) {
-        setBody(res.body);
-        setCta(res.cta);
-        save({ body: res.body, cta: res.cta });
-        setShowDraftPrompt(false);
-        setDraftPrompt("");
-        toast.success("Draft added — read it over before it goes anywhere.");
-      }
-    });
-  }
 
   function addHook(value: string) {
     const v = value.trim();
@@ -229,12 +176,16 @@ export function ScriptWorkspace({
             </Link>
             <span className="text-ink-3">/</span>
             <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{video.title}</h1>
-            <Link
-              href={`/videos/${video.id}`}
-              className="rounded-lg border border-line px-2.5 py-1.5 text-xs text-ink-2 hover:bg-hover hover:text-ink"
-            >
-              Video review →
-            </Link>
+            {/* Only once there's a cut to review — before that, /videos/[id]
+                just bounces back to this room, which read as a dead button. */}
+            {!PLANNING_STAGES.includes(video.status) ? (
+              <Link
+                href={`/videos/${video.id}`}
+                className="rounded-lg border border-line px-2.5 py-1.5 text-xs text-ink-2 hover:bg-hover hover:text-ink"
+              >
+                Video review →
+              </Link>
+            ) : null}
           </div>
           <PlanningStageBar
             videoId={video.id}
@@ -267,86 +218,6 @@ export function ScriptWorkspace({
             The first hook is the one the main cut opens on. Add more and the editor will be asked
             for a variant of each after you approve the cut.
           </p>
-          <div className="mb-2 flex items-center gap-1.5">
-            <input
-              value={refinement}
-              onChange={(e) => setRefinement(e.target.value)}
-              placeholder="Optional direction — e.g. &ldquo;about pricing objections&rdquo;, &ldquo;punchier&rdquo;…"
-              className="min-w-0 flex-1 rounded-md border border-line bg-raised px-2.5 py-1.5 text-[11px] placeholder:text-ink-3 focus:border-accent focus:outline-none"
-            />
-          </div>
-          <button
-            type="button"
-            disabled={generatingHooks}
-            onClick={() => {
-              setGeneratingHooks(true);
-              startTransition(async () => {
-                const res = await generateHooksAction(video.id, refinement.trim() || undefined);
-                setGeneratingHooks(false);
-                if (res?.error) toast.error(res.error);
-                else if (res?.hooks?.length) {
-                  setHookOptions(res.hooks);
-                  setAddedOptions(new Set());
-                }
-              });
-            }}
-            className="mb-1 flex items-center gap-1.5 rounded-lg bg-accent-ghost px-2.5 py-1.5 text-[11px] font-medium text-accent-hi hover:bg-accent/25 disabled:opacity-50"
-          >
-            <IconSparkles size={12} />
-            {generatingHooks ? "Writing 10 hooks…" : hookOptions ? "Generate 10 more" : "Suggest 10 hooks"}
-          </button>
-          <p className="mb-3 text-[10px] leading-snug text-ink-3">
-            Reads this video&rsquo;s title/brief/idea notes/pillar automatically — no separate setup —
-            plus your SOP guide and a few of your own posted scripts, so it sounds like you rather
-            than generic AI. Nothing here is a permanent &ldquo;training&rdquo; step; it re-reads fresh every time.
-            These are options — nothing&rsquo;s added until you pick one.
-          </p>
-
-          {hookOptions ? (
-            <div className="mb-3 space-y-2 rounded-xl border border-line bg-app p-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-ink-2">
-                  {hookOptions.length} option{hookOptions.length === 1 ? "" : "s"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setHookOptions(null)}
-                  className="rounded p-1 text-ink-3 hover:bg-hover hover:text-ink"
-                  aria-label="Dismiss options"
-                >
-                  <IconX size={12} />
-                </button>
-              </div>
-              <div className="max-h-64 space-y-1.5 overflow-y-auto">
-                {hookOptions.map((h, i) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-2 rounded-lg bg-panel px-2.5 py-2 text-xs leading-snug"
-                  >
-                    <span className="min-w-0 flex-1">{h}</span>
-                    <button
-                      type="button"
-                      disabled={addedOptions.has(i)}
-                      onClick={() => {
-                        const next = [...hooks, h];
-                        setHooks(next);
-                        save({ hooks: next });
-                        setAddedOptions((s) => new Set(s).add(i));
-                      }}
-                      className={`shrink-0 rounded-md px-2 py-1 text-[10px] font-medium transition ${
-                        addedOptions.has(i)
-                          ? "bg-ok/15 text-ok"
-                          : "bg-accent-ghost text-accent-hi hover:bg-accent/25"
-                      } disabled:opacity-70`}
-                    >
-                      {addedOptions.has(i) ? "Added ✓" : "Add as variant"}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
           <div className="space-y-1.5">
             {hooks.map((h, i) => (
               <div
@@ -431,107 +302,7 @@ export function ScriptWorkspace({
             <span className="text-[11px] tabular-nums text-ink-3">
               {bodyTime.words} words · {bodyTime.label} spoken
             </span>
-            <button
-              type="button"
-              disabled={finishing || !body.trim()}
-              title="Continue the body to a natural finish, from what's already written"
-              onClick={() => {
-                setFinishing(true);
-                startTransition(async () => {
-                  const res = await finishScriptAction(video.id, body);
-                  setFinishing(false);
-                  if (res?.error) {
-                    toast.error(res.error);
-                  } else if (res?.ok) {
-                    const next = `${body.trimEnd()}\n\n${res.rest}`;
-                    setBody(next);
-                    save({ body: next });
-                    toast.success("Finished the body below.");
-                  }
-                });
-              }}
-              className="ml-auto flex items-center gap-1.5 rounded-lg border border-line px-2 py-1 text-[11px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-40"
-            >
-              <IconSparkles size={11} />
-              {finishing ? "Finishing…" : "Finish script"}
-            </button>
           </div>
-
-          {bodySelection && !rephraseSuggestion ? (
-            <div className="mb-2 space-y-1.5 rounded-lg border border-dashed border-line-strong bg-app px-2.5 py-2">
-              <p className="truncate text-[11px] text-ink-3">
-                Selected: &ldquo;{bodySelection.text}&rdquo;
-              </p>
-              <div className="flex items-center gap-2">
-                <input
-                  value={rephraseInstruction}
-                  onChange={(e) => setRephraseInstruction(e.target.value)}
-                  placeholder="Optional instruction — e.g. &ldquo;more casual&rdquo;, &ldquo;punchier&rdquo;…"
-                  className="min-w-0 flex-1 rounded-md border border-line bg-raised px-2 py-1.5 text-[11px] placeholder:text-ink-3 focus:border-accent focus:outline-none"
-                />
-                <button
-                  type="button"
-                  disabled={rephrasing}
-                  onClick={() => {
-                    setRephrasing(true);
-                    startTransition(async () => {
-                      const res = await rephraseSelectionAction(
-                        video.id,
-                        bodySelection.text,
-                        body.slice(0, bodySelection.start),
-                        body.slice(bodySelection.end),
-                        rephraseInstruction.trim() || undefined
-                      );
-                      setRephrasing(false);
-                      if (res?.error) toast.error(res.error);
-                      else if (res?.ok) setRephraseSuggestion(res.rewrite);
-                    });
-                  }}
-                  className="flex shrink-0 items-center gap-1 rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-white hover:bg-accent-hi disabled:opacity-50"
-                >
-                  <IconSparkles size={10} />
-                  {rephrasing ? "Rephrasing…" : "Rephrase"}
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {bodySelection && rephraseSuggestion ? (
-            <div className="mb-2 space-y-1.5 rounded-lg border border-accent/40 bg-accent-ghost px-2.5 py-2">
-              <p className="text-[11px] text-ink-2">
-                Suggested: &ldquo;{rephraseSuggestion}&rdquo;
-              </p>
-              <div className="flex justify-end gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRephraseSuggestion(null);
-                    setBodySelection(null);
-                    setRephraseInstruction("");
-                  }}
-                  className="rounded-md border border-line px-2 py-1 text-[11px] text-ink-2 hover:bg-hover"
-                >
-                  Discard
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next =
-                      body.slice(0, bodySelection.start) + rephraseSuggestion + body.slice(bodySelection.end);
-                    setBody(next);
-                    save({ body: next });
-                    setRephraseSuggestion(null);
-                    setBodySelection(null);
-                    setRephraseInstruction("");
-                  }}
-                  className="flex items-center gap-1 rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-white hover:bg-accent-hi"
-                >
-                  <IconCheck size={10} />
-                  Use this
-                </button>
-              </div>
-            </div>
-          ) : null}
 
           <textarea
             value={body}
@@ -540,21 +311,6 @@ export function ScriptWorkspace({
             onChange={(e) => {
               setBody(e.target.value);
               setDirty(true);
-              setBodySelection(null);
-              setRephraseSuggestion(null);
-            }}
-            onSelect={(e) => {
-              const el = e.currentTarget;
-              if (el.selectionEnd > el.selectionStart) {
-                setBodySelection({
-                  start: el.selectionStart,
-                  end: el.selectionEnd,
-                  text: body.slice(el.selectionStart, el.selectionEnd),
-                });
-                setRephraseSuggestion(null);
-              } else {
-                setBodySelection(null);
-              }
             }}
             onBlur={() => dirty && save()}
             className="w-full resize-y bg-transparent text-sm leading-relaxed placeholder:text-ink-3 focus:outline-none"
@@ -565,29 +321,6 @@ export function ScriptWorkspace({
         <section className="rounded-2xl border border-line bg-card p-4">
           <div className="mb-2 flex items-center gap-2">
             <h2 className="text-sm font-semibold">Call to action</h2>
-            <button
-              type="button"
-              disabled={addingCta || !body.trim()}
-              title={body.trim() ? "Suggest a CTA from the finished body" : "Write the body first"}
-              onClick={() => {
-                setAddingCta(true);
-                startTransition(async () => {
-                  const res = await generateCtaAction(video.id);
-                  setAddingCta(false);
-                  if (res?.error) {
-                    toast.error(res.error);
-                  } else if (res?.ok) {
-                    setCta(res.cta);
-                    save({ cta: res.cta });
-                    toast.success("CTA added.");
-                  }
-                });
-              }}
-              className="ml-auto flex items-center gap-1.5 rounded-lg border border-line px-2 py-1 text-[11px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-40"
-            >
-              <IconSparkles size={11} />
-              {addingCta ? "Writing…" : "Add CTA"}
-            </button>
           </div>
           <textarea
             value={cta}
@@ -622,21 +355,6 @@ export function ScriptWorkspace({
                 <IconChart size={13} />
                 Teleprompter
               </button>
-              <button
-                type="button"
-                disabled={drafting}
-                onClick={() => setShowDraftPrompt((v) => !v)}
-                className="flex items-center gap-1.5 rounded-lg bg-accent-ghost px-2.5 py-1.5 text-xs font-medium text-accent-hi transition hover:bg-accent/25 disabled:opacity-50"
-              >
-                <IconSparkles size={13} />
-                {drafting ? "Drafting…" : "Draft with AI"}
-              </button>
-              <span
-                title="Uses this video's brief/idea notes, the chosen hook, your SOP guide, and a few of your own posted scripts as tone examples."
-                className="text-[11px] text-ink-3"
-              >
-                (uses the brief + your house style)
-              </span>
             </>
           ) : null}
           {video.status === "scripting" && (canEditStage || canSubmitForReview) ? (
@@ -727,98 +445,6 @@ export function ScriptWorkspace({
           ) : null}
         </div>
 
-        {showDraftPrompt ? (
-          <div className="space-y-2 rounded-xl border border-dashed border-line-strong bg-app p-3">
-            <p className="flex items-center gap-1.5 text-xs text-ink-2">
-              <IconSparkles size={12} />
-              Give it direction, or leave it blank and it&rsquo;ll go from the brief alone.
-            </p>
-            <textarea
-              value={draftPrompt}
-              rows={2}
-              autoFocus
-              placeholder="e.g. “lead with the stat, not the story”, “make it punchier”, “keep it under 30 seconds”…"
-              onChange={(e) => setDraftPrompt(e.target.value)}
-              className="w-full resize-none rounded-lg border border-line bg-raised px-2.5 py-2 text-sm placeholder:text-ink-3 focus:border-accent focus:outline-none"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowDraftPrompt(false)}
-                className="rounded-lg border border-line px-2.5 py-1.5 text-xs text-ink-2 hover:bg-hover"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={drafting}
-                onClick={runDraft}
-                className="flex items-center gap-1.5 rounded-lg bg-accent px-2.5 py-1.5 text-xs font-medium text-white hover:bg-accent-hi disabled:opacity-60"
-              >
-                <IconSparkles size={12} />
-                {drafting ? "Drafting…" : "Generate"}
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {needsContext ? (
-          <div className="space-y-2 rounded-xl border border-dashed border-line-strong bg-app p-3">
-            <p className="flex items-center gap-1.5 text-xs text-ink-2">
-              <IconSparkles size={12} />
-              Nothing to draft from yet — give it something to work with, or record a spoken brief
-              above and try again.
-            </p>
-            <textarea
-              value={brief}
-              rows={3}
-              autoFocus
-              placeholder="Angle, key points, anything you already know…"
-              onChange={(e) => setBrief(e.target.value)}
-              className="w-full resize-none rounded-lg border border-line bg-raised px-2.5 py-2 text-sm placeholder:text-ink-3 focus:border-accent focus:outline-none"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setNeedsContext(false)}
-                className="rounded-lg border border-line px-2.5 py-1.5 text-xs text-ink-2 hover:bg-hover"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={savingContext || !brief.trim()}
-                onClick={() => {
-                  setSavingContext(true);
-                  startTransition(async () => {
-                    const saveRes = await updateVideoAction(video.id, { brief: brief.trim() });
-                    if (saveRes?.error) {
-                      setSavingContext(false);
-                      toast.error(saveRes.error);
-                      return;
-                    }
-                    setNeedsContext(false);
-                    setDrafting(true);
-                    const res = await draftScriptAction(video.id, hooks[0], draftPrompt.trim() || undefined);
-                    setSavingContext(false);
-                    setDrafting(false);
-                    if (res?.error) toast.error(res.error);
-                    else if (res?.ok) {
-                      setBody(res.body);
-                      setCta(res.cta);
-                      save({ body: res.body, cta: res.cta });
-                      toast.success("Draft added — read it over before it goes anywhere.");
-                    }
-                  });
-                }}
-                className="flex items-center gap-1.5 rounded-lg bg-accent px-2.5 py-1.5 text-xs font-medium text-white hover:bg-accent-hi disabled:opacity-60"
-              >
-                <IconSparkles size={12} />
-                {savingContext ? "Drafting…" : "Save & draft"}
-              </button>
-            </div>
-          </div>
-        ) : null}
       </div>
 
       {/* ---- Everything about the video ---- */}
@@ -826,7 +452,7 @@ export function ScriptWorkspace({
         <section className="rounded-2xl border border-line bg-card p-4">
           <h2 className="mb-2 text-sm font-semibold">Spoken brief</h2>
           <p className="mb-2.5 text-xs leading-relaxed text-ink-3">
-            Faster than typing. Record the idea, then turn it into text you can shape.
+            Faster than typing. Record the idea and it goes to the editor as a voice note.
           </p>
 
           {recording ? (
@@ -835,56 +461,6 @@ export function ScriptWorkspace({
             <div className="space-y-2">
               <VoicePlayer src={voiceUrl} duration={voiceMeta.duration} peaks={voiceMeta.peaks} />
               <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  disabled={transcribing}
-                  onClick={() => {
-                    setTranscribing(true);
-                    startTransition(async () => {
-                      const res = await transcribeBriefAction(video.id);
-                      setTranscribing(false);
-                      if (res?.error) toast.error(res.error);
-                      else if (res?.text) {
-                        // Appended, never overwriting what's already written.
-                        const next = body ? `${body}\n\n${res.text}` : res.text;
-                        setBody(next);
-                        save({ body: next });
-                        toast.success("Transcript added to the body.");
-                      }
-                    });
-                  }}
-                  className="flex items-center gap-1.5 rounded-lg bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-accent-hi disabled:opacity-50"
-                >
-                  <IconSparkles size={12} />
-                  {transcribing ? "Transcribing…" : "Turn into text"}
-                </button>
-                <button
-                  type="button"
-                  disabled={structuring}
-                  title="Split the recording straight into a hook, body and CTA instead of one raw paragraph"
-                  onClick={() => {
-                    setStructuring(true);
-                    startTransition(async () => {
-                      const res = await structureBriefAction(video.id);
-                      setStructuring(false);
-                      if (res?.error) toast.error(res.error);
-                      else if (res?.ok) {
-                        const nextHooks = res.hooks.length ? [...hooks, ...res.hooks] : hooks;
-                        const nextBody = res.body ? (body ? `${body}\n\n${res.body}` : res.body) : body;
-                        const nextCta = cta || res.cta;
-                        setHooks(nextHooks);
-                        setBody(nextBody);
-                        setCta(nextCta);
-                        save({ hooks: nextHooks, body: nextBody, cta: nextCta });
-                        toast.success("Structured into hook / body / CTA below.");
-                      }
-                    });
-                  }}
-                  className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-[11px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
-                >
-                  <IconSparkles size={12} />
-                  {structuring ? "Structuring…" : "Structure into script"}
-                </button>
                 <button
                   type="button"
                   onClick={() =>

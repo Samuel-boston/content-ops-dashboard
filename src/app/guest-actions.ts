@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { requireRole } from "@/lib/auth";
+import { requireUser } from "@/lib/auth";
 import type { CutComment, CutWithVersions, GuestLink, Video } from "@/lib/types";
 
 export interface GuestAssetItem {
@@ -22,9 +22,31 @@ function newToken(): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * Who may manage share links for a video: the client and admins always, and
+ * an editor on the video they're assigned to — sending a cut out for a quick
+ * look is part of doing the revisions. Editors have no RLS access to
+ * guest_links, so once this passes the queries below use the service role;
+ * this check is the boundary.
+ */
+async function requireLinkAccess(videoId: string) {
+  const me = await requireUser();
+  if (me.role === "owner" || me.role === "admin") return me;
+  if (me.role === "editor") {
+    const supabase = await supabaseServer();
+    const { data } = await supabase
+      .from("videos")
+      .select("assigned_editor_id")
+      .eq("id", videoId)
+      .maybeSingle();
+    if (data?.assigned_editor_id === me.id) return me;
+  }
+  throw new Error("You can't manage share links on this video.");
+}
+
 export async function listGuestLinks(videoId: string): Promise<GuestLink[]> {
-  await requireRole("owner", "admin");
-  const supabase = await supabaseServer();
+  await requireLinkAccess(videoId);
+  const supabase = supabaseAdmin();
   const { data } = await supabase
     .from("guest_links")
     .select("*")
@@ -39,8 +61,8 @@ export async function createGuestLinkAction(input: {
   purpose?: "review" | "upload" | "assets";
   expiresInDays?: number | null;
 }) {
-  const me = await requireRole("owner", "admin");
-  const supabase = await supabaseServer();
+  const me = await requireLinkAccess(input.videoId);
+  const supabase = supabaseAdmin();
 
   const expires = input.expiresInDays
     ? new Date(Date.now() + input.expiresInDays * 86_400_000).toISOString()
@@ -65,9 +87,13 @@ export async function createGuestLinkAction(input: {
 }
 
 export async function revokeGuestLinkAction(id: string, videoId: string) {
-  await requireRole("owner", "admin");
-  const supabase = await supabaseServer();
-  const { error } = await supabase.from("guest_links").update({ revoked: true }).eq("id", id);
+  await requireLinkAccess(videoId);
+  const supabase = supabaseAdmin();
+  const { error } = await supabase
+    .from("guest_links")
+    .update({ revoked: true })
+    .eq("id", id)
+    .eq("video_id", videoId);
   if (error) return { error: error.message };
   revalidatePath(`/videos/${videoId}`);
   return { ok: true };

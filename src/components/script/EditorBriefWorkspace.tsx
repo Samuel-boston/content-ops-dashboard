@@ -15,14 +15,13 @@ import { ScreenRecorder, type ScreenCapture } from "@/components/workspace/Scree
 import { VoicePlayer, VoiceRecorder, type VoiceCapture } from "@/components/workspace/Voice";
 import { uploadCommentMedia } from "@/lib/upload-client";
 import { saveBriefVoiceAction } from "@/app/script-actions";
-import { buildEditorBriefAction } from "@/app/ai-actions";
 import { updateVideoAction } from "@/app/actions";
-import { createFootageUploadUrlAction, registerAssetAction, deleteAssetAction } from "@/app/asset-actions";
+import { createFootageUploadUrlAction, registerAssetAction } from "@/app/asset-actions";
+import { BriefAttachments } from "@/components/BriefAttachments";
 import {
   IconCheck,
   IconFile,
   IconMic,
-  IconSparkles,
   IconTrash,
   IconScreenRecord,
 } from "@/components/ui/icons";
@@ -75,7 +74,6 @@ export function EditorBriefWorkspace({
     peaks: video.brief_voice_peaks,
   });
   const [brief, setBrief] = useState(video.brief ?? "");
-  const [buildingBrief, setBuildingBrief] = useState(false);
   const [priority, setPriority] = useState<Priority>(video.priority);
   const [screenRecording, setScreenRecording] = useState(false);
   const [uploadingClip, setUploadingClip] = useState(false);
@@ -126,11 +124,12 @@ export function EditorBriefWorkspace({
       return;
     }
     try {
-      await fetch(up.signedUrl, {
+      const put = await fetch(up.signedUrl, {
         method: "PUT",
         body: capture.blob,
         headers: { "x-upsert": "true" },
       });
+      if (!put.ok) throw new Error(put.status === 413 ? "That recording is too large to upload." : `Upload failed (${put.status}).`);
       const res = await registerAssetAction({
         videoId: video.id,
         label: `Screen recording — ${new Date().toLocaleDateString()}`,
@@ -146,6 +145,10 @@ export function EditorBriefWorkspace({
   }
 
   async function uploadClipFile(file: File) {
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error(`${file.name} is over the 50 MB upload limit.`);
+      return;
+    }
     setUploadingClip(true);
     const up = await createFootageUploadUrlAction(video.id, file.name);
     if (!up?.ok) {
@@ -154,7 +157,8 @@ export function EditorBriefWorkspace({
       return;
     }
     try {
-      await fetch(up.signedUrl, { method: "PUT", body: file, headers: { "x-upsert": "true" } });
+      const put = await fetch(up.signedUrl, { method: "PUT", body: file, headers: { "x-upsert": "true" } });
+      if (!put.ok) throw new Error(put.status === 413 ? "That file is over the 50 MB upload limit." : `Upload failed (${put.status}).`);
       const res = await registerAssetAction({
         videoId: video.id,
         label: file.name,
@@ -244,30 +248,6 @@ export function EditorBriefWorkspace({
                 <div className="flex flex-wrap gap-1.5">
                   <button
                     type="button"
-                    disabled={buildingBrief}
-                    title="Writes a short editing brief from this recording — tone, pacing, what matters. Doesn't touch the recording itself."
-                    onClick={() => {
-                      setBuildingBrief(true);
-                      startTransition(async () => {
-                        const res = await buildEditorBriefAction(video.id);
-                        setBuildingBrief(false);
-                        if (res?.error) toast.error(res.error);
-                        else if (res?.ok) {
-                          const next = brief ? `${brief}\n\n${res.brief}` : res.brief;
-                          setBrief(next);
-                          const saveRes = await updateVideoAction(video.id, { brief: next });
-                          if (saveRes?.error) toast.error(saveRes.error);
-                          else toast.success("Written brief drafted below — the recording stays too.");
-                        }
-                      });
-                    }}
-                    className="flex items-center gap-1.5 rounded-lg bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-accent-hi disabled:opacity-50"
-                  >
-                    <IconSparkles size={12} />
-                    {buildingBrief ? "Writing…" : "Draft written brief from it"}
-                  </button>
-                  <button
-                    type="button"
                     onClick={() =>
                       startTransition(async () => {
                         const res = await saveBriefVoiceAction(video.id, null);
@@ -330,31 +310,9 @@ export function EditorBriefWorkspace({
             </p>
 
             {clips.length ? (
-              <ul className="mb-3 space-y-2">
-                {clips.map((c) => (
-                  <li key={c.id} className="rounded-lg border border-line bg-panel p-2">
-                    <div className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-xs text-ink-2">{c.label}</span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          startTransition(async () => {
-                            await deleteAssetAction(c.id, video.id);
-                            router.refresh();
-                          })
-                        }
-                        className="shrink-0 text-ink-3 hover:text-danger"
-                        aria-label="Remove"
-                      >
-                        <IconTrash size={12} />
-                      </button>
-                    </div>
-                    {c.signed_url ? (
-                      <video src={c.signed_url} controls className="mt-1.5 max-h-48 w-full rounded-md bg-black" />
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
+              <div className="mb-3">
+                <BriefAttachments videoId={video.id} assets={assets} canEdit />
+              </div>
             ) : null}
 
             {screenRecording ? (

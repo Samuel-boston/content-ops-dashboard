@@ -7,8 +7,6 @@ import {
   IconChevronDown,
   IconDraw,
   IconFile,
-  IconGlobe,
-  IconLock,
   IconMic,
   IconPaperclip,
   IconScreenRecord,
@@ -79,7 +77,7 @@ export function Composer({
 }) {
   const toast = useToast();
   const [body, setBody] = useState("");
-  const [visibility, setVisibility] = useState<CommentVisibility>("internal");
+  const [visibility] = useState<CommentVisibility>("internal");
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<CommentAttachment[]>([]);
   const [voice, setVoice] = useState<{ capture: VoiceCapture; url: string } | null>(null);
@@ -472,50 +470,6 @@ export function Composer({
                     >
                       <Avatar person={p} size="sm" />
                       <span className="truncate">{displayName(p)}</span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            ) : null}
-          </div>
-
-          {/* Visibility */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setMenu(menu === "visibility" ? null : "visibility")}
-              className="flex items-center gap-1.5 rounded-md border border-line px-2 py-1 text-[11px] text-ink-2 hover:bg-hover"
-            >
-              {visibility === "internal" ? <IconLock size={11} /> : <IconGlobe size={11} />}
-              {visibility === "internal" ? "Internal" : "Client"}
-              <IconChevronDown size={11} />
-            </button>
-            {menu === "visibility" ? (
-              <>
-                <span className="fixed inset-0 z-20" onClick={() => setMenu(null)} />
-                <div className="absolute bottom-full left-0 z-30 mb-1 w-56 rounded-lg border border-line bg-raised py-1 shadow-xl">
-                  {(
-                    [
-                      ["internal", "Internal", "Only the team sees this."],
-                      ["client", "Client", "Visible in the client's review view."],
-                    ] as const
-                  ).map(([value, label, hint]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => {
-                        setVisibility(value);
-                        setMenu(null);
-                      }}
-                      className="flex w-full items-start gap-2 px-2.5 py-1.5 text-left hover:bg-hover"
-                    >
-                      <span className="mt-0.5 text-ink-2">
-                        {value === "internal" ? <IconLock size={12} /> : <IconGlobe size={12} />}
-                      </span>
-                      <span>
-                        <span className="block text-sm">{label}</span>
-                        <span className="block text-[11px] text-ink-3">{hint}</span>
-                      </span>
                     </button>
                   ))}
                 </div>

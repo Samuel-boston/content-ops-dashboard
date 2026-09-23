@@ -1,10 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTrackedTransition } from "@/components/ui/Pending";
 import { useToast } from "@/components/ui/Toast";
 import { StageBack } from "@/components/pipeline/StageBack";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { CarouselSlides } from "@/components/script/CarouselSlides";
 import {
   approveCarouselCreativeAction,
@@ -37,6 +39,7 @@ export function CarouselPostView({
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTrackedTransition();
+  const [confirmPosted, setConfirmPosted] = useState(false);
 
   function run(action: () => Promise<{ error?: string } | void>, ok: string) {
     startTransition(async () => {
@@ -121,7 +124,7 @@ export function CarouselPostView({
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => run(() => markPostedAction(video.id), "Marked posted.")}
+                onClick={() => setConfirmPosted(true)}
                 className="flex shrink-0 items-center gap-1 rounded-lg bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white transition hover:bg-accent-hi disabled:opacity-50"
               >
                 Mark posted
@@ -141,6 +144,19 @@ export function CarouselPostView({
         videoId={video.id}
         slides={carouselSlides}
         carouselStyle={video.carousel_style}
+      />
+
+      <ConfirmDialog
+        open={confirmPosted}
+        title="Mark as posted?"
+        body="Marking as posted will move this off the dashboard and into the Google Drive archive."
+        confirmLabel="Proceed"
+        cancelLabel="Go back"
+        onCancel={() => setConfirmPosted(false)}
+        onConfirm={() => {
+          setConfirmPosted(false);
+          run(() => markPostedAction(video.id), "Marked posted.");
+        }}
       />
     </div>
   );

@@ -15,7 +15,6 @@ import {
   IconLayers,
   IconMic,
   IconMuted,
-  IconPaperclip,
   IconPause,
   IconPlay,
   IconScreenRecord,
@@ -57,7 +56,6 @@ export function PlayerPane({
   onOpenComposer,
   onStartVoice,
   onStartScreen,
-  onAttach,
   onPinClick,
   recordingSince,
   revealUpTo,
@@ -91,7 +89,8 @@ export function PlayerPane({
   onOpenComposer: () => void;
   onStartVoice: () => void;
   onStartScreen: () => void;
-  onAttach: () => void;
+  /** Attaching now lives in the comment box only; kept so callers needn't change. */
+  onAttach?: () => void;
   onPinClick: (c: CutComment) => void;
   /** Set while a voice note records, so strokes get timestamped. */
   recordingSince?: number | null;
@@ -516,15 +515,6 @@ export function PlayerPane({
             className="rounded-lg border border-line px-2.5 py-1.5 text-ink-2 hover:bg-hover hover:text-ink"
           >
             <IconScreenRecord size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={onAttach}
-            aria-label="Attach a file"
-            title="Attach a file"
-            className="rounded-lg border border-line px-2.5 py-1.5 text-ink-2 hover:bg-hover hover:text-ink"
-          >
-            <IconPaperclip size={14} />
           </button>
         </div>
       </div>

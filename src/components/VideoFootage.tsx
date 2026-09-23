@@ -11,6 +11,14 @@ import {
 import { useToast } from "@/components/ui/Toast";
 import type { VideoAsset } from "@/lib/types";
 
+/**
+ * Supabase's project-wide per-file cap on the current (Free) plan. Anything
+ * larger is rejected by Storage with a 413 — after a long upload — so it's
+ * caught up front and pointed at the link box instead. Raising the plan's
+ * limit (Settings → Storage in Supabase) means raising this to match.
+ */
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
 const size = (b: number | null) => {
   if (!b) return "";
   const mb = b / 1024 / 1024;
@@ -37,11 +45,17 @@ export function VideoFootage({
   const [link, setLink] = useState("");
   const [progress, setProgress] = useState<number | null>(null);
   const [, startTransition] = useTrackedTransition();
-  // Finished-video links are the deliverable, not source material — they have
-  // their own panel.
-  assets = assets.filter((a) => a.kind !== "delivery");
+  // Raw footage only. Finished-video links are the deliverable and have their
+  // own panel; screenshots and clips attached to the brief live with the brief.
+  assets = assets.filter((a) => a.kind === "raw");
 
   async function upload(file: File) {
+    if (file.size > MAX_UPLOAD_BYTES) {
+      toast.error(
+        `${file.name} is ${Math.round(file.size / 1024 / 1024)} MB — over the ${MAX_UPLOAD_BYTES / 1024 / 1024} MB upload limit. Paste a Drive or Dropbox link below instead.`
+      );
+      return;
+    }
     setProgress(0);
     const res = await createFootageUploadUrlAction(videoId, file.name);
     if (!res?.ok) {
@@ -56,7 +70,7 @@ export function VideoFootage({
         xhr.setRequestHeader("x-upsert", "true");
         xhr.upload.onprogress = (e) =>
           e.lengthComputable && setProgress(Math.round((e.loaded / e.total) * 100));
-        xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status})`)));
+        xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(xhr.status === 413 ? "That file is too large to upload — paste a link instead." : `Upload failed (${xhr.status})`)));
         xhr.onerror = () => reject(new Error("Upload failed"));
         xhr.send(file);
       });

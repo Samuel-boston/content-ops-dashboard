@@ -8,6 +8,7 @@ import {
   trialPostingKitAction,
   vaMarkTrialPostedAction,
   vaSaveTrialMetricsAction,
+  vaSetPostAsAction,
   type PostingJobItem,
   type PostingTrialItem,
 } from "@/app/posting-actions";
@@ -50,6 +51,14 @@ function TrialCard({ trial }: { trial: PostingTrialItem }) {
       } else {
         toast.error("No downloadable file for this cut yet — ask the team.");
       }
+    });
+  }
+
+  function setPostAs(postAs: "trial" | "main") {
+    startTransition(async () => {
+      const res = await vaSetPostAsAction(trial.id, postAs);
+      if (res?.error) toast.error(res.error);
+      else router.refresh();
     });
   }
 
@@ -110,8 +119,48 @@ function TrialCard({ trial }: { trial: PostingTrialItem }) {
         <p className="min-w-0 flex-1 truncate text-sm font-medium">{trial.videoTitle}</p>
         {trial.winner ? <span title="Winning hook">🏆</span> : null}
       </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+        <span className="text-xs text-ink-2">
+          Variant: <span className="text-ink">{trial.label}</span>
+        </span>
+        {trial.status === "planned" ? (
+          <select
+            value={trial.postAs}
+            disabled={pending}
+            onChange={(e) => setPostAs(e.target.value as "trial" | "main")}
+            aria-label="Post as"
+            className="rounded-md border border-line bg-raised px-2 py-1 text-xs focus:border-accent focus:outline-none"
+          >
+            <option value="trial">Trial reel</option>
+            <option value="main">Post to main feed</option>
+          </select>
+        ) : (
+          <span className="rounded-md bg-raised px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-3">
+            {trial.postAs === "main" ? "Main feed" : "Trial"}
+          </span>
+        )}
+      </div>
+      {trial.notes ? (
+        <p className="mt-2 whitespace-pre-wrap rounded-md border border-line bg-raised px-2.5 py-2 text-xs leading-relaxed text-ink-2">
+          <span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-ink-3">
+            Instructions
+          </span>
+          {trial.notes}
+        </p>
+      ) : null}
+      {trial.coverUrl ? (
+        <a
+          href={trial.coverUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-2 flex items-center gap-2 text-xs text-accent-hi hover:underline"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={trial.coverUrl} alt="Cover" className="h-14 w-14 rounded-md object-cover" />
+          Cover image — open to save
+        </a>
+      ) : null}
       <p className="mt-1 text-xs text-ink-2">
-        Hook: <span className="text-ink">{trial.label}</span>
         {trial.scheduled_for ? (
           <span className="ml-2 inline-flex items-center gap-1 text-ink-3">
             <IconClock size={11} />
@@ -145,8 +194,14 @@ function TrialCard({ trial }: { trial: PostingTrialItem }) {
             </button>
           </div>
           <p className="text-[11px] leading-relaxed text-ink-3">
-            Post it from the Instagram app as a <b>trial reel</b> (Share to: Trial), then paste the
-            link here.
+            {trial.postAs === "main" ? (
+              <>Post it to the <b>main feed</b>, then paste the link here.</>
+            ) : (
+              <>
+                Post it from the Instagram app as a <b>trial reel</b> (Share to: Trial), then paste
+                the link here.
+              </>
+            )}
           </p>
           <div className="flex gap-2">
             <input
@@ -224,10 +279,10 @@ export function PostingQueue({
   return (
     <div className="space-y-6">
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-ink-2">Trial reels to post</h2>
+        <h2 className="text-sm font-semibold text-ink-2">To post</h2>
         {toPost.length === 0 ? (
           <p className="rounded-xl border border-line bg-card px-4 py-8 text-center text-sm text-ink-3">
-            Nothing waiting. New trials appear here the moment the team queues them.
+            Nothing waiting. A video shows up here once the client presses “Send to VA” on it.
           </p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
@@ -239,10 +294,10 @@ export function PostingQueue({
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-ink-2">Live trials — bring the numbers back</h2>
+        <h2 className="text-sm font-semibold text-ink-2">Live — bring the numbers back</h2>
         {live.length === 0 ? (
           <p className="rounded-xl border border-line bg-card px-4 py-8 text-center text-sm text-ink-3">
-            No live trials right now.
+            Nothing live right now.
           </p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">

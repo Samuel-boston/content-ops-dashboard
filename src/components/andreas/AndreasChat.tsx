@@ -82,10 +82,13 @@ export function AndreasChat({ autoAsk }: { autoAsk?: { text: string; nonce: numb
     const q = question.trim();
     if (!q || thinking) return;
     setInput("");
+    // What was said so far, so a follow-up ("say I uploaded a video") knows
+    // what it's a follow-up to. Captured before this turn is appended.
+    const history = messages.slice(-6).map((m) => ({ role: m.role, text: m.text }));
     setMessages((m) => [...m, { role: "user", text: q }]);
     setThinking(true);
     startTransition(async () => {
-      const res = await assistantQueryAction(q);
+      const res = await assistantQueryAction(q, history);
       setThinking(false);
       setMessages((m) => [...m, { role: "assistant", text: res.text, rows: res.rows, action: res.action }]);
     });

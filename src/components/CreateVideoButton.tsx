@@ -5,7 +5,6 @@ import { useTrackedTransition } from "@/components/ui/Pending";
 import { useRouter } from "next/navigation";
 import { createVideoAction } from "@/app/actions";
 import { saveBriefVoiceAction } from "@/app/script-actions";
-import { draftIdeaFromRecordingAction } from "@/app/ai-actions";
 import { createFootageUploadUrlAction, registerAssetAction } from "@/app/asset-actions";
 import { createGuestLinkAction } from "@/app/guest-actions";
 import { uploadCommentMedia } from "@/lib/upload-client";
@@ -13,7 +12,7 @@ import { TaxonomyMultiSelect } from "@/components/TaxonomyMultiSelect";
 import { CAROUSEL_FORMAT } from "@/lib/taxonomy";
 import { VoiceRecorder, type VoiceCapture } from "@/components/workspace/Voice";
 import { QR } from "@/components/ui/QR";
-import { IconCamera, IconFile, IconMic, IconPlus, IconSparkles, IconX } from "@/components/ui/icons";
+import { IconCamera, IconFile, IconMic, IconPlus, IconX } from "@/components/ui/icons";
 import { displayName } from "@/lib/format";
 import {
   STATUS_COLOR,
@@ -56,8 +55,7 @@ const FOOTAGE_STAGES: VideoStatus[] = ["ready_to_film", "ready_to_edit"];
 
 /**
  * Where to land right after creating — the stage-specific workspace for that
- * status, not a generic form. Ideation gets the voice-note capture + AI
- * drafting, Scripting gets the script editor and teleprompter, Ready to Film
+ * status, not a generic form. Ideation gets the voice-note capture, Scripting gets the script editor and teleprompter, Ready to Film
  * gets the shoot-day assembly page, Ready to Edit goes straight to the
  * shared workspace since it's already handed off.
  */
@@ -120,18 +118,10 @@ export function NewVideoDialog({
     setRecording(false);
     setDrafting(true);
     try {
+      // Just stored with the idea — nothing is transcribed or rewritten.
       const up = await uploadCommentMedia(capture.blob, "idea.webm", viewerId);
       setVoice({ path: up.path, duration: capture.duration, peaks: capture.peaks });
-      const res = await draftIdeaFromRecordingAction(up.path);
       setDrafting(false);
-      if (res?.error) {
-        setError(res.error);
-        return;
-      }
-      if (res?.ok) {
-        setTitle(res.title);
-        setNotes(res.hook ? `${res.brief}\n\nHook: ${res.hook}` : res.brief);
-      }
     } catch (e) {
       setDrafting(false);
       setError((e as Error).message);
@@ -314,7 +304,7 @@ export function NewVideoDialog({
                 ) : drafting ? (
                   <div className="flex items-center gap-2 py-2 text-sm text-ink-2">
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent" />
-                    Transcribing and drafting…
+                    Saving the recording…
                   </div>
                 ) : (
                   <button
@@ -328,9 +318,8 @@ export function NewVideoDialog({
                 )}
                 {voice && !recording && !drafting ? (
                   <p className="flex items-center gap-1.5 text-[11px] text-ink-3">
-                    <IconSparkles size={11} />
-                    Drafted the title and notes below from the recording — edit anything before
-                    creating.
+                    <IconMic size={11} />
+                    Recording attached — it plays back on the idea once it&rsquo;s created.
                     <button
                       type="button"
                       onClick={() => setVoice(null)}

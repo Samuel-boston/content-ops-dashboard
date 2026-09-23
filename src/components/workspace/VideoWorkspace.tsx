@@ -9,7 +9,6 @@ import { CarouselViewer } from "@/components/workspace/CarouselViewer";
 import { Composer, type ComposerSubmit } from "@/components/workspace/Composer";
 import { CommentsTab } from "@/components/workspace/CommentsTab";
 import { BriefTab } from "@/components/workspace/BriefTab";
-import { TranscriptTab } from "@/components/workspace/TranscriptTab";
 import { PostTab } from "@/components/workspace/PostTab";
 import { FilesTab } from "@/components/workspace/FilesTab";
 import { ChatTab } from "@/components/workspace/ChatTab";
@@ -27,7 +26,6 @@ import type {
   Series,
   CarouselImage,
   CutComment,
-  CutTranscript,
 
   CutWithVersions,
   Drawing,
@@ -43,7 +41,7 @@ import type {
   VideoMetrics,
 } from "@/lib/types";
 
-type Tab = "comments" | "brief" | "transcript" | "files" | "chat" | "post";
+type Tab = "comments" | "brief" | "files" | "chat" | "post";
 
 /**
  * Post only belongs on screen once there's something to post — everywhere
@@ -52,15 +50,14 @@ type Tab = "comments" | "brief" | "transcript" | "files" | "chat" | "post";
  */
 function visibleTabs(status: Video["status"]): Tab[] {
   if (status === "ready_to_post" || status === "posted") {
-    return ["post", "comments", "brief", "transcript", "files", "chat"];
+    return ["post", "comments", "brief", "files", "chat"];
   }
-  return ["comments", "brief", "transcript", "files", "chat"];
+  return ["comments", "brief", "files", "chat"];
 }
 
 const TAB_LABELS: Record<Tab, string> = {
   comments: "Comments",
   brief: "Brief",
-  transcript: "Transcript",
   files: "Files & Share",
   chat: "Chat",
   post: "Post",
@@ -71,7 +68,6 @@ export function VideoWorkspace({
   viewer,
   cuts,
   comments,
-  transcript,
   roster,
   customs,
   publishJobs,
@@ -90,7 +86,6 @@ export function VideoWorkspace({
   viewer: Profile;
   cuts: CutWithVersions[];
   comments: CutComment[];
-  transcript: CutTranscript | null;
   roster: Pick<Profile, "id" | "full_name" | "email">[];
   customs: { content_pillar: string[]; format: string[]; platform: string[] };
   publishJobs: PublishJob[];
@@ -126,6 +121,10 @@ export function VideoWorkspace({
   );
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(version?.duration_seconds ?? 0);
+  // Short-form is the norm here, and a 9:16 frame leaves black bars either
+  // side — so once the video reports its size, a portrait cut gives the
+  // comments panel the width instead.
+  const [portrait, setPortrait] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [tool, setTool] = useState<Tool>("none");
   const [drawing, setDrawing] = useState<Drawing | null>(null);
@@ -261,23 +260,6 @@ export function VideoWorkspace({
           />
         ) : null}
 
-        {tab === "transcript" ? (
-          <TranscriptTab
-            transcript={transcript}
-            cutId={activeCut?.id ?? ""}
-            version={version?.version ?? 1}
-            videoId={video.id}
-            currentTime={current}
-            canGenerate={!!version?.playback_url}
-            onSeek={seek}
-            onCommentRange={(start, end) => {
-              setSelection({ start, end });
-              seek(start);
-              openComposer();
-            }}
-          />
-        ) : null}
-
         {tab === "files" ? (
           <FilesTab
             video={video}
@@ -296,7 +278,7 @@ export function VideoWorkspace({
             streamConfigured={integrations.stream}
             canEdit={viewer.role !== "editor" || video.assigned_editor_id === viewer.id}
             guestLinks={guestLinks}
-            canShare={viewer.role !== "editor"}
+            canShare={viewer.role !== "editor" || video.assigned_editor_id === viewer.id}
           />
         ) : null}
 
@@ -391,7 +373,11 @@ export function VideoWorkspace({
       drawing={drawing}
       composerOpen={composerOpen}
       onSeek={seek}
-      onDuration={(d) => setDuration(d || version?.duration_seconds || 0)}
+      onDuration={(d) => {
+        setDuration(d || version?.duration_seconds || 0);
+        const el = playerRef.current?.element();
+        if (el?.videoWidth) setPortrait(el.videoHeight > el.videoWidth);
+      }}
       onTime={setCurrent}
       onPlayState={setPlaying}
       onSelect={setSelection}
@@ -447,7 +433,13 @@ export function VideoWorkspace({
       {/* Desktop: player | tabs (comments, files — cuts & hooks live there too) */}
       {/* grid-rows-[minmax(0,1fr)] + min-h-0 panes: without both, the row is
           sized by the tallest pane and the player scrolls off. */}
-      <div className="hidden h-[calc(100dvh-3.5rem)] lg:grid lg:grid-cols-[minmax(420px,1fr)_minmax(330px,420px)] lg:grid-rows-[minmax(0,1fr)]">
+      <div
+        className={`hidden h-[calc(100dvh-3.5rem)] lg:grid lg:grid-rows-[minmax(0,1fr)] ${
+          portrait
+            ? "lg:grid-cols-[minmax(340px,440px)_minmax(0,1fr)]"
+            : "lg:grid-cols-[minmax(420px,1fr)_minmax(330px,420px)]"
+        }`}
+      >
         <div className="min-h-0 min-w-0 overflow-hidden border-r border-line">{player}</div>
         <div className="min-h-0 min-w-0 overflow-hidden">{panel}</div>
       </div>

@@ -5,8 +5,6 @@ import { VideoRow } from "@/components/pipeline/VideoRow";
 import { StageMove } from "@/components/pipeline/StageMove";
 import { staleIds } from "@/lib/priorities";
 import { CreateVideoButton } from "@/components/CreateVideoButton";
-import { IdeaGeneratorButton } from "@/components/script/IdeaGeneratorButton";
-import { IdeaVoiceCapture } from "@/components/script/IdeaVoiceCapture";
 
 /**
  * The client's idea shelf. Private — editors can't see this stage at all, and
@@ -50,8 +48,6 @@ export default async function IdeationPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <IdeaVoiceCapture viewerId={viewer.id} />
-          <IdeaGeneratorButton />
           <CreateVideoButton editors={editors} customs={customsBy} viewerId={viewer.id} />
         </div>
       </div>

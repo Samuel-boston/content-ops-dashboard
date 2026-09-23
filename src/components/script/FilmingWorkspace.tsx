@@ -13,9 +13,8 @@ import { ShareLinks } from "@/components/workspace/ShareLinks";
 import { VoicePlayer, VoiceRecorder, type VoiceCapture } from "@/components/workspace/Voice";
 import { uploadCommentMedia } from "@/lib/upload-client";
 import { saveBriefVoiceAction } from "@/app/script-actions";
-import { buildEditorBriefAction } from "@/app/ai-actions";
 import { updateVideoAction } from "@/app/actions";
-import { IconChart, IconCheck, IconFile, IconMic, IconSparkles, IconTrash } from "@/components/ui/icons";
+import { IconChart, IconCheck, IconFile, IconMic, IconTrash } from "@/components/ui/icons";
 import { STATUS_COLOR, STATUS_LABELS } from "@/lib/types";
 import type { GuestLink, Video, VideoAsset } from "@/lib/types";
 
@@ -53,7 +52,6 @@ export function FilmingWorkspace({
     peaks: video.brief_voice_peaks,
   });
   const [brief, setBrief] = useState(video.brief ?? "");
-  const [buildingBrief, setBuildingBrief] = useState(false);
 
   const hasScript = Boolean(video.script_body?.trim() || video.script_hooks?.length);
   const hasFootage = assets.some((a) => a.storage_path || a.drive_url || a.external_url);
@@ -204,30 +202,6 @@ export function FilmingWorkspace({
               <div className="space-y-2">
                 <VoicePlayer src={voiceUrl} duration={voiceMeta.duration} peaks={voiceMeta.peaks} />
                 <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    disabled={buildingBrief}
-                    title="Writes a short editing brief from this recording — tone, pacing, what matters. Doesn't touch the recording itself."
-                    onClick={() => {
-                      setBuildingBrief(true);
-                      startTransition(async () => {
-                        const res = await buildEditorBriefAction(video.id);
-                        setBuildingBrief(false);
-                        if (res?.error) toast.error(res.error);
-                        else if (res?.ok) {
-                          const next = brief ? `${brief}\n\n${res.brief}` : res.brief;
-                          setBrief(next);
-                          const saveRes = await updateVideoAction(video.id, { brief: next });
-                          if (saveRes?.error) toast.error(saveRes.error);
-                          else toast.success("Written brief drafted below — the recording stays too.");
-                        }
-                      });
-                    }}
-                    className="flex items-center gap-1.5 rounded-lg bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-accent-hi disabled:opacity-50"
-                  >
-                    <IconSparkles size={12} />
-                    {buildingBrief ? "Writing…" : "Draft written brief from it"}
-                  </button>
                   <button
                     type="button"
                     onClick={() =>

@@ -5,7 +5,7 @@ import { requireRole } from "@/lib/auth";
 import { notify } from "@/lib/notify";
 import { chatJSON, chatText, aiErrorMessage } from "@/lib/integrations/ai";
 import { generateCaptionAction } from "@/app/ai-actions";
-import { CONTENT_PILLARS, FORMATS, PLATFORMS } from "@/lib/taxonomy";
+import { CONTENT_PILLARS, FORMATS, PLATFORMS, isCarouselFormat } from "@/lib/taxonomy";
 import { PUBLISH_CHANNELS, STATUS_LABELS, type PublishChannel, type VideoStatus } from "@/lib/types";
 
 /**
@@ -160,7 +160,39 @@ Pages:
 - Settings: a DIFFERENT page, owner-only, also reached from the account menu — integration credentials (Cloudflare Stream, Google Drive, Instagram, Telegram) and which AI engine (Groq/Claude/OpenAI) powers the in-app AI features. Has nothing to do with connecting an external AI assistant — don't conflate the two.
 `.trim();
 
-async function classify(question: string, people: string[]): Promise<Intent | null> {
+/** One earlier turn of the Andreas thread, as the client kept it. */
+export interface AssistantTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
+/**
+ * The last few turns, flattened for the classifier. Each question used to be
+ * classified alone, so "message Nathan" → "What should I tell them?" → "say
+ * I uploaded a video" lost the recipient and fell through to the generic
+ * "try rephrasing" reply. With the thread in view, the follow-up merges into
+ * the request it answers.
+ */
+function threadForPrompt(history: AssistantTurn[] | undefined): string {
+  const recent = (history ?? []).slice(-6);
+  if (!recent.length) return "";
+  return (
+    `Conversation so far (oldest first):\n` +
+    recent
+      .map((t) => `${t.role === "user" ? "User" : "Assistant"}: ${t.text.slice(0, 400)}`)
+      .join("\n") +
+    `\n\nIf the request below is a short follow-up that answers or refines the assistant's last message ` +
+    `(e.g. it supplies the message text after "What should I tell them?", picks one of several matches, or ` +
+    `adds a date), COMBINE it with the earlier request into ONE complete intent — keep the same intent, person ` +
+    `and video from the earlier turn and fill in the new detail. Only treat it as a fresh request if it is clearly about something else.\n\n`
+  );
+}
+
+async function classify(
+  question: string,
+  people: string[],
+  history?: AssistantTurn[]
+): Promise<Intent | null> {
   const today = new Date();
   const todayISO = today.toISOString().slice(0, 10);
   const todayWeekday = today.toLocaleDateString("en-US", { weekday: "long" });
@@ -175,6 +207,7 @@ async function classify(question: string, people: string[]): Promise<Intent | nu
       `Known formats: ${FORMATS.join(", ")}. Known platforms: ${PLATFORMS.join(", ")}. Known content pillars: ${CONTENT_PILLARS.join(", ")}.\n` +
       `People on the team: ${people.join(", ") || "(none)"}.\n` +
       `Publishing channels: ${PUBLISH_CHANNELS.join(", ")}.\n\n` +
+      threadForPrompt(history) +
       `Classify this request: "${question}"\n\n` +
       `Pick ONE intent:\n` +
       `- "find_video": asking where a specific video is, or to find one by topic/title (e.g. "where's the pricing video", "find that video about editors from 2 months ago"). searchText is ONLY the distinctive topic/title words — drop generic words like "video", "post", "clip", "that", "the". Add a rough time hint in daysBack if one was given (e.g. "2 months ago" -> 60).\n` +
@@ -288,13 +321,28 @@ async function resolveOneVideo(
   supabase: Awaited<ReturnType<typeof supabaseServer>>,
   searchText: string
 ): Promise<{ video: VideoLookupRow } | { reply: AssistantReply }> {
-  const { data, error } = await supabase
+  // Any-word matching over-collects ("carousel test post" also pulls every
+  // title with "test" in it), and a bare .limit(5) cut the right video off
+  // before it was ever considered. So: fetch wide, score by how many of the
+  // search words each title actually contains, and only ask "which one?"
+  // among the best-scoring ties.
+  const { data: found, error } = await supabase
     .from("videos")
     .select("id, title, status")
     .or(titleOrFilter(searchText))
-    .limit(5);
+    .limit(60);
   if (error) return { reply: { ok: false, text: error.message } };
-  if (!data?.length) return { reply: { ok: true, text: `Nothing matching "${searchText}".` } };
+  if (!found?.length) return { reply: { ok: true, text: `Nothing matching "${searchText}".` } };
+
+  const words = titleWords(searchText);
+  const score = (title: string) => {
+    const t = title.toLowerCase();
+    return words.filter((w) => t.includes(w)).length;
+  };
+  const ranked = [...found].sort((x, y) => score(y.title) - score(x.title));
+  const best = score(ranked[0].title);
+  const data = ranked.filter((v) => score(v.title) === best).slice(0, 5);
+
   if (data.length > 1) {
     return {
       reply: {
@@ -336,7 +384,10 @@ export async function messageTeamAction(
   return {};
 }
 
-export async function assistantQueryAction(question: string): Promise<AssistantReply> {
+export async function assistantQueryAction(
+  question: string,
+  history?: AssistantTurn[]
+): Promise<AssistantReply> {
   await requireRole("owner", "admin");
   if (!question.trim()) return { ok: false, text: "Ask me something first." };
 
@@ -347,7 +398,11 @@ export async function assistantQueryAction(question: string): Promise<AssistantR
     .eq("active", true);
   const people = (roster as Person[]) ?? [];
 
-  const parsed = await classify(question, people.map((p) => p.full_name || p.email.split("@")[0]));
+  const parsed = await classify(
+    question,
+    people.map((p) => p.full_name || p.email.split("@")[0]),
+    history
+  );
   if (!parsed) {
     return {
       ok: false,
@@ -427,24 +482,16 @@ export async function assistantQueryAction(question: string): Promise<AssistantR
     if (!parsed.toStatus || !STATUS_VALUES.includes(parsed.toStatus as VideoStatus)) {
       return { ok: false, text: "I couldn't tell which stage to move it to." };
     }
-    const { data, error } = await supabase
-      .from("videos")
-      .select("id, title, status")
-      .or(titleOrFilter(parsed.searchText))
-      .limit(5);
-    if (error) return { ok: false, text: error.message };
-    if (!data?.length) return { ok: true, text: `Nothing matching "${parsed.searchText}".` };
-    if (data.length > 1) {
-      return {
-        ok: true,
-        text: `More than one matches "${parsed.searchText}" — which one?`,
-        rows: toRows(
-          data.map((v) => ({ ...v, post_date: null, posted_at: null, assigned_editor: null }))
-        ),
-      };
+    const found = await resolveOneVideo(supabase, parsed.searchText);
+    if ("reply" in found) return found.reply;
+    const v = found.video;
+    let toStatus = parsed.toStatus as VideoStatus;
+    // "Revisions" on a carousel means its creative revisions — the editing
+    // stage of that name doesn't exist for one.
+    if (toStatus === "revisions") {
+      const { data: fmt } = await supabase.from("videos").select("formats").eq("id", v.id).maybeSingle();
+      if (isCarouselFormat((fmt?.formats as string[] | null) ?? [])) toStatus = "creative_revisions";
     }
-    const v = data[0];
-    const toStatus = parsed.toStatus as VideoStatus;
     if (v.status === toStatus) {
       return { ok: true, text: `"${v.title}" is already in ${STATUS_LABELS[toStatus]}.` };
     }

@@ -4,19 +4,27 @@ import { listTeam } from "@/app/actions";
 import { teamSnapshots } from "@/app/team-actions";
 import { getWorkspaceSettings } from "@/lib/workspace";
 import { TeamManager } from "@/components/TeamManager";
+import { listVaTasks } from "@/app/task-actions";
+import { listTimeOff } from "@/app/pricing-actions";
+import { VaTaskBoard } from "@/components/tasks/VaTaskBoard";
 import { Avatar } from "@/components/ui/Avatar";
 import { EtaBadge } from "@/components/pipeline/Eta";
 import { IconChevronRight } from "@/components/ui/icons";
-import { displayName, money } from "@/lib/format";
+import { dayMonth, displayName, money } from "@/lib/format";
 import { STATUS_COLOR, STATUS_LABELS } from "@/lib/types";
 
 export default async function TeamPage() {
   const viewer = await requireRole("owner", "admin");
-  const [team, snapshots, settings] = await Promise.all([
+  const [team, snapshots, settings, vaTasks, timeOff] = await Promise.all([
     listTeam(),
     teamSnapshots(),
     getWorkspaceSettings(),
+    listVaTasks(),
+    listTimeOff(),
   ]);
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const away = timeOff.filter((t) => t.ends_on >= todayISO).slice(0, 12);
+  const vas = team.filter((p) => p.role === "va" && p.active);
   const currency = settings.currency ?? "USD";
 
   return (
@@ -112,6 +120,48 @@ export default async function TeamPage() {
           No editors yet — add a seat below.
         </p>
       ) : null}
+
+      {away.length > 0 ? (
+        <section>
+          <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+            Away
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {away.map((t) => {
+              const who = team.find((p) => p.id === t.editor_id);
+              return (
+                <span key={t.id} className="rounded-lg border border-line bg-card px-3 py-1.5 text-xs">
+                  <span className="font-medium">{who ? displayName(who) : "Someone"}</span>
+                  <span className="text-ink-3">
+                    {" "}
+                    · {dayMonth(t.starts_on)}
+                    {t.ends_on !== t.starts_on ? ` – ${dayMonth(t.ends_on)}` : ""}
+                  </span>
+                </span>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-[11px] text-ink-3">
+            Each person sets their own days from Time off in their account menu.
+          </p>
+        </section>
+      ) : null}
+
+      {/* The VA has no video work to hold, so their card is the task list you give them. */}
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+            VA{vas.length > 1 ? "s" : ""}
+            {vas.length ? ` — ${vas.map((v) => displayName(v)).join(", ")}` : ""}
+          </h2>
+          <p className="mt-1 text-sm text-ink-2">
+            {vas.length === 0
+              ? "No VA seat yet — add one below, then give them tasks here."
+              : `${vaTasks.filter((t) => t.status === "todo").length} open · give them a task, and see what's been done.`}
+          </p>
+        </div>
+        <VaTaskBoard tasks={vaTasks} canManage />
+      </section>
 
       <section className="max-w-3xl">
         <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-3">

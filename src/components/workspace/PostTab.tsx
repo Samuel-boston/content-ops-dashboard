@@ -3,9 +3,8 @@
 import { useState } from "react";
 import { useTrackedTransition } from "@/components/ui/Pending";
 import { useToast } from "@/components/ui/Toast";
-import { IconCalendar, IconCheck, IconClock, IconSparkles } from "@/components/ui/icons";
+import { IconCalendar, IconCheck, IconClock } from "@/components/ui/icons";
 import { schedulePostAction } from "@/app/publishing-actions";
-import { generateCaptionAction } from "@/app/ai-actions";
 import { TrialsPanel } from "@/components/workspace/TrialsPanel";
 import { CHANNEL_LABELS, PUBLISH_CHANNELS, type PublishChannel } from "@/lib/types";
 import type { PublishJob, Video } from "@/lib/types";
@@ -76,10 +75,8 @@ export function PostTab({
   const [caption, setCaption] = useState(
     [video.script_body, video.script_cta].filter(Boolean).join("\n\n")
   );
-  const [captionPrompt, setCaptionPrompt] = useState("");
   const [channels, setChannels] = useState<PublishChannel[]>(["instagram"]);
   const [when, setWhen] = useState("");
-  const [writing, setWriting] = useState(false);
   const [coverSeconds, setCoverSeconds] = useState(0);
   const [shareToFeed, setShareToFeed] = useState(true);
 
@@ -109,49 +106,6 @@ export function PostTab({
           className="w-full resize-none bg-transparent px-3 py-3 text-sm leading-relaxed text-ink placeholder:text-ink-3 focus:outline-none"
         />
         <div className="flex items-center gap-1.5 border-t border-line px-2 py-1.5">
-          <input
-            value={captionPrompt}
-            onChange={(e) => setCaptionPrompt(e.target.value)}
-            placeholder="Steer it — e.g. more playful, lead with the stat… (optional)"
-            className="min-w-0 flex-1 rounded-md border border-line bg-raised px-2 py-1 text-[11px] placeholder:text-ink-3 focus:border-accent focus:outline-none"
-          />
-          <button
-            type="button"
-            disabled={writing}
-            onClick={() => {
-              setWriting(true);
-              startTransition(async () => {
-                const res = await generateCaptionAction(video.id, captionPrompt);
-                setWriting(false);
-                if (res?.error) toast.error(res.error);
-                else if (res?.ok) setCaption(res.caption);
-              });
-            }}
-            title="Uses this video's script, its pillar/format, your SOP guide, and a couple of your own posted scripts as tone examples"
-            className="flex shrink-0 items-center gap-1.5 rounded-md bg-accent px-2 py-1 text-[11px] font-medium text-white hover:bg-accent-hi disabled:opacity-50"
-          >
-            <IconSparkles size={12} />
-            {writing ? "Writing…" : "Write caption"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const tags = video.content_pillars
-                .concat(video.formats)
-                .map((t) => `#${t.replace(/[^a-zA-Z0-9]/g, "").toLowerCase()}`)
-                .filter((t) => t.length > 1);
-              if (!tags.length) {
-                toast.info("Add pillars or formats on the Brief tab to generate tags.");
-                return;
-              }
-              setCaption((c) => `${c.trimEnd()}\n\n${[...new Set(tags)].join(" ")}`);
-            }}
-            title="Append hashtags from this video's pillars and formats"
-            className="flex items-center gap-1.5 rounded-md bg-accent-ghost px-2 py-1 text-[11px] text-accent-hi hover:bg-accent/25"
-          >
-            <IconSparkles size={12} />
-            Tags
-          </button>
           <span
             className={`ml-auto font-mono text-[11px] ${
               caption.length > IG_LIMIT ? "text-danger" : "text-ink-3"
@@ -323,7 +277,12 @@ export function PostTab({
 
       {/* Hook trials — manual by nature (IG's API can't post or read trial
           reels), so it lives beside the automatic scheduler, not inside it. */}
-      <TrialsPanel videoId={video.id} />
+      <TrialsPanel
+        videoId={video.id}
+        vaNotes={video.va_notes}
+        vaSentAt={video.va_sent_at}
+        hasCover={Boolean(video.cover_path)}
+      />
     </div>
   );
 }

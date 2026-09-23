@@ -44,6 +44,80 @@ export async function listVideoTrials(videoId: string): Promise<{
   };
 }
 
+/**
+ * "Send this to the VA to post" — the one deliberate hand-off. Saves the
+ * instructions and cover on the video, then puts every variant (the main cut
+ * and each hook variant) on the VA's posting desk. Variants that are already
+ * queued are left alone, so sending again after adding a new hook only adds
+ * the new one. The main cut defaults to the main feed and hook variants to
+ * trials; either can be flipped per variant afterwards.
+ */
+export async function sendToVaAction(input: {
+  videoId: string;
+  notes?: string | null;
+  coverPath?: string | null;
+}) {
+  const me = await requireRole("owner", "admin");
+  const supabase = await supabaseServer();
+
+  const [{ data: video }, { data: cuts }, { data: existing }] = await Promise.all([
+    supabase.from("videos").select("script_body, script_cta, cover_path").eq("id", input.videoId).single(),
+    supabase
+      .from("video_cuts")
+      .select("id, label, kind")
+      .eq("video_id", input.videoId)
+      .order("position"),
+    supabase.from("trial_posts").select("cut_id, status").eq("video_id", input.videoId),
+  ]);
+  if (!video) return { error: "Video not found." };
+  if (!cuts?.length) return { error: "There's no cut on this video to send yet." };
+
+  const busy = new Set(
+    (existing ?? []).filter((t) => t.status !== "archived").map((t) => t.cut_id as string)
+  );
+  const todo = cuts.filter((c) => !busy.has(c.id));
+  const notes = input.notes?.trim() || null;
+  const caption = [video.script_body, video.script_cta].filter(Boolean).join("\n\n").trim() || null;
+
+  const { error: vErr } = await supabase
+    .from("videos")
+    .update({
+      va_notes: notes,
+      cover_path: input.coverPath ?? video.cover_path ?? null,
+      va_sent_at: new Date().toISOString(),
+    })
+    .eq("id", input.videoId);
+  if (vErr) return { error: vErr.message };
+
+  if (todo.length) {
+    const { error } = await supabase.from("trial_posts").insert(
+      todo.map((c) => ({
+        video_id: input.videoId,
+        cut_id: c.id,
+        label: c.label,
+        caption,
+        notes,
+        status: "planned",
+        post_as: c.kind === "main" ? "main" : "trial",
+        created_by: me.id,
+      }))
+    );
+    if (error) return { error: error.message };
+  }
+  revalidateTrials(input.videoId);
+  return { ok: true as const, queued: todo.length };
+}
+
+/** Trial reel or straight to the main feed — settable per variant. */
+export async function setPostAsAction(id: string, videoId: string, postAs: "trial" | "main") {
+  await requireRole("owner", "admin");
+  const supabase = await supabaseServer();
+  const { error } = await supabase.from("trial_posts").update({ post_as: postAs }).eq("id", id);
+  if (error) return { error: error.message };
+  revalidateTrials(videoId);
+  return { ok: true };
+}
+
 export async function queueTrialAction(input: {
   videoId: string;
   cutId: string | null;

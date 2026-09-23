@@ -9,6 +9,7 @@ import { ClaimDialog, EtaBadge, NudgeButton } from "@/components/pipeline/Eta";
 import { ReturnToBay } from "@/components/pipeline/ReturnToBay";
 import { StageBack } from "@/components/pipeline/StageBack";
 import { ParkButton } from "@/components/pipeline/ParkButton";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   IconCheck,
   IconChevronDown,
@@ -82,6 +83,7 @@ export function StageActions({
   const [, startTransition] = useTrackedTransition();
   const [claim, setClaim] = useState<null | "claim" | "eta">(null);
   const [approveMenu, setApproveMenu] = useState(false);
+  const [confirmPosted, setConfirmPosted] = useState(false);
 
   const isManager = viewer.role !== "editor";
   const mine = video.assigned_editor_id === viewer.id;
@@ -237,7 +239,7 @@ export function StageActions({
           ) : null}
 
           {video.status === "ready_to_post" ? (
-            <Primary tone="ok" onClick={() => run(() => markPostedAction(video.id), "Marked as posted.")}>
+            <Primary tone="ok" onClick={() => setConfirmPosted(true)}>
               <IconCheck size={13} />
               Mark as posted
             </Primary>
@@ -254,6 +256,19 @@ export function StageActions({
           ) : null}
         </>
       ) : null}
+
+      <ConfirmDialog
+        open={confirmPosted}
+        title="Mark as posted?"
+        body="Marking as posted will move this off the dashboard and into the Google Drive archive."
+        confirmLabel="Proceed"
+        cancelLabel="Go back"
+        onCancel={() => setConfirmPosted(false)}
+        onConfirm={() => {
+          setConfirmPosted(false);
+          run(() => markPostedAction(video.id), "Marked as posted.");
+        }}
+      />
 
       <ClaimDialog
         open={claim !== null}

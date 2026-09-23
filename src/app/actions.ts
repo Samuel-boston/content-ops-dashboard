@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { redirect } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -388,7 +389,9 @@ export async function setStatusAction(id: string, status: VideoStatus) {
   // into Google Drive, then point the record at Drive — keeping Stream's working
   // set small and flat forever. Best-effort; runs only if Drive is configured.
   if (status === "posted" && before?.status !== "posted") {
-    void archivePostedToDrive(id);
+    // after(): on a serverless host a bare floating promise is frozen the
+    // moment the response is sent, so the copy to Drive would silently never run.
+    after(() => archivePostedToDrive(id));
     await notifyTelegram(`✅ Posted: <b>${before?.title ?? "a video"}</b>`);
   }
   if (before?.status === "ready_to_edit" && status !== "ready_to_edit") void checkPoolEmpty();

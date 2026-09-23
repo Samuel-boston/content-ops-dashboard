@@ -1,9 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 import { isManager, requireUser } from "@/lib/auth";
-import { getVideo, listEditors, listTaxonomyCustoms } from "@/app/actions";
+import { getVideo, listTaxonomyCustoms, listTeam } from "@/app/actions";
 import { PLANNING_STAGES, type VideoStatus } from "@/lib/types";
 import { isCarouselFormat } from "@/lib/taxonomy";
-import { getTranscript, listCutComments, listCuts } from "@/app/engine-actions";
+import { listCutComments, listCuts } from "@/app/engine-actions";
 import { listVideoPublishJobs } from "@/app/publishing-actions";
 import { listGuestLinks } from "@/app/guest-actions";
 import { listActivity, listAssets } from "@/app/asset-actions";
@@ -28,7 +28,6 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
 
   const [
     video,
-    editors,
     customs,
     cuts,
     settings,
@@ -42,7 +41,6 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
     guestLinks,
   ] = await Promise.all([
     getVideo(id),
-    listEditors(),
     listTaxonomyCustoms(),
     listCuts(id),
     getWorkspaceSettings(),
@@ -93,12 +91,12 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
   // during render is impure and would differ between server and hydration.
   const [{ overdue }] = annotateOverdue([{ eta_at: video.eta_at }]);
 
-  const mainCut = cuts[0];
-  const topVersion = mainCut?.versions[0];
-  const transcript =
-    mainCut && topVersion ? await getTranscript(mainCut.id, topVersion.version) : null;
-
-  const roster = editors.map((e) => ({ id: e.id, full_name: e.full_name, email: e.email }));
+  // Everyone who can be @-mentioned in this video's chat and comments — the
+  // whole active team, not just editors. An editor couldn't tag the client and
+  // the client couldn't tag the copywriter or VA. Roles are folded into the
+  // list only to keep the assigned-editor lookup below working.
+  const team = (await listTeam()).filter((p) => p.active);
+  const roster = team.map((e) => ({ id: e.id, full_name: e.full_name, email: e.email }));
   const seriesOptions = await listSeriesOptions();
 
   // Editors get a working view rather than the client's review workspace: the
@@ -112,7 +110,7 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
       // signed a URL for it, so the recording was silently unreachable.
       briefVoiceUrl(video.brief_voice_path),
     ]);
-    return (
+    const editorView = (
       <EditorVideoView
         video={video}
         viewer={viewer}
@@ -132,6 +130,44 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
         briefVoiceUrl={briefVoice}
       />
     );
+
+    // Sent back for changes: the editor needs the same room the client used
+    // to leave the notes — the player, the comments pinned to the timeline,
+    // replies, resolving, the chat and share links — or they're guessing at
+    // what to change. It comes first; their own working view sits beneath it.
+    if (video.status === "revisions" && video.assigned_editor_id === viewer.id) {
+      const links = await listGuestLinks(id);
+      const customsBy = {
+        content_pillar: customs.filter((c) => c.kind === "content_pillar").map((c) => c.value),
+        format: customs.filter((c) => c.kind === "format").map((c) => c.value),
+        platform: customs.filter((c) => c.kind === "platform").map((c) => c.value),
+      };
+      return (
+        <>
+          <VideoWorkspace
+            video={video}
+            viewer={viewer}
+            cuts={cuts}
+            comments={comments}
+            roster={roster}
+            customs={customsBy}
+            publishJobs={[]}
+            overdue={overdue}
+            assets={assets}
+            carouselImages={carouselImages}
+            references={references}
+            messages={messages}
+            activity={activity}
+            metrics={metrics}
+            integrations={integrationStatus(settings)}
+            guestLinks={links}
+            seriesOptions={seriesOptions}
+          />
+          <div className="border-t border-line px-3 py-6 sm:px-6">{editorView}</div>
+        </>
+      );
+    }
+    return editorView;
   }
 
   // Ready to Edit hasn't been picked up yet — there's nothing to review, only
@@ -187,7 +223,6 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
       viewer={viewer}
       cuts={cuts}
       comments={comments}
-      transcript={transcript}
       roster={roster}
       customs={customsBy}
       publishJobs={publishJobs}

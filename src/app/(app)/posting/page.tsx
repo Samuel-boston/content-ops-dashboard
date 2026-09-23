@@ -1,6 +1,8 @@
 import { requireRole } from "@/lib/auth";
 import { listPostingWork } from "@/app/posting-actions";
 import { PostingQueue } from "@/components/posting/PostingQueue";
+import { listVaTasks } from "@/app/task-actions";
+import { VaTaskBoard } from "@/components/tasks/VaTaskBoard";
 
 /**
  * The posting desk — the VA's whole dashboard, and the only page their seat
@@ -12,7 +14,7 @@ import { PostingQueue } from "@/components/posting/PostingQueue";
  */
 export default async function PostingPage() {
   const viewer = await requireRole("va", "owner", "admin");
-  const { trials, jobs } = await listPostingWork();
+  const [{ trials, jobs }, tasks] = await Promise.all([listPostingWork(), listVaTasks()]);
 
   return (
     <div className="space-y-5">
@@ -24,6 +26,17 @@ export default async function PostingPage() {
         </p>
       </div>
       <PostingQueue trials={trials} jobs={jobs} viewerRole={viewer.role} />
+
+      {/* Everything that isn't posting — right under it, so it can't be missed. */}
+      <section className="space-y-3 border-t border-line pt-5">
+        <div>
+          <h2 className="text-base font-semibold">Other tasks</h2>
+          <p className="text-sm text-ink-2">
+            {tasks.filter((t) => t.status === "todo").length} open · click a task for the details
+          </p>
+        </div>
+        <VaTaskBoard tasks={tasks} canManage={viewer.role !== "va"} />
+      </section>
     </div>
   );
 }
