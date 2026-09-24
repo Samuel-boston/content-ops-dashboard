@@ -232,7 +232,10 @@ export function PlayerPane({
           width, and `shrink-0` meant the inner flex-wrap never got the chance
           to wrap — the whole page scrolled sideways instead. */}
       {headerActions ? (
-        <div className="flex min-w-0 max-w-full justify-end border-t border-line/60 bg-app px-3 py-2 [&>div]:justify-end">
+        <div
+          data-stage-actions
+          className="flex min-w-0 max-w-full justify-end border-t border-line/60 bg-app px-3 py-2 [&>div]:justify-end [&_button]:whitespace-nowrap"
+        >
           {headerActions}
         </div>
       ) : null}

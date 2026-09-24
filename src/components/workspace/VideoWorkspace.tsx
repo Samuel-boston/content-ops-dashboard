@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTrackedTransition } from "@/components/ui/Pending";
 import { useRouter } from "next/navigation";
 import type { PlayerHandle } from "@/components/engine/StreamPlayer";
@@ -163,6 +163,28 @@ export function VideoWorkspace({
       return null;
     }
   });
+  // The narrowest the player can be before its stage buttons wrap onto a second
+  // line and push the video down — measured from the real buttons, because the
+  // set differs by stage and role.
+  const [actionsW, setActionsW] = useState(0);
+  useEffect(() => {
+    const row = splitRef.current?.querySelector<HTMLElement>("[data-stage-actions]");
+    if (!row) return;
+    const measure = () => {
+      const list = row.firstElementChild;
+      if (!list) return setActionsW(0);
+      const kids = Array.from(list.children) as HTMLElement[];
+      const widths = kids.map((k) => k.offsetWidth).filter((w) => w > 0);
+      const sum = widths.reduce((a, b) => a + b, 0) + Math.max(0, widths.length - 1) * 8;
+      setActionsW(Math.ceil(sum + 24 + 2)); // the row's own padding and the divider
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(row);
+    if (row.firstElementChild) ro.observe(row.firstElementChild);
+    measure();
+    return () => ro.disconnect();
+  }, []);
+  const minPlayerW = Math.max(MIN_PLAYER_W, actionsW);
   const savePlayerW = useCallback((w: number | null) => {
     setPlayerW(w);
     try {
@@ -182,18 +204,18 @@ export function VideoWorkspace({
       const left = box.getBoundingClientRect().left;
       const total = box.getBoundingClientRect().width;
       const move = (ev: PointerEvent) => {
-        setPlayerW(Math.min(Math.max(ev.clientX - left, MIN_PLAYER_W), total - MIN_PANEL_W));
+        setPlayerW(Math.min(Math.max(ev.clientX - left, minPlayerW), total - MIN_PANEL_W));
       };
       const up = (ev: PointerEvent) => {
         handle.removeEventListener("pointermove", move);
         handle.removeEventListener("pointerup", up);
         handle.releasePointerCapture(ev.pointerId);
-        savePlayerW(Math.min(Math.max(ev.clientX - left, MIN_PLAYER_W), total - MIN_PANEL_W));
+        savePlayerW(Math.min(Math.max(ev.clientX - left, minPlayerW), total - MIN_PANEL_W));
       };
       handle.addEventListener("pointermove", move);
       handle.addEventListener("pointerup", up);
     },
-    [savePlayerW]
+    [savePlayerW, minPlayerW]
   );
   // Draw-while-talking: the composer records, the draw layer lives on the
   // player, and playback of a saved note drives the replay — so both timings
@@ -503,14 +525,14 @@ export function VideoWorkspace({
       <div
         ref={splitRef}
         suppressHydrationWarning
-        style={playerW ? { gridTemplateColumns: `min(${playerW}px, calc(100% - ${MIN_PANEL_W + 8}px)) 8px minmax(0,1fr)` } : undefined}
-        className={`hidden h-[calc(100dvh-3.5rem)] lg:grid lg:grid-rows-[minmax(0,1fr)] ${
-          playerW
-            ? ""
+        style={{
+          gridTemplateColumns: playerW
+            ? `max(${minPlayerW}px, min(${playerW}px, calc(100% - ${MIN_PANEL_W + 8}px))) 8px minmax(0,1fr)`
             : portrait
-              ? "lg:grid-cols-[minmax(340px,440px)_8px_minmax(0,1fr)]"
-              : "lg:grid-cols-[minmax(420px,1fr)_8px_minmax(330px,420px)]"
-        }`}
+              ? `minmax(${Math.max(340, minPlayerW)}px, ${Math.max(440, minPlayerW)}px) 8px minmax(0,1fr)`
+              : `minmax(${Math.max(420, minPlayerW)}px, 1fr) 8px minmax(330px, 420px)`,
+        }}
+        className="hidden h-[calc(100dvh-3.5rem)] lg:grid lg:grid-rows-[minmax(0,1fr)]"
       >
         <div className="min-h-0 min-w-0 overflow-hidden">{player}</div>
         {/* Drag to resize; double-click to put it back. */}
