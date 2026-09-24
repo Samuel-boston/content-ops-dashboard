@@ -464,6 +464,20 @@ export async function inviteUserAction(formData: FormData) {
   return { ok: true };
 }
 
+/** Set a new temporary password for someone on the team (they can change it themselves from their account menu). */
+export async function resetUserPasswordAction(userId: string, password: string) {
+  const me = await requireRole("owner", "admin");
+  if (password.trim().length < 8) return { error: "Use 8 or more characters." };
+  const supabase = await supabaseServer();
+  const { data: target } = await supabase.from("profiles").select("role").eq("id", userId).single();
+  if (!target) return { error: "Not found." };
+  if (target.role === "owner") return { error: "The Owner changes their own password." };
+  if (target.role === "admin" && me.role !== "owner") return { error: "Only the Owner can reset an Admin's password." };
+  const { error } = await supabaseAdmin().auth.admin.updateUserById(userId, { password: password.trim() });
+  if (error) return { error: error.message };
+  return { ok: true };
+}
+
 export async function setUserRoleAction(userId: string, role: Role) {
   const me = await requireRole("owner", "admin");
   if (role === "owner") return { error: "The Owner seat can't be reassigned here." };

@@ -5,6 +5,7 @@ import { useTrackedTransition } from "@/components/ui/Pending";
 import { useRouter } from "next/navigation";
 import {
   inviteUserAction,
+  resetUserPasswordAction,
   setUserActiveAction,
   setUserRoleAction,
 } from "@/app/actions";
@@ -104,6 +105,19 @@ export function TeamManager({ team, viewer }: { team: Profile[]; viewer: Profile
                 {m.role}
               </span>
             )}
+
+            {canEdit(m) ? (
+              <button
+                onClick={() => {
+                  const pw = window.prompt(`New temporary password for ${m.full_name || m.email} (8+ characters). Tell them to change it from their account menu.`);
+                  if (pw) run(() => resetUserPasswordAction(m.id, pw));
+                }}
+                disabled={pending}
+                className="text-xs text-ink-2 hover:text-ink"
+              >
+                Reset password
+              </button>
+            ) : null}
 
             {canEdit(m) ? (
               <button
