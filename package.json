@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "db:push": "node scripts/apply-sql.mjs",
-    "build:sql": "{ echo \"-- ONE-FILE DATABASE SETUP: schema.sql + every migration, in order. Run once on a new Supabase project.\"; echo; cat supabase/schema.sql; for f in $(ls supabase/migration_*.sql | sort); do echo; echo \"-- ----- $(basename $f) -----\"; cat \"$f\"; done; } > supabase/setup_all.sql"
+    "build:sql": "{ echo \"-- ONE-FILE DATABASE SETUP: schema.sql + every migration, in order. Run once on a new Supabase project.\"; echo; cat supabase/schema.sql; for f in $(ls supabase/migration_*.sql | sort); do echo; echo \"-- ----- $(basename $f) -----\"; cat \"$f\"; done; } > supabase/setup_all.sql",
+    "build:docs": "npx tsx scripts/build-docs.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",
