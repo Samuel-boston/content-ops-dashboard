@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireUser, isManager } from "@/lib/auth";
 import { getVideo, listEditors } from "@/app/actions";
 import { listCutComments, listCuts } from "@/app/engine-actions";
@@ -16,6 +16,8 @@ export default async function ReviewPage({ params }: PageProps<"/videos/[id]/rev
     listCarouselImages(id),
   ]);
   if (!video) notFound();
+  // Editors review in the same room as everyone else: the video page itself.
+  if (!isManager(viewer.role) && viewer.role !== "copywriter" && viewer.role !== "va") redirect(`/videos/${id}`);
 
   const commentsByCut: Record<string, CutComment[]> = {};
   await Promise.all(

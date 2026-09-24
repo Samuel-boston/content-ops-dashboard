@@ -26,6 +26,7 @@ export function FilesTab({
   canEdit,
   guestLinks,
   canShare,
+  canDeliverLinks,
 }: {
   video: Pick<Video, "script_hooks">;
   videoId: string;
@@ -40,15 +41,17 @@ export function FilesTab({
   canEdit: boolean;
   guestLinks: GuestLink[];
   canShare: boolean;
+  /** The assigned editor can add finished-video links instead of uploading a file. */
+  canDeliverLinks?: boolean;
 }) {
   return (
     <div className="h-full space-y-5 overflow-y-auto px-3 py-3">
-      {assets.some((a) => a.kind === "delivery") ? (
+      {canDeliverLinks || assets.some((a) => a.kind === "delivery") ? (
         <section>
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
             Finished video links
           </h3>
-          <FinishedLinks videoId={videoId} assets={assets} canEdit={false} />
+          <FinishedLinks videoId={videoId} assets={assets} canEdit={Boolean(canDeliverLinks)} />
         </section>
       ) : null}
 

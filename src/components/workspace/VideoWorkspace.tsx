@@ -48,7 +48,9 @@ type Tab = "comments" | "brief" | "files" | "chat" | "post";
  * else it was a tab that did nothing, competing with tabs that mattered.
  * Pinned first at Ready to Post / Posted since it's the reason you're there.
  */
-function visibleTabs(status: Video["status"]): Tab[] {
+function visibleTabs(status: Video["status"], editor = false): Tab[] {
+  // Editors don't post, so they never get the Post tab.
+  if (editor) return ["comments", "brief", "files", "chat"];
   if (status === "ready_to_post" || status === "posted") {
     return ["post", "comments", "brief", "files", "chat"];
   }
@@ -127,9 +129,10 @@ export function VideoWorkspace({
   // over, so it opens straight onto the caption/schedule tab instead of the
   // comments thread everyone else lands on.
   const [tab, setTab] = useState<Tab>(
-    video.status === "ready_to_post" ||
-      video.status === "posted" ||
-      video.status === "final_review"
+    viewer.role !== "editor" &&
+      (video.status === "ready_to_post" ||
+        video.status === "posted" ||
+        video.status === "final_review")
       ? "post"
       : "comments"
   );
@@ -280,7 +283,7 @@ export function VideoWorkspace({
     <div className="flex h-full min-h-0 flex-col border-line bg-app">
       {/* Tabs */}
       <div className="no-scrollbar flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-3 pt-2">
-        {visibleTabs(video.status).map((t) => (
+        {visibleTabs(video.status, viewer.role === "editor").map((t) => (
           <button
             key={t}
             type="button"
@@ -361,6 +364,7 @@ export function VideoWorkspace({
             canEdit={viewer.role !== "editor" || video.assigned_editor_id === viewer.id}
             guestLinks={guestLinks}
             canShare={viewer.role !== "editor" || video.assigned_editor_id === viewer.id}
+        canDeliverLinks={viewer.role === "editor" && video.assigned_editor_id === viewer.id}
           />
         ) : null}
 

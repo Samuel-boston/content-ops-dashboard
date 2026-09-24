@@ -137,40 +137,50 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
       />
     );
 
-    // Sent back for changes: the editor needs the same room the client used
-    // to leave the notes — the player, the comments pinned to the timeline,
-    // replies, resolving, the chat and share links — or they're guessing at
-    // what to change. It comes first; their own working view sits beneath it.
-    if (video.status === "revisions" && video.assigned_editor_id === viewer.id) {
-      const links = await listGuestLinks(id);
+    // Once a finished video has been uploaded, the editor is in the same room
+    // the client reviews in — player, timeline comments, replies, resolving,
+    // chat, files and share links, plus the stage buttons — for every stage
+    // from there on (in review, revisions, awaiting variants, final review,
+    // ready to post, posted). The only thing they don't get is the client's
+    // Post tab. Delivering more cuts and hook variants happens in its Files tab.
+    // Before anything is uploaded, they get their own working view instead.
+    const REVIEW_ROOM: VideoStatus[] = [
+      "in_review",
+      "revisions",
+      "approved",
+      "awaiting_variants",
+      "final_review",
+      "ready_to_post",
+      "posted",
+    ];
+    const hasUpload = cuts.some((c) => c.versions.length > 0);
+    if (REVIEW_ROOM.includes(video.status) || (video.status === "in_progress" && hasUpload)) {
+      const links = video.assigned_editor_id === viewer.id ? await listGuestLinks(id) : [];
       const customsBy = {
         content_pillar: customs.filter((c) => c.kind === "content_pillar").map((c) => c.value),
         format: customs.filter((c) => c.kind === "format").map((c) => c.value),
         platform: customs.filter((c) => c.kind === "platform").map((c) => c.value),
       };
       return (
-        <>
-          <VideoWorkspace
-            video={video}
-            viewer={viewer}
-            cuts={cuts}
-            comments={comments}
-            roster={roster}
-            customs={customsBy}
-            publishJobs={[]}
-            overdue={overdue}
-            assets={assets}
-            carouselImages={carouselImages}
-            references={references}
-            messages={messages}
-            activity={activity}
-            metrics={metrics}
-            integrations={integrationStatus(settings)}
-            guestLinks={links}
-            seriesOptions={seriesOptions}
-          />
-          <div className="border-t border-line px-3 py-6 sm:px-6">{editorView}</div>
-        </>
+        <VideoWorkspace
+          video={video}
+          viewer={viewer}
+          cuts={cuts}
+          comments={comments}
+          roster={roster}
+          customs={customsBy}
+          publishJobs={[]}
+          overdue={overdue}
+          assets={assets}
+          carouselImages={carouselImages}
+          references={references}
+          messages={messages}
+          activity={activity}
+          metrics={metrics}
+          integrations={integrationStatus(settings)}
+          guestLinks={links}
+          seriesOptions={seriesOptions}
+        />
       );
     }
     return editorView;
