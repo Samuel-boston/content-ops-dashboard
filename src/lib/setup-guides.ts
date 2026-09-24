@@ -55,16 +55,16 @@ export const SETUP_GUIDES: SetupGuideItem[] = [
   },
   {
     id: "publer",
-    title: "Publer — post and schedule Reels, including trial reels",
+    title: "Publer — post to Instagram (including trial reels), YouTube, TikTok and LinkedIn",
     blurb: "The easy way to post from the dashboard: no Meta app or verification needed, and it can post Instagram trial reels, which Meta's own API cannot. Needs a Publer Business plan (check Publer's current pricing); it replaces the Meta / Instagram guide for posting.",
     steps: [
       "Go to publer.com and sign up or log in. Choose a Business plan — the API is not available on lower plans.",
-      "In Publer open Social Accounts → Add account → Instagram, and connect the Instagram account you post from. It must be a Professional (Creator or Business) account.",
+      "In Publer open Social Accounts → Add account, and connect each account you post from: Instagram (a Professional Creator or Business account), YouTube, TikTok and/or LinkedIn.",
       "Open Settings → Access & Login → API Keys → Create API Key. Give it a name and tick these permissions: workspaces, accounts, posts and media. Create it and copy the key now.",
-      "In this dashboard open Settings → Publer, paste the key, and press Connect. It finds your workspace and Instagram account by itself; if you have more than one account it asks which to post to.",
+      "In this dashboard open Settings → Publer, paste the key, and press Connect. It finds your workspace and accounts by itself; if you have more than one of a kind it asks which to post to.",
     ],
     fields: ["Publer → the API key box, then the Connect button (nothing else to fill in)"],
-    finish: "The Publer card turns green and says Connected to Instagram. Press “Test the connection” to check it. Then on any video that is with the VA, mark a variant as a trial reel and press “Post trial reel via Publer…”. Choose whether trial reels stay trials or may be shared by Instagram automatically at the top of the Publer card.",
+    finish: "The Publer card turns green and lists each connected account. Press “Test the connection” to check it. Then on any video that is with the VA, mark a variant as a trial reel and press “Post trial reel via Publer…”. Choose whether trial reels stay trials or may be shared by Instagram automatically at the top of the Publer card.",
   },
   {
     id: "instagram",

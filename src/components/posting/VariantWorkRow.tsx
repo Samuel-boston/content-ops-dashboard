@@ -1,4 +1,5 @@
 "use client";
+import type { PublishChannel } from "@/lib/types";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -30,12 +31,15 @@ export function VariantWorkRow({
   trial,
   instagramConnected,
   publerConnected = false,
+  channels,
   clientName,
 }: {
   trial: PostingTrialItem;
   instagramConnected: boolean;
   /** Publer is connected: trial reels can be posted from here, and covers are Publer's. */
   publerConnected?: boolean;
+  /** Everywhere a feed post can go (Instagram, and any YouTube / TikTok / LinkedIn connected in Publer). */
+  channels?: PublishChannel[];
   clientName: string;
 }) {
   const toast = useToast();
@@ -92,6 +96,7 @@ export function VariantWorkRow({
         coverOffsetMs: v.coverOffsetMs,
         shareToFeed: v.shareToFeed,
         asTrial: dest === "trial",
+        channels: dest === "trial" ? undefined : v.channels,
       });
       if (res?.error) return toast.error(res.error);
       toast.success(
@@ -233,7 +238,11 @@ export function VariantWorkRow({
           <PostComposer
             caption={draftCaption}
             onCaptionChange={setDraftCaption}
-            connected={(dest === "trial" ? publerConnected : instagramConnected) ? ["instagram"] : []}
+            connected={
+              dest === "trial"
+                ? publerConnected ? ["instagram"] : []
+                : channels ?? (instagramConnected ? ["instagram"] : [])
+            }
             nowOnly={dest === "trial"}
             coverEnabled={!publerConnected}
             emptyHint={

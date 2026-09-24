@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import type { IntegrationStatus, WorkspaceSettings } from "@/lib/types";
+import type { IntegrationStatus, PublishChannel, WorkspaceSettings } from "@/lib/types";
 
 /**
  * Workspace-level integration config. Stored in one DB row (Owner-only via RLS)
@@ -31,6 +31,7 @@ function emptySettings(): WorkspaceSettings {
     publer_workspace_id: null,
     publer_account_id: null,
     publer_account_name: null,
+    publer_accounts: {},
     publer_trial_mode: "MANUAL",
     telegram_bot_token: null,
     telegram_chat_ids: [],
@@ -49,12 +50,30 @@ function emptySettings(): WorkspaceSettings {
   };
 }
 
+/** Publer accounts by network, including an Instagram account saved before migration 048. */
+export function publerAccounts(s: WorkspaceSettings): Record<string, { id: string; name: string }> {
+  const out = { ...(s.publer_accounts ?? {}) };
+  if (!out.instagram && s.publer_account_id) out.instagram = { id: s.publer_account_id, name: s.publer_account_name ?? "" };
+  return out;
+}
+
+const POSTABLE: PublishChannel[] = ["instagram", "youtube", "tiktok", "linkedin"];
+
+/** Where a post can actually go today: the Graph API for Instagram, or any account connected in Publer. */
+export function postingChannels(s: WorkspaceSettings): PublishChannel[] {
+  const viaPubler = s.publer_api_key && s.publer_workspace_id ? Object.keys(publerAccounts(s)) : [];
+  return POSTABLE.filter(
+    (c) => viaPubler.includes(c) || (c === "instagram" && Boolean(s.ig_user_id && s.ig_access_token))
+  );
+}
+
 export function integrationStatus(s: WorkspaceSettings): IntegrationStatus {
   return {
     stream: Boolean(s.cf_account_id && s.cf_stream_token && s.cf_stream_customer_code),
     drive: Boolean(s.drive_folder_id && s.drive_service_account),
     instagram: Boolean(s.ig_user_id && s.ig_access_token),
-    publer: Boolean(s.publer_api_key && s.publer_workspace_id && s.publer_account_id),
+    publer: Boolean(s.publer_api_key && s.publer_workspace_id && Object.keys(publerAccounts(s)).length > 0),
+    channels: postingChannels(s),
     telegram: Boolean(s.telegram_bot_token && s.telegram_chat_ids.length),
     whisper: Boolean(s.openai_api_key),
     ai:

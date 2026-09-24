@@ -3,7 +3,7 @@
 import http from "node:http";
 import assert from "node:assert/strict";
 import {
-  listWorkspaces, listAccounts, uploadMedia, importMediaFromUrl, publishReel, reelBody, findMedia, readFailures, PublerError,
+  listWorkspaces, listAccounts, uploadMedia, importMediaFromUrl, publishReel, publishVideo, videoBody, reelBody, findMedia, readFailures, PublerError,
 } from "../src/lib/publer-client.ts";
 
 type Seen = { method: string; url: string; headers: http.IncomingHttpHeaders; body: string };
@@ -96,6 +96,20 @@ assert.deepEqual(readFailures({ failures: [{ account_name: "A", message: "no" }]
 assert.equal(findMedia({ deep: { list: [{ id: "z", type: "video" }] } })?.id, "z");
 assert.equal(findMedia({ id: "only-an-id" }), null);
 assert.equal(reelBody({ accountId: "a", media, caption: "c", trial: "SS_PERFORMANCE" }).bulk.posts[0].networks.instagram.details.trial_reel, "SS_PERFORMANCE");
+
+// other networks: YouTube Short, TikTok, and the same through publishVideo
+const yt = videoBody({ network: "youtube", accountId: "y1", media, caption: "desc", title: "My Short" }).bulk.posts[0].networks as Record<string, any>;
+assert.equal(yt.youtube.title, "My Short"); assert.equal(yt.youtube.details.type, "short"); assert.equal(yt.youtube.details.privacy, "public");
+assert.equal(yt.youtube.media[0].id, "m1");
+const tt = videoBody({ network: "tiktok", accountId: "t1", media, caption: "hi" }).bulk.posts[0].networks as Record<string, any>;
+assert.equal(tt.tiktok.type, "video"); assert.equal(tt.tiktok.text, "hi");
+jobPolls = 0; failPost = false;
+await publishVideo(c, { network: "youtube", accountId: "y1", media, caption: "d", title: "T" });
+const ytSent = JSON.parse(seen.filter((x) => x.url === "/posts/schedule/publish").at(-1)!.body);
+assert.ok(ytSent.bulk.posts[0].networks.youtube);
+// instagram through videoBody is the reel shape, with the trial flag
+const igt = videoBody({ network: "instagram", accountId: "a1", media, caption: "c", trial: "MANUAL" }).bulk.posts[0].networks as Record<string, any>;
+assert.equal(igt.instagram.details.trial_reel, "MANUAL");
 
 server.close();
 console.log("publer client: all checks passed");

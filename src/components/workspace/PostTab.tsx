@@ -34,6 +34,7 @@ export function PostTab({
   jobs,
   canManage,
   instagramConfigured,
+  channels,
   publerConnected = false,
   durationSeconds,
   variantsOnly = false,
@@ -44,6 +45,8 @@ export function PostTab({
   jobs: PublishJob[];
   canManage: boolean;
   instagramConfigured: boolean;
+  /** Everywhere a post can go right now. */
+  channels?: PublishChannel[];
   /** Publer is the route in use: it picks its own cover frame. */
   publerConnected?: boolean;
   /** The active cut's duration, so the cover-frame picker can be bounded to it. */
@@ -104,7 +107,7 @@ export function PostTab({
           <PostComposer
             caption={caption}
             onCaptionChange={changeCaption}
-            connected={instagramConfigured ? ["instagram"] : []}
+            connected={channels ?? (instagramConfigured ? ["instagram"] : [])}
             coverEnabled={!publerConnected}
             emptyHint={<>Connect one in Settings → Integrations and it shows up here.</>}
             isVideo={!isCarouselFormat(video.formats)}

@@ -14,7 +14,7 @@ import { effectiveCaption } from "@/lib/caption";
 import { isOnMainFeed, variantState, type VariantState } from "@/lib/variant-state";
 import { notify } from "@/lib/notify";
 import { ensureVariantRows, releaseFromVa, stageAfterVa } from "@/lib/va-handoff";
-import type { PublishStatus, TrialPost, TrialStatus } from "@/lib/types";
+import type { PublishChannel, PublishStatus, TrialPost, TrialStatus } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // The VA's posting surface.
@@ -228,6 +228,7 @@ export async function listPostingWork(): Promise<{
   feedMetrics: Record<string, PostingFeedMetrics>;
   instagramConnected: boolean;
   publerConnected: boolean;
+  channels: PublishChannel[];
 }> {
   await requireRole("va", "owner", "admin");
   const db = supabaseAdmin();
@@ -246,8 +247,9 @@ export async function listPostingWork(): Promise<{
   ]);
   return {
     // "Can post straight from here": Publer or the Instagram Graph API.
-    instagramConnected: integrationStatus(settings).instagram || integrationStatus(settings).publer,
+    instagramConnected: integrationStatus(settings).channels.includes("instagram"),
     publerConnected: integrationStatus(settings).publer,
+    channels: integrationStatus(settings).channels,
     feedMetrics: {},
     trials: await buildItems(db, (rows ?? []) as unknown as (TrialPost & { video: VideoJoin })[], jobs),
     jobs,
@@ -261,6 +263,7 @@ export async function getPostingVideoAction(videoId: string): Promise<{
   feedMetrics: Record<string, PostingFeedMetrics>;
   instagramConnected: boolean;
   publerConnected: boolean;
+  channels: PublishChannel[];
 }> {
   await requireRole("va", "owner", "admin");
   const db = supabaseAdmin();
@@ -274,8 +277,9 @@ export async function getPostingVideoAction(videoId: string): Promise<{
   const jobs = await jobsFor(db, [videoId]);
   return {
     // "Can post straight from here": Publer or the Instagram Graph API.
-    instagramConnected: integrationStatus(settings).instagram || integrationStatus(settings).publer,
+    instagramConnected: integrationStatus(settings).channels.includes("instagram"),
     publerConnected: integrationStatus(settings).publer,
+    channels: integrationStatus(settings).channels,
     feedMetrics: await feedMetricsFor(db, [videoId]),
     trials: await buildItems(db, (rows ?? []) as unknown as (TrialPost & { video: VideoJoin })[], jobs),
     jobs,
@@ -425,6 +429,8 @@ export async function vaPublishAction(
     shareToFeed?: boolean;
     /** Post it as an Instagram trial reel (Publer only, and only "now"). */
     asTrial?: boolean;
+    /** Where to post (default Instagram). YouTube, TikTok and LinkedIn go through Publer. */
+    channels?: string[];
   } = {}
 ) {
   const whenISO = opts.asTrial ? null : (opts.whenISO ?? null);
@@ -432,7 +438,12 @@ export async function vaPublishAction(
   const db = supabaseAdmin();
   const settings = await getWorkspaceSettings();
   const connected = integrationStatus(settings);
-  if (opts.asTrial ? !connected.publer : !(connected.instagram || connected.publer)) {
+  const wantChannels = opts.asTrial ? ["instagram"] : (opts.channels?.length ? opts.channels : ["instagram"]);
+  const unreachable = wantChannels.filter((c) => !connected.channels.includes(c as PublishChannel));
+  if (!opts.asTrial && unreachable.length) {
+    return { error: `${unreachable.map((c) => c[0].toUpperCase() + c.slice(1)).join(" and ")} isn't connected. Connect it in Settings → Integrations, or post by hand and mark it posted.` };
+  }
+  if (opts.asTrial ? !(connected.publer && connected.channels.includes("instagram")) : !connected.channels.length) {
     return {
       error: opts.asTrial
         ? "Trial reels are posted through Publer, which isn't connected yet. Connect it in Settings → Integrations, or post it by hand and tick Posted."
@@ -467,7 +478,7 @@ export async function vaPublishAction(
       video_id: t.video_id,
       cut_id: t.cut_id,
       caption,
-      channels: ["instagram"],
+      channels: wantChannels,
       scheduled_for: (scheduled ? when : new Date())!.toISOString(),
       status: "scheduled",
       cover_offset_ms: Math.max(0, Math.round(opts.coverOffsetMs ?? 0)),

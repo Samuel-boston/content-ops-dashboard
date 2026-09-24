@@ -1,4 +1,5 @@
 "use client";
+import type { PublishChannel } from "@/lib/types";
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -132,6 +133,7 @@ export function PostingBoard({
   archive,
   instagramConnected,
   publerConnected = false,
+  channels,
   clientName,
 }: {
   trials: PostingTrialItem[];
@@ -139,6 +141,7 @@ export function PostingBoard({
   archive: PostedVideoRow[];
   instagramConnected: boolean;
   publerConnected?: boolean;
+  channels?: PublishChannel[];
   clientName: string;
 }) {
   const toast = useToast();
@@ -235,6 +238,7 @@ export function PostingBoard({
           jobs={jobs}
           instagramConnected={instagramConnected}
           publerConnected={publerConnected}
+          channels={channels}
           clientName={clientName}
           onClose={() => setOpenVideo(null)}
         />

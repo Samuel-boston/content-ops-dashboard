@@ -6,6 +6,7 @@ import {
   brandingFor,
   getWorkspaceSettings,
   integrationStatus,
+  publerAccounts,
   redactSettings,
 } from "@/lib/workspace";
 import { SettingsForm } from "@/components/SettingsForm";
@@ -37,7 +38,7 @@ export default async function SettingsPage() {
       <PublerConnect
         connected={integrationStatus(settings).publer}
         hasKey={Boolean(settings.publer_api_key)}
-        accountName={settings.publer_account_name}
+        accounts={Object.fromEntries(Object.entries(publerAccounts(settings)).map(([n, a]) => [n, a.name]))}
         trialMode={settings.publer_trial_mode ?? "MANUAL"}
       />
       <SettingsForm

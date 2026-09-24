@@ -783,6 +783,8 @@ export interface WorkspaceSettings {
   publer_workspace_id: string | null;
   publer_account_id: string | null;
   publer_account_name: string | null;
+  /** Network -> the Publer account to post to. Instagram is also mirrored above. */
+  publer_accounts: Record<string, { id: string; name: string }>;
   publer_trial_mode: "MANUAL" | "SS_PERFORMANCE";
   telegram_bot_token: string | null;
   telegram_chat_ids: number[];
@@ -811,8 +813,10 @@ export interface IntegrationStatus {
   stream: boolean;
   drive: boolean;
   instagram: boolean;
-  /** Publer is connected and an Instagram account is chosen. */
+  /** Publer is connected and at least one account is chosen. */
   publer: boolean;
+  /** Every channel the dashboard can post to right now (Instagram Graph API and/or Publer accounts). */
+  channels: PublishChannel[];
   telegram: boolean;
   whisper: boolean;
   ai: boolean;

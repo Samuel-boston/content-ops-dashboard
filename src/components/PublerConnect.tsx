@@ -3,36 +3,42 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  choosePublerAccountAction,
+  choosePublerAccountsAction,
   connectPublerAction,
   disconnectPublerAction,
   setPublerTrialModeAction,
   testPublerAction,
-  type PublerChoice,
+  type PublerWorkspaceOption,
 } from "@/app/publer-actions";
 
+const LABEL: Record<string, string> = { instagram: "Instagram", youtube: "YouTube", tiktok: "TikTok", linkedin: "LinkedIn" };
+
 /**
- * Connect Publer: paste one API key and press Connect. The Instagram account is
- * read from Publer and chosen automatically when there's only one. Lives outside
- * the big settings form on purpose — it saves itself, so there's no second
- * Save button to forget.
+ * Connect Publer: paste one API key and press Connect. The workspace and the
+ * Instagram / YouTube / TikTok / LinkedIn accounts are read from Publer and
+ * chosen automatically when there's only one of each. Lives outside the big
+ * settings form on purpose — it saves itself, so there's no second Save button
+ * to forget.
  */
 export function PublerConnect({
   connected,
   hasKey,
-  accountName,
+  accounts,
   trialMode,
 }: {
   connected: boolean;
   hasKey: boolean;
-  accountName: string | null;
+  /** Network -> account name, for what's saved. */
+  accounts: Record<string, string>;
   trialMode: "MANUAL" | "SS_PERFORMANCE";
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [key, setKey] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [choices, setChoices] = useState<PublerChoice[] | null>(null);
+  const [options, setOptions] = useState<PublerWorkspaceOption[] | null>(null);
+  const [workspaceId, setWorkspaceId] = useState("");
+  const [picks, setPicks] = useState<Record<string, string>>({});
   const [changing, setChanging] = useState(false);
   const [mode, setMode] = useState(trialMode);
 
@@ -41,6 +47,19 @@ export function PublerConnect({
   const btn =
     "rounded-lg border border-line-strong px-3 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50";
 
+  function showOptions(workspaces: PublerWorkspaceOption[]) {
+    setOptions(workspaces);
+    const first = workspaces[0];
+    setWorkspaceId(first.workspaceId);
+    setPicks(defaultPicks(first));
+  }
+
+  function defaultPicks(ws: PublerWorkspaceOption) {
+    const out: Record<string, string> = {};
+    for (const a of ws.accounts) if (!out[a.network]) out[a.network] = a.accountId;
+    return out;
+  }
+
   function connect() {
     setMsg(null);
     start(async () => {
@@ -48,24 +67,24 @@ export function PublerConnect({
       if (!r.ok) return setMsg({ ok: false, text: r.message });
       if (r.connected) {
         setKey("");
-        setChoices(null);
+        setOptions(null);
         setChanging(false);
-        setMsg({ ok: true, text: `Connected to ${r.accountName}.` });
+        setMsg({ ok: true, text: `Connected: ${r.summary}.` });
         router.refresh();
       } else {
-        setChoices(r.choices);
-        setMsg({ ok: true, text: "The key works. Pick the Instagram account to post to." });
+        showOptions(r.workspaces);
+        setMsg({ ok: true, text: "The key works. Choose what to post to." });
       }
     });
   }
 
-  function choose(c: PublerChoice) {
+  function saveChoice() {
     start(async () => {
-      const r = await choosePublerAccountAction({ workspaceId: c.workspaceId, accountId: c.accountId });
+      const r = await choosePublerAccountsAction({ workspaceId, accounts: picks });
       if (!r.ok) return setMsg({ ok: false, text: r.message });
-      setChoices(null);
+      setOptions(null);
       setChanging(false);
-      setMsg({ ok: true, text: r.connected ? `Connected to ${r.accountName}.` : "" });
+      setMsg({ ok: true, text: r.connected ? `Connected: ${r.summary}.` : "" });
       router.refresh();
     });
   }
@@ -82,7 +101,7 @@ export function PublerConnect({
     start(async () => {
       await disconnectPublerAction();
       setMsg(null);
-      setChoices(null);
+      setOptions(null);
       router.refresh();
     });
   }
@@ -96,23 +115,33 @@ export function PublerConnect({
   }
 
   const showConnected = connected && !changing;
+  const ws = options?.find((w) => w.workspaceId === workspaceId) ?? null;
+  const networks = ws ? [...new Set(ws.accounts.map((a) => a.network))] : [];
 
   return (
     <section className="rounded-xl border border-line bg-app p-4 space-y-3">
       <h2 className="flex items-center gap-2 text-sm font-semibold">
         <span className={`inline-block h-2 w-2 rounded-full ${connected ? "bg-emerald-400" : "bg-line-strong"}`} />
-        Publer <span className="text-ink-3">— post and schedule Reels, including trial reels</span>
+        Publer <span className="text-ink-3">— post and schedule Reels, trial reels, YouTube and more</span>
       </h2>
 
       {showConnected ? (
         <>
-          <p className="text-sm text-ink-2">
-            Connected to Instagram{accountName ? <> · <span className="text-ink">{accountName}</span></> : null}. Reels and trial
-            reels are posted from the VA&rsquo;s desk and the Post tab. No Meta app is needed.
+          <ul className="space-y-1 text-sm text-ink-2">
+            {Object.entries(accounts).map(([n, name]) => (
+              <li key={n} className="flex items-center gap-2">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span className="w-20 shrink-0 text-ink-3">{LABEL[n] ?? n}</span>
+                <span className="text-ink">{name || "connected"}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-ink-3">
+            Reels, trial reels and YouTube Shorts are posted from the VA&rsquo;s desk and the Post tab. No Meta app is needed.
           </p>
 
           <div>
-            <p className="mb-1.5 text-xs font-medium text-ink-2">After a trial reel is posted</p>
+            <p className="mb-1.5 text-xs font-medium text-ink-2">After an Instagram trial reel is posted</p>
             <div className="space-y-1.5">
               {(
                 [
@@ -142,7 +171,7 @@ export function PublerConnect({
               {pending ? "Checking…" : "Test the connection"}
             </button>
             <button type="button" disabled={pending} onClick={() => { setChanging(true); setMsg(null); }} className={btn}>
-              Change account or key
+              Change accounts or key
             </button>
             <button type="button" disabled={pending} onClick={disconnect} className={btn}>
               Disconnect
@@ -156,7 +185,7 @@ export function PublerConnect({
               In Publer open <b>Settings → Access &amp; Login → API Keys</b> and press <b>Create API Key</b> (needs a Business
               plan). Tick <b>workspaces, accounts, posts and media</b>, then copy the key.
             </li>
-            <li>Make sure your Instagram account is added in Publer (Social Accounts).</li>
+            <li>Make sure the accounts you post from are added in Publer (Social Accounts): Instagram, YouTube, TikTok or LinkedIn.</li>
             <li>Paste the key below and press <b>Connect</b>. That&rsquo;s all — nothing else to fill in.</li>
           </ol>
           <div className="flex gap-2">
@@ -178,27 +207,63 @@ export function PublerConnect({
             </button>
           </div>
           {changing ? (
-            <button type="button" onClick={() => { setChanging(false); setChoices(null); setMsg(null); }} className="text-xs text-ink-3 underline">
+            <button type="button" onClick={() => { setChanging(false); setOptions(null); setMsg(null); }} className="text-xs text-ink-3 underline">
               Cancel
             </button>
           ) : null}
         </>
       )}
 
-      {choices ? (
-        <div className="space-y-1.5">
-          {choices.map((c) => (
-            <button
-              key={`${c.workspaceId}:${c.accountId}`}
-              type="button"
-              disabled={pending}
-              onClick={() => choose(c)}
-              className="flex w-full items-center justify-between rounded-lg border border-line bg-card px-3 py-2 text-left text-sm hover:border-accent"
-            >
-              <span>{c.accountName}</span>
-              <span className="text-[11px] text-ink-3">{c.workspaceName}</span>
-            </button>
-          ))}
+      {options && ws ? (
+        <div className="space-y-2 rounded-lg border border-line bg-card p-3">
+          {options.length > 1 ? (
+            <label className="block text-xs text-ink-2">
+              Workspace
+              <select
+                value={workspaceId}
+                onChange={(e) => {
+                  setWorkspaceId(e.target.value);
+                  const next = options.find((w) => w.workspaceId === e.target.value);
+                  if (next) setPicks(defaultPicks(next));
+                }}
+                className={`${cls} mt-1`}
+              >
+                {options.map((w) => (
+                  <option key={w.workspaceId} value={w.workspaceId}>
+                    {w.workspaceName}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {networks.map((n) => {
+            const list = ws.accounts.filter((a) => a.network === n);
+            return (
+              <label key={n} className="flex items-center gap-2 text-xs text-ink-2">
+                <span className="w-20 shrink-0">{LABEL[n] ?? n}</span>
+                <select
+                  value={picks[n] ?? ""}
+                  onChange={(e) => setPicks((p) => ({ ...p, [n]: e.target.value }))}
+                  className={cls}
+                >
+                  <option value="">Don&rsquo;t post here</option>
+                  {list.map((a) => (
+                    <option key={a.accountId} value={a.accountId}>
+                      {a.accountName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            );
+          })}
+          <button
+            type="button"
+            disabled={pending}
+            onClick={saveChoice}
+            className="rounded-lg bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hi disabled:opacity-50"
+          >
+            {pending ? "Saving…" : "Save"}
+          </button>
         </div>
       ) : null}
 

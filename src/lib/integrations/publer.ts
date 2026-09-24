@@ -1,10 +1,11 @@
 import "server-only";
-import { getWorkspaceSettings } from "@/lib/workspace";
+import { getWorkspaceSettings, publerAccounts } from "@/lib/workspace";
 import { NotConfiguredError } from "@/lib/integrations/stream";
 import {
   DIRECT_UPLOAD_LIMIT_BYTES,
   importMediaFromUrl,
-  publishReel,
+  publishVideo,
+  type VideoNetwork,
   uploadMedia,
   PublerError,
   type PublerCreds,
@@ -13,32 +14,42 @@ import {
 /** Saved Publer settings, or null when Publer isn't connected. */
 export async function publerSettings() {
   const s = await getWorkspaceSettings();
-  if (!s.publer_api_key || !s.publer_workspace_id || !s.publer_account_id) return null;
+  if (!s.publer_api_key || !s.publer_workspace_id) return null;
+  const accounts = publerAccounts(s);
+  if (!Object.keys(accounts).length) return null;
   return {
     creds: { apiKey: s.publer_api_key, workspaceId: s.publer_workspace_id } satisfies PublerCreds,
-    accountId: s.publer_account_id,
-    accountName: s.publer_account_name,
+    accounts,
     trialMode: s.publer_trial_mode ?? "MANUAL",
   };
 }
 
 /**
- * Post one video to Instagram as a Reel (or trial reel) through Publer.
+ * Post one video through Publer to one or more networks (Instagram as a Reel or
+ * trial reel, YouTube as a Short, TikTok, LinkedIn).
  *
  * `videoUrl` is any address Publer and this server can both fetch. The bytes are
- * uploaded to Publer directly when they fit its 200 MB limit; a bigger cut is
- * handed to Publer as a link to import itself.
+ * uploaded to Publer once, directly when they fit its 200 MB limit; a bigger cut
+ * is handed to Publer as a link to import itself. Every network then posts the
+ * same uploaded media. A network with no Publer account chosen is an error, not
+ * a silent skip. Returns Publer's job ids, comma-joined.
  */
-export async function postReelViaPubler(input: {
+export async function postVideoViaPubler(input: {
   videoUrl: string;
   filename?: string;
   caption: string;
+  title?: string;
+  networks: VideoNetwork[];
   asTrial: boolean;
   shareToFeed?: boolean;
   scheduledAt?: string;
 }): Promise<{ jobId: string }> {
   const p = await publerSettings();
   if (!p) throw new NotConfiguredError("Publer");
+  const missing = input.networks.filter((n) => !p.accounts[n]);
+  if (missing.length) {
+    throw new PublerError(`No ${missing.join(" or ")} account is connected in Publer. Connect it in Settings → Publer.`);
+  }
   const name = input.filename ?? "cut.mp4";
 
   const res = await fetch(input.videoUrl);
@@ -57,12 +68,19 @@ export async function postReelViaPubler(input: {
         : await uploadMedia(p.creds, new Blob([blob], { type: "video/mp4" }), name);
   }
 
-  return publishReel(p.creds, {
-    accountId: p.accountId,
-    media,
-    caption: input.caption,
-    trial: input.asTrial ? p.trialMode : undefined,
-    shareToFeed: input.shareToFeed,
-    scheduledAt: input.scheduledAt,
-  });
+  const ids: string[] = [];
+  for (const network of input.networks) {
+    const sent = await publishVideo(p.creds, {
+      network,
+      accountId: p.accounts[network].id,
+      media,
+      caption: input.caption,
+      title: input.title,
+      trial: network === "instagram" && input.asTrial ? p.trialMode : undefined,
+      shareToFeed: input.shareToFeed,
+      scheduledAt: input.scheduledAt,
+    });
+    ids.push(sent.jobId);
+  }
+  return { jobId: ids.join(",") };
 }

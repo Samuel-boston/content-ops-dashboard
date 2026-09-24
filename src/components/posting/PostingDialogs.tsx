@@ -1,4 +1,5 @@
 "use client";
+import type { PublishChannel } from "@/lib/types";
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -23,6 +24,7 @@ interface Loaded {
   feedMetrics: Record<string, PostingFeedMetrics>;
   instagramConnected: boolean;
   publerConnected?: boolean;
+  channels?: PublishChannel[];
 }
 
 function Shell({ title, subtitle, cover, onClose, children }: { title: string; subtitle: string; cover?: string | null; onClose: () => void; children: React.ReactNode }) {
@@ -65,6 +67,7 @@ export function VideoWorkDialog({
   jobs,
   instagramConnected,
   publerConnected = false,
+  channels,
   clientName,
   onClose,
 }: {
@@ -72,6 +75,7 @@ export function VideoWorkDialog({
   jobs: PostingJobItem[];
   instagramConnected: boolean;
   publerConnected?: boolean;
+  channels?: PublishChannel[];
   clientName: string;
   onClose: () => void;
 }) {
@@ -115,7 +119,7 @@ export function VideoWorkDialog({
         ))}
 
         {trials.map((t) => (
-          <VariantWorkRow key={t.id} trial={t} instagramConnected={instagramConnected} publerConnected={publerConnected} clientName={clientName} />
+          <VariantWorkRow key={t.id} trial={t} instagramConnected={instagramConnected} publerConnected={publerConnected} channels={channels} clientName={clientName} />
         ))}
 
         {sendingBack ? (

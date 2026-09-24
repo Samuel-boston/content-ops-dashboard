@@ -9,7 +9,7 @@ import {
 } from "@/lib/integrations/instagram";
 import { getDownloadUrl } from "@/lib/integrations/stream";
 import { getWorkspaceSettings } from "@/lib/workspace";
-import { postReelViaPubler, publerSettings } from "@/lib/integrations/publer";
+import { postVideoViaPubler, publerSettings } from "@/lib/integrations/publer";
 import { markVideoPosted } from "@/lib/archive";
 import { mintFileToken } from "@/lib/phone-link";
 import { ORIGINAL_COLUMNS, hasOriginal } from "@/lib/cut-files";
@@ -58,14 +58,32 @@ export async function runPublishJob(jobId: string): Promise<{ ok: boolean; error
       if (!videoUrl) videoUrl = top?.drive_file_url ?? null;
       if (!videoUrl) throw new Error("No downloadable video for the main cut.");
 
-      // Publer, when it's connected: it also carries trial reels, which the
-      // Graph API can't. Otherwise the Graph API below.
+      // Publer, when it's connected: it carries trial reels and every network
+      // except Instagram's own Graph route. Otherwise the Graph API below.
       const publer = await publerSettings();
-      if (publer || job.as_trial) {
-        if (!publer) throw new Error("Trial reels are posted through Publer. Connect Publer in Settings → Integrations first.");
-        const sent = await postReelViaPubler({
+      const channels = ((job.channels as string[] | null)?.length ? (job.channels as string[]) : ["instagram"]).filter(
+        (c): c is "instagram" | "youtube" | "tiktok" | "linkedin" => ["instagram", "youtube", "tiktok", "linkedin"].includes(c)
+      );
+      const beyondInstagram = channels.some((c) => c !== "instagram");
+      const wanted = job.as_trial ? (["instagram"] as const) : channels;
+      const publerOk = Boolean(publer) && wanted.every((c) => publer!.accounts[c]);
+      if (publerOk || job.as_trial || beyondInstagram) {
+        if (!publerOk) {
+          const missing = wanted.filter((c) => !publer?.accounts[c]);
+          throw new Error(
+            !publer
+              ? job.as_trial
+                ? "Trial reels are posted through Publer. Connect Publer in Settings → Integrations first."
+                : "YouTube, TikTok and LinkedIn are posted through Publer. Connect it in Settings → Integrations first."
+              : `No ${missing.join(" or ")} account is connected in Publer. Connect it in Settings → Publer.`
+          );
+        }
+        const { data: vid } = await db.from("videos").select("title").eq("id", job.video_id).maybeSingle();
+        const sent = await postVideoViaPubler({
           videoUrl,
           caption: job.caption ?? "",
+          title: (vid?.title as string | undefined) ?? undefined,
+          networks: [...wanted],
           asTrial: Boolean(job.as_trial),
           shareToFeed: job.share_to_feed ?? true,
         });

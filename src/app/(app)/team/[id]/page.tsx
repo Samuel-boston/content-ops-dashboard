@@ -241,7 +241,7 @@ type Person = Awaited<ReturnType<typeof listTeam>>[number];
 
 /** The VA's dashboard, as the client sees it: what's with them to post, the archive, and their tasks. */
 async function VaPerson({ person }: { person: Person }) {
-  const [{ trials, jobs, instagramConnected, publerConnected }, archive, tasks, clientName] = await Promise.all([
+  const [{ trials, jobs, instagramConnected, publerConnected, channels }, archive, tasks, clientName] = await Promise.all([
     listPostingWork(),
     listPostedVideos(),
     listVaTasks(),
@@ -261,7 +261,7 @@ async function VaPerson({ person }: { person: Person }) {
       </div>
       <section className="space-y-3">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">Posting desk</h2>
-        <PostingBoard trials={trials} jobs={jobs} archive={archive} instagramConnected={instagramConnected} publerConnected={publerConnected} clientName={clientName} />
+        <PostingBoard trials={trials} jobs={jobs} archive={archive} instagramConnected={instagramConnected} publerConnected={publerConnected} channels={channels} clientName={clientName} />
       </section>
       <section className="space-y-3">
         <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">Tasks</h2>

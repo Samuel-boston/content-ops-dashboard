@@ -292,6 +292,80 @@ export function reelBody(p: ReelPost) {
   };
 }
 
+export type VideoNetwork = "instagram" | "youtube" | "tiktok" | "linkedin";
+
+export interface VideoPost {
+  network: VideoNetwork;
+  accountId: string;
+  media: PublerMedia;
+  caption: string;
+  /** YouTube needs a title. */
+  title?: string;
+  trial?: "MANUAL" | "SS_PERFORMANCE";
+  shareToFeed?: boolean;
+  /** YouTube: a Short (default) or a regular video. */
+  youtubeKind?: "short" | "video";
+  scheduledAt?: string;
+}
+
+/**
+ * The request body for a video going to any supported network. Instagram is a
+ * Reel (or trial reel); YouTube is a Short by default (Publer documents that
+ * shape); TikTok and LinkedIn take a plain video post.
+ */
+export function videoBody(p: VideoPost) {
+  if (p.network === "instagram") {
+    return reelBody({
+      accountId: p.accountId,
+      media: p.media,
+      caption: p.caption,
+      trial: p.trial,
+      shareToFeed: p.shareToFeed,
+      scheduledAt: p.scheduledAt,
+    });
+  }
+  const media = [{ id: p.media.id, ...(p.media.path ? { path: p.media.path } : {}), type: "video" }];
+  const network: Record<string, unknown> =
+    p.network === "youtube"
+      ? {
+          type: "video",
+          title: (p.title || p.caption || "Video").slice(0, 100),
+          text: p.caption,
+          media,
+          details: { type: p.youtubeKind ?? "short", privacy: "public" },
+        }
+      : { type: "video", text: p.caption, media };
+  return {
+    bulk: {
+      state: "scheduled",
+      posts: [
+        {
+          networks: { [p.network]: network },
+          accounts: [{ id: p.accountId, ...(p.scheduledAt ? { scheduled_at: p.scheduledAt } : {}) }],
+        },
+      ],
+    },
+  };
+}
+
+/** Send a video to one network through Publer and wait for Publer to finish. Publishes now unless `scheduledAt` is set. */
+export async function publishVideo(c: PublerCreds, p: VideoPost): Promise<{ jobId: string }> {
+  if (p.network === "instagram") {
+    if (p.media.reelOk === false) {
+      throw new PublerError("Publer says this video can't go out as an Instagram Reel. Reels need to be vertical (9:16) and 3 to 90 seconds.");
+    }
+  }
+  const path = p.scheduledAt ? "/posts/schedule" : "/posts/schedule/publish";
+  const started = await call<unknown>(c, path, { json: videoBody(p) });
+  const jobId = jobIdOf(started);
+  if (!jobId) throw new PublerError(`Publer didn't accept the ${p.network} post: ${JSON.stringify(started).slice(0, 200)}`);
+  const done = await waitForJob(c, jobId);
+  if (done.state === "failed") {
+    throw new PublerError(`Publer couldn't post it to ${p.network}: ${done.failures.join("; ") || "no reason given"}`);
+  }
+  return { jobId };
+}
+
 /** Send a Reel. Publishes now when there's no `scheduledAt`. Returns Publer's job id once it has finished. */
 export async function publishReel(c: PublerCreds, p: ReelPost): Promise<{ jobId: string }> {
   if (p.media.reelOk === false) {
