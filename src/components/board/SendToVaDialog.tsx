@@ -70,6 +70,7 @@ export function SendToVaDialog({ videoId, onClose }: { videoId: string; onClose:
             vaNotes={info.notes}
             hasCover={info.hasCover}
             fallbackCaption={info.postCaption}
+            initial={{ trials: info.trials, cuts: info.cuts }}
             onSent={() => {
               onClose();
               router.refresh();

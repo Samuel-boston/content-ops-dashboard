@@ -44,8 +44,11 @@ export function TrialsPanel({
   fallbackCaption = "",
   onWatch,
   onSent,
+  initial,
 }: {
   videoId: string;
+  /** Variants already loaded by the parent (saves a round trip when opened from the board). */
+  initial?: { trials: TrialPost[]; cuts: { id: string; label: string; kind: string }[] };
   vaNotes?: string | null;
   /** The video's stage: Ready to Post shows the hand-off, With the VA shows the take-back. */
   status: VideoStatus;
@@ -59,8 +62,8 @@ export function TrialsPanel({
   const toast = useToast();
   const router = useRouter();
   const [pending, startTransition] = useTrackedTransition();
-  const [trials, setTrials] = useState<TrialPost[] | null>(null);
-  const [cuts, setCuts] = useState<{ id: string; label: string; kind: string }[]>([]);
+  const [trials, setTrials] = useState<TrialPost[] | null>(initial?.trials ?? null);
+  const [cuts, setCuts] = useState<{ id: string; label: string; kind: string }[]>(initial?.cuts ?? []);
   const [notes, setNotes] = useState(vaNotes ?? "");
   const [coverPath, setCoverPath] = useState<string | null>(null);
   const [coverName, setCoverName] = useState<string | null>(null);
@@ -112,6 +115,7 @@ export function TrialsPanel({
     // Load on open; the panel lives inside a tab, so this runs once per
     // visit. setState happens in the promise callback (external data
     // arriving), never synchronously in the effect body.
+    if (initial) return;
     let cancelled = false;
     listVideoTrials(videoId).then((res) => {
       if (cancelled) return;
@@ -121,7 +125,7 @@ export function TrialsPanel({
     return () => {
       cancelled = true;
     };
-  }, [videoId]);
+  }, [videoId, initial]);
 
   function run(fn: () => Promise<{ error?: string } | void>, then?: () => void) {
     startTransition(async () => {
@@ -129,8 +133,7 @@ export function TrialsPanel({
       if (res && "error" in res && res.error) toast.error(res.error);
       else {
         then?.();
-        await reload();
-        router.refresh();
+        await Promise.all([reload(), Promise.resolve(router.refresh())]);
       }
     });
   }

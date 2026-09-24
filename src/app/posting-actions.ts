@@ -206,9 +206,9 @@ async function jobsFor(db: DB, videoIds: string[] | null): Promise<PostingJobIte
 const TRIAL_SELECT = "*, video:videos (title, status, va_notes, cover_path, post_caption)";
 
 /**
- * The posting board: every video that is with the VA (all of its variants,
- * together) and the videos posted in the last month (so a drag to Posted is
- * visible and fixable). A video is never split: it appears whole, or not at all.
+ * The posting board: every video that is with the VA, with all of its variants
+ * together. Nothing else — a video that's been posted is in the archive, and one
+ * that went back to the client isn't here at all.
  */
 export async function listPostingWork(): Promise<{
   trials: PostingTrialItem[];
@@ -218,31 +218,21 @@ export async function listPostingWork(): Promise<{
 }> {
   await requireRole("va", "owner", "admin");
   const db = supabaseAdmin();
-  const settings = await getWorkspaceSettings();
-  const since = new Date(Date.now() - 30 * 864e5).toISOString();
-  const [{ data: withVa }, { data: posted }] = await Promise.all([
+  const [settings, { data: withVa }] = await Promise.all([
+    getWorkspaceSettings(),
     db.from("videos").select("id").eq("status", "with_va"),
-    db.from("videos").select("id").eq("status", "posted").gte("posted_at", since),
   ]);
-  const withVaIds = (withVa ?? []).map((v) => v.id as string);
-  const postedIds = (posted ?? []).map((v) => v.id as string);
-  const ids = [...withVaIds, ...postedIds];
-  const { data: rows } = ids.length
-    ? await db.from("trial_posts").select(TRIAL_SELECT).in("video_id", ids).neq("status", "archived").order("created_at")
-    : { data: [] as never[] };
-  // A posted video only belongs here if it went through the VA's desk.
-  const wentThroughVa = new Set(
-    ((rows ?? []) as TrialPost[]).filter((t) => t.sent_to_va_at).map((t) => t.video_id)
-  );
-  const keep = ((rows ?? []) as unknown as (TrialPost & { video: VideoJoin })[]).filter(
-    (t) => withVaIds.includes(t.video_id) || wentThroughVa.has(t.video_id)
-  );
-  const keepIds = [...new Set(keep.map((t) => t.video_id))];
-  const jobs = await jobsFor(db, keepIds);
+  const ids = (withVa ?? []).map((v) => v.id as string);
+  const [{ data: rows }, jobs] = await Promise.all([
+    ids.length
+      ? db.from("trial_posts").select(TRIAL_SELECT).in("video_id", ids).neq("status", "archived").order("created_at")
+      : Promise.resolve({ data: [] as never[] }),
+    jobsFor(db, ids),
+  ]);
   return {
     instagramConnected: integrationStatus(settings).instagram,
-    feedMetrics: await feedMetricsFor(db, keepIds),
-    trials: await buildItems(db, keep, jobs),
+    feedMetrics: {},
+    trials: await buildItems(db, (rows ?? []) as unknown as (TrialPost & { video: VideoJoin })[], jobs),
     jobs,
   };
 }

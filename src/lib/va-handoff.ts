@@ -10,6 +10,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
  *  - anything scheduled for it comes off Instagram's schedule, so it can't
  *    publish while it's being changed;
  *  - variants that were waiting on that schedule go back to "to post";
+ *  - variants ticked "posted" during the hand-off go back to "to post";
  *  - the hand-off markers are cleared (captions and destinations are kept).
  *
  * It does NOT change the video's status — the caller decides where it goes.
@@ -33,6 +34,14 @@ export async function releaseFromVa(videoId: string): Promise<void> {
     .eq("video_id", videoId)
     .eq("status", "promoted")
     .is("posted_at", null);
+  // "Posted" ticks made during this hand-off were provisional — the video was never
+  // marked posted — so they must not survive it coming back, or it would read as
+  // posted while sitting in Ready to Post. (Captions and destinations are kept.)
+  await db
+    .from("trial_posts")
+    .update({ status: "planned", posted_at: null, posted_by: null })
+    .eq("video_id", videoId)
+    .eq("status", "posted");
   await db.from("trial_posts").update({ sent_to_va_at: null }).eq("video_id", videoId).eq("status", "planned");
   await db.from("videos").update({ va_sent_at: null }).eq("id", videoId);
 }

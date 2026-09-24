@@ -12,13 +12,10 @@ import { isToPost } from "@/lib/variant-state";
 
 /**
  * The VA's board. One card per video — its hook variants live inside it and are
- * never split out. Two columns, the same as the client's flow:
- *
- *   To post   the video is with the VA: work through its variants
- *   Posted    marked posted — it's in the archive (drag here to finish a video)
- *
- * Opening a To-post card shows every variant on one page; opening a Posted card
- * shows performance and the button to post the best trial to the feed.
+ * never split out. The board holds only videos that are with the VA. When one is
+ * finished it is dragged to the "Posted" drop zone (or its Mark as posted button is
+ * pressed): it leaves the board at once and is in the Archive tab — that is where
+ * performance and "post to the main feed" live.
  */
 interface VideoGroup {
   videoId: string;
@@ -88,6 +85,23 @@ function Card({ g, draggable, onOpen }: { g: VideoGroup; draggable: boolean; onO
   );
 }
 
+function DropZone() {
+  const { setNodeRef, isOver } = useDroppable({ id: "posted" });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex min-h-24 flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition ${
+        isOver ? "border-emerald-400 bg-emerald-500/10" : "border-line"
+      }`}
+    >
+      <p className="text-sm font-medium">✓ Posted</p>
+      <p className="mt-1 max-w-xs text-[11px] leading-snug text-ink-3">
+        Drag a video here when everything in it is posted. It moves into the Archive tab.
+      </p>
+    </div>
+  );
+}
+
 function Column({
   id, label, color, blurb, groups, draggable, onOpen,
 }: {
@@ -134,20 +148,21 @@ export function PostingBoard({
   const [openVideo, setOpenVideo] = useState<string | null>(null);
   const [openArchived, setOpenArchived] = useState<{ id: string; title: string } | null>(null);
   const [confirmPosted, setConfirmPosted] = useState<VideoGroup | null>(null);
+  // Videos just marked posted: gone from the board at once, without waiting for the refresh.
+  const [gone, setGone] = useState<Set<string>>(new Set());
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const groups = useMemo(() => groupUp(trials), [trials]);
   const q = query.trim().toLowerCase();
   const match = (title: string) => !q || title.toLowerCase().includes(q);
-  const toPost = groups.filter((g) => g.videoStatus === "with_va" && match(g.title));
-  const posted = groups.filter((g) => g.videoStatus !== "with_va" && match(g.title));
+  const toPost = groups.filter((g) => match(g.title) && !gone.has(g.videoId));
   const opened = groups.find((g) => g.videoId === openVideo) ?? null;
 
   function onDragEnd(e: DragEndEvent) {
     if (!e.over) return;
     const g = groups.find((x) => x.videoId === String(e.active.id));
     if (!g) return;
-    if (String(e.over.id) === "posted" && g.videoStatus === "with_va") setConfirmPosted(g);
+    if (String(e.over.id) === "posted") setConfirmPosted(g);
   }
 
   return (
@@ -179,13 +194,15 @@ export function PostingBoard({
       {tab === "board" ? (
         <>
           <p className="text-[11px] text-ink-3">
-            Open a video to work through all its hook variants in one place. When it&rsquo;s all posted, drag it to <b>Posted</b> — that
-            moves it into the archive.
+            Open a video to work through all its hook variants in one place. When it&rsquo;s all posted, drag it to <b>Posted</b> — it
+            leaves this board and is in the Archive tab.
           </p>
           <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-            <div className="grid gap-3 md:grid-cols-2">
-              <Column id="to_post" label="To post" color="#f59e0b" blurb="With the VA — work through each video's variants." groups={toPost} draggable onOpen={setOpenVideo} />
-              <Column id="posted" label="Posted" color="#34d399" blurb="Last 30 days. Open one for performance and to post the best trial to the feed." groups={posted} draggable={false} onOpen={setOpenVideo} />
+            <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+              <Column id="to_post" label="To post" color="#f59e0b" blurb="With the VA — open a video to work through all its variants." groups={toPost} draggable onOpen={setOpenVideo} />
+              <div className="md:pt-2">
+                <DropZone />
+              </div>
             </div>
           </DndContext>
         </>
@@ -226,7 +243,7 @@ export function PostingBoard({
         </div>
       )}
 
-      {opened && opened.videoStatus === "with_va" ? (
+      {opened ? (
         <VideoWorkDialog
           trials={opened.trials}
           jobs={jobs}
@@ -234,9 +251,6 @@ export function PostingBoard({
           clientName={clientName}
           onClose={() => setOpenVideo(null)}
         />
-      ) : null}
-      {opened && opened.videoStatus !== "with_va" ? (
-        <PostedVideoDialog videoId={opened.videoId} title={opened.title} clientName={clientName} onClose={() => setOpenVideo(null)} />
       ) : null}
       {openArchived ? (
         <PostedVideoDialog videoId={openArchived.id} title={openArchived.title} clientName={clientName} onClose={() => setOpenArchived(null)} />
@@ -253,11 +267,18 @@ export function PostingBoard({
           const g = confirmPosted;
           setConfirmPosted(null);
           if (!g) return;
+          setGone((prev) => new Set(prev).add(g.videoId));
           startTransition(async () => {
             const res = await vaMarkVideoPostedAction(g.videoId);
-            if (res?.error) toast.error(res.error);
-            else {
-              toast.success("Posted — it's in the archive.");
+            if (res?.error) {
+              toast.error(res.error);
+              setGone((prev) => {
+                const next = new Set(prev);
+                next.delete(g.videoId);
+                return next;
+              });
+            } else {
+              toast.success("Posted — it's in the Archive tab.");
               router.refresh();
             }
           });

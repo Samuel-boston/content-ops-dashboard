@@ -115,18 +115,17 @@ export async function sendToVaAction(input: {
 
   const now = new Date().toISOString();
   const shared = (video.post_caption as string | null)?.trim() || null;
-  for (const t of live) {
-    const postAs = t.post_as === "none" ? (t.cut_id === null ? "main" : "trial") : t.post_as;
-    const { error } = await supabase
-      .from("trial_posts")
-      .update({
-        post_as: postAs,
-        caption: t.caption?.trim() || shared,
-        sent_to_va_at: t.sent_to_va_at ?? now,
-      })
-      .eq("id", t.id);
-    if (error) return { error: error.message };
-  }
+  const results = await Promise.all(
+    live.map((t) => {
+      const postAs = t.post_as === "none" ? (t.cut_id === null ? "main" : "trial") : t.post_as;
+      return supabase
+        .from("trial_posts")
+        .update({ post_as: postAs, caption: t.caption?.trim() || shared, sent_to_va_at: t.sent_to_va_at ?? now })
+        .eq("id", t.id);
+    })
+  );
+  const failed = results.find((r) => r.error);
+  if (failed?.error) return { error: failed.error.message };
 
   const { error: vErr } = await supabase
     .from("videos")
@@ -165,15 +164,16 @@ export async function saveVaCoverAction(videoId: string, coverPath: string) {
   return { ok: true as const };
 }
 
-/** What the board's "send to the VA" dialog needs to show for one video. */
+/** What the board's "send to the VA" dialog needs for one video — its details and its variants, in one round trip. */
 export async function getVaHandoffInfoAction(videoId: string) {
-  await requireRole("owner", "admin");
+  const me = await requireRole("owner", "admin");
   const supabase = await supabaseServer();
-  const { data: v } = await supabase
-    .from("videos")
-    .select("title, status, va_notes, cover_path, post_caption")
-    .eq("id", videoId)
-    .maybeSingle();
+  await ensureVariantRows(supabase, me.id, videoId);
+  const [{ data: v }, { data: trials }, { data: cuts }] = await Promise.all([
+    supabase.from("videos").select("title, status, va_notes, cover_path, post_caption").eq("id", videoId).maybeSingle(),
+    supabase.from("trial_posts").select("*").eq("video_id", videoId).order("created_at"),
+    supabase.from("video_cuts").select("id, label, kind, notes").eq("video_id", videoId).order("position"),
+  ]);
   if (!v) return null;
   return {
     title: v.title as string,
@@ -181,6 +181,8 @@ export async function getVaHandoffInfoAction(videoId: string) {
     notes: (v.va_notes as string | null) ?? "",
     hasCover: Boolean(v.cover_path),
     postCaption: (v.post_caption as string | null) ?? "",
+    trials: ((trials as TrialPost[]) ?? []).filter((t) => t.status !== "archived"),
+    cuts: (cuts as { id: string; label: string; kind: string; notes: string | null }[]) ?? [],
   };
 }
 
