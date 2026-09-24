@@ -2,6 +2,7 @@ import "server-only";
 import { after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { notifyTelegram } from "@/lib/notify";
+import { announceSlack } from "@/lib/integrations/slack";
 
 /**
  * Move a posted video's files out of Cloudflare Stream and into Google Drive,
@@ -96,4 +97,5 @@ export async function markVideoPosted(videoId: string): Promise<void> {
     .eq("id", videoId);
   after(() => archivePostedToDrive(videoId));
   await notifyTelegram(`✅ Posted: <b>${v.title}</b>`);
+  await announceSlack(`✅ Posted: *${String(v.title).replace(/[<>|]/g, "")}*`);
 }

@@ -305,16 +305,16 @@ Save settings, then press “Test the connection” — it must say Connected. C
 
 ---
 
-## Publer — post and schedule Reels, including trial reels
+## Publer — post to Instagram (including trial reels), YouTube, TikTok and LinkedIn
 
 The easy way to post from the dashboard: no Meta app or verification needed, and it can post Instagram trial reels, which Meta's own API cannot. Needs a Publer Business plan (check Publer's current pricing); it replaces the Meta / Instagram guide for posting.
 
 ### Steps
 
 1. Go to publer.com and sign up or log in. Choose a Business plan — the API is not available on lower plans.
-2. In Publer open Social Accounts → Add account → Instagram, and connect the Instagram account you post from. It must be a Professional (Creator or Business) account.
+2. In Publer open Social Accounts → Add account, and connect each account you post from: Instagram (a Professional Creator or Business account), YouTube, TikTok and/or LinkedIn.
 3. Open Settings → Access & Login → API Keys → Create API Key. Give it a name and tick these permissions: workspaces, accounts, posts and media. Create it and copy the key now.
-4. In this dashboard open Settings → Publer, paste the key, and press Connect. It finds your workspace and Instagram account by itself; if you have more than one account it asks which to post to.
+4. In this dashboard open Settings → Publer, paste the key, and press Connect. It finds your workspace and accounts by itself; if you have more than one of a kind it asks which to post to.
 
 ### Paste into Settings
 
@@ -322,7 +322,7 @@ The easy way to post from the dashboard: no Meta app or verification needed, and
 
 ### Then
 
-The Publer card turns green and says Connected to Instagram. Press “Test the connection” to check it. Then on any video that is with the VA, mark a variant as a trial reel and press “Post trial reel via Publer…”. Choose whether trial reels stay trials or may be shared by Instagram automatically at the top of the Publer card.
+The Publer card turns green and lists each connected account. Press “Test the connection” to check it. Then on any video that is with the VA, mark a variant as a trial reel and press “Post trial reel via Publer…”. Choose whether trial reels stay trials or may be shared by Instagram automatically at the top of the Publer card.
 
 ---
 
@@ -347,7 +347,7 @@ Lets the dashboard post and schedule Reels and carousels to the feed and read th
 
 ### Then
 
-Save settings. Then, on any video that is Ready to Post, open the Post tab: the Instagram channel should now appear. Post a test to the feed to confirm.
+Save settings. Then, on any video that is with the VA, open the Post tab: the Instagram channel should now appear. Post a test to the feed to confirm.
 
 ---
 
@@ -390,6 +390,32 @@ Anything sent to a private Telegram chat lands in Ideation. Free.
 ### Then
 
 Save settings, then send a text message to the chat — a new idea should appear in Ideation within seconds.
+
+---
+
+## Slack — ask the dashboard from Slack, and hear what moves
+
+Lets the team say "add this to ideas" or "how many videos are in scripting?" in Slack, and posts to a channel when scripts are done, cuts are ready for review, videos are approved or posted. Free on any Slack plan.
+
+### Steps
+
+1. Create your Slack workspace if you haven't (slack.com), and make sure everyone who should use it is in it.
+2. In this dashboard open Settings → Slack and press “Copy the app manifest”. It already contains this dashboard's address, the /ops command and every permission.
+3. Go to api.slack.com/apps → Create New App → From a manifest. Pick your workspace, paste the manifest, and press Create.
+4. On the app's page press Install to Workspace and allow it.
+5. Copy the Signing Secret (Basic Information page) and the Bot User OAuth Token (OAuth & Permissions page, starts with xoxb-).
+6. Back in Settings → Slack paste both and press Connect, then pick the channel updates should go to.
+7. Make sure each person has a seat in the dashboard (Team → Seats) using the same email as on their Slack profile — that's how the bot knows who is asking and what they may see.
+
+### Paste into Settings
+
+- Slack → Bot User OAuth Token
+- Slack → Signing Secret
+- Slack → the channel to announce in
+
+### Then
+
+Press “Send a test message”, then in Slack try /ops how many in scripting and /ops add idea: a test idea. You can also @-mention the bot in a channel or message it directly.
 
 ---
 
@@ -453,7 +479,7 @@ Lets someone work on scripts or run the board from inside Claude. Uses their exi
 
 ### Then
 
-Copywriters can list ideas, write scripts and move them between Ideation, Scripting and Script Review; owners and admins can do more.
+Copywriters can list ideas, write scripts and move them between Ideation and Scripting; owners and admins can do more.
 
 ---
 

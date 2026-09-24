@@ -786,6 +786,14 @@ export interface WorkspaceSettings {
   /** Network -> the Publer account to post to. Instagram is also mirrored above. */
   publer_accounts: Record<string, { id: string; name: string }>;
   publer_trial_mode: "MANUAL" | "SS_PERFORMANCE";
+  /** Slack: ask the dashboard from Slack, and announcements into a channel. Secrets. */
+  slack_bot_token: string | null;
+  slack_signing_secret: string | null;
+  slack_bot_user_id: string | null;
+  slack_team_name: string | null;
+  slack_channel_id: string | null;
+  slack_channel_name: string | null;
+  slack_announce: boolean;
   telegram_bot_token: string | null;
   telegram_chat_ids: number[];
   telegram_user_ids: number[];
@@ -818,6 +826,7 @@ export interface IntegrationStatus {
   /** Every channel the dashboard can post to right now (Instagram Graph API and/or Publer accounts). */
   channels: PublishChannel[];
   telegram: boolean;
+  slack: boolean;
   whisper: boolean;
   ai: boolean;
   email: boolean;

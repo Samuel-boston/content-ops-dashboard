@@ -107,6 +107,22 @@ export const SETUP_GUIDES: SetupGuideItem[] = [
     finish: "Save settings, then send a text message to the chat — a new idea should appear in Ideation within seconds.",
   },
   {
+    id: "slack",
+    title: "Slack — ask the dashboard from Slack, and hear what moves",
+    blurb: "Lets the team say \"add this to ideas\" or \"how many videos are in scripting?\" in Slack, and posts to a channel when scripts are done, cuts are ready for review, videos are approved or posted. Free on any Slack plan.",
+    steps: [
+      "Create your Slack workspace if you haven't (slack.com), and make sure everyone who should use it is in it.",
+      "In this dashboard open Settings → Slack and press “Copy the app manifest”. It already contains this dashboard's address, the /ops command and every permission.",
+      "Go to api.slack.com/apps → Create New App → From a manifest. Pick your workspace, paste the manifest, and press Create.",
+      "On the app's page press Install to Workspace and allow it.",
+      "Copy the Signing Secret (Basic Information page) and the Bot User OAuth Token (OAuth & Permissions page, starts with xoxb-).",
+      "Back in Settings → Slack paste both and press Connect, then pick the channel updates should go to.",
+      "Make sure each person has a seat in the dashboard (Team → Seats) using the same email as on their Slack profile — that's how the bot knows who is asking and what they may see.",
+    ],
+    fields: ["Slack → Bot User OAuth Token", "Slack → Signing Secret", "Slack → the channel to announce in"],
+    finish: "Press “Send a test message”, then in Slack try /ops how many in scripting and /ops add idea: a test idea. You can also @-mention the bot in a channel or message it directly.",
+  },
+  {
     id: "email",
     title: "Email notifications (Resend)",
     blurb: "Sends the “you've been mentioned / revisions requested” emails. Free tier is plenty. These two values are set in Vercel, not in this page.",

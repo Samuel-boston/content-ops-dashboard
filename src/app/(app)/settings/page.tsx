@@ -12,6 +12,7 @@ import {
 import { SettingsForm } from "@/components/SettingsForm";
 import { BrandingForm } from "@/components/BrandingForm";
 import { PublerConnect } from "@/components/PublerConnect";
+import { SlackConnect } from "@/components/SlackConnect";
 
 export default async function SettingsPage() {
   await requireRole("owner");
@@ -40,6 +41,14 @@ export default async function SettingsPage() {
         hasKey={Boolean(settings.publer_api_key)}
         accounts={Object.fromEntries(Object.entries(publerAccounts(settings)).map(([n, a]) => [n, a.name]))}
         trialMode={settings.publer_trial_mode ?? "MANUAL"}
+      />
+      <SlackConnect
+        connected={integrationStatus(settings).slack}
+        team={settings.slack_team_name}
+        channelId={settings.slack_channel_id}
+        channelName={settings.slack_channel_name}
+        announce={settings.slack_announce}
+        appUrl={process.env.NEXT_PUBLIC_APP_URL ?? ""}
       />
       <SettingsForm
         settings={redactSettings(settings)}

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
 import { getCurrentProfile, requireRole, requireUser } from "@/lib/auth";
 import { notify } from "@/lib/notify";
+import { announceSlack } from "@/lib/integrations/slack";
 import { displayName } from "@/lib/format";
 import { NUDGES, type NudgeKind } from "@/lib/nudges";
 import { previousStage, type VideoStatus } from "@/lib/types";
@@ -221,6 +222,7 @@ export async function submitForReviewAction(videoId: string) {
     .in("role", ["owner", "admin"])
     .eq("active", true);
   const me = await getCurrentProfile();
+  await announceSlack(`👀 *${String(v.title).replace(/[<>|]/g, "")}* is ready to review.`);
   await notify({
     userIds: (managers ?? []).map((m) => m.id),
     kind: "system",
@@ -279,7 +281,10 @@ export async function approveAction(videoId: string, needsVariants?: boolean | n
       videoId,
     });
   }
-  if (after?.status === "with_va") await handOffToVa(videoId, me.id);
+  if (after?.status === "with_va") {
+    await handOffToVa(videoId, me.id);
+    await announceSlack(`✅ *${String(after.title).replace(/[<>|]/g, "")}* is approved — it's on the VA's desk.`);
+  }
 
   revalidateAll(videoId);
   revalidatePath("/posting");
@@ -308,6 +313,7 @@ export async function scriptDoneAction(videoId: string) {
   if (!v) return { error: "Not found." };
   if (v.status !== "scripting") return { error: "This one isn't in Scripting." };
   const { data: managers } = await supabase.from("profiles").select("id").in("role", ["owner", "admin"]).eq("active", true);
+  await announceSlack(`✍️ The script for *${String(v.title).replace(/[<>|]/g, "")}* is done — ready to approve.`);
   await notify({
     userIds: (managers ?? []).map((m) => m.id as string),
     kind: "system",
