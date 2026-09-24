@@ -243,6 +243,14 @@ function VariantPanel({
           {trial.notes}
         </p>
       ) : null}
+      {trial.variantNotes ? (
+        <p className="mt-2 whitespace-pre-wrap rounded-md border border-accent/30 bg-accent-ghost/40 px-2.5 py-2 text-xs leading-relaxed text-ink-2">
+          <span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-ink-3">
+            About this variant
+          </span>
+          {trial.variantNotes}
+        </p>
+      ) : null}
       {trial.coverUrl ? (
         <a
           href={trial.coverUrl}

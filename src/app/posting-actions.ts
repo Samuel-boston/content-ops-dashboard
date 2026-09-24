@@ -40,8 +40,10 @@ export interface PostingTrialItem {
   onMainFeed: boolean;
   /** Set once the variant has been handed to Instagram's scheduler. */
   scheduled: boolean;
-  /** Instructions from whoever sent it over. */
+  /** Instructions for the whole video. */
   notes: string | null;
+  /** Instructions for this variant in particular. */
+  variantNotes: string | null;
   /** Signed link to the cover image, when one was uploaded. */
   coverUrl: string | null;
   /** A carousel has no video file — these are its slide images, in order. */
@@ -143,8 +145,9 @@ export async function listPostingWork(): Promise<{
         durationSeconds = (ver?.duration_seconds as number | null) ?? null;
       }
       let coverUrl: string | null = null;
-      if (t.video?.cover_path) {
-        const { data: signed } = await db.storage.from("footage").createSignedUrl(t.video.cover_path, 3600);
+      const coverPath = t.cover_path ?? t.video?.cover_path ?? null;
+      if (coverPath) {
+        const { data: signed } = await db.storage.from("footage").createSignedUrl(coverPath, 3600);
         coverUrl = signed?.signedUrl ?? null;
       }
       return {
@@ -158,8 +161,9 @@ export async function listPostingWork(): Promise<{
       postAs: t.post_as === "main" ? "main" : "trial",
       onMainFeed: isOnMainFeed(t),
       scheduled: t.status === "promoted" && !t.posted_at,
-      // Instructions live on the video, so the client editing them reaches the desk at once.
-      notes: t.video?.va_notes ?? t.notes ?? null,
+      // Video-wide instructions, and this variant's own — both live, so edits reach the desk at once.
+      notes: t.video?.va_notes ?? null,
+      variantNotes: t.notes ?? null,
       coverUrl,
       images,
       durationSeconds,

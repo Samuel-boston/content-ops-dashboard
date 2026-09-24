@@ -6,6 +6,7 @@ import { useTrackedTransition } from "@/components/ui/Pending";
 import { useToast } from "@/components/ui/Toast";
 import {
   archiveTrialAction,
+  getCutPlaybackAction,
   listVideoTrials,
   markTrialPostedAction,
   markTrialWinnerAction,
@@ -18,6 +19,7 @@ import {
   updateVariantAction,
 } from "@/app/trial-actions";
 import { createFootageUploadUrlAction } from "@/app/asset-actions";
+import { StreamPlayer } from "@/components/engine/StreamPlayer";
 import { IconTrash } from "@/components/ui/icons";
 import { TRIAL_STATUS_LABELS, type TrialPost, type VideoStatus } from "@/lib/types";
 import { CHOICE_LABELS, variantChoice, variantStateLabel, type VariantChoice } from "@/lib/variant-state";
@@ -67,6 +69,8 @@ export function TrialsPanel({
   // null = the first one still waiting to be sent; "none" = all collapsed.
   const [openId, setOpenId] = useState<string | null>(null);
   const coverInput = useRef<HTMLInputElement>(null);
+  // Watching a variant right here, when the surrounding page has no player of its own (the board's hand-off dialog).
+  const [watching, setWatching] = useState<{ cutId: string; label: string } | null>(null);
   const withVa = status === "with_va";
   const readyToSend = status === "ready_to_post";
 
@@ -143,6 +147,7 @@ export function TrialsPanel({
 
   return (
     <section className="mb-4 rounded-xl border border-line bg-card p-3">
+      {watching ? <WatchDialog cutId={watching.cutId} label={watching.label} onClose={() => setWatching(null)} /> : null}
       {/* The hand-off. Ready to Post: this is where it's sent. With the VA: it can be edited live or taken back. */}
       {readyToSend || withVa ? (
         <div className="mb-3 space-y-2 rounded-lg border border-accent/30 bg-accent-ghost p-2.5">
@@ -253,7 +258,7 @@ export function TrialsPanel({
               isMain={cutKind(t) === "main" || t.cut_id === null}
               videoId={videoId}
               fallbackCaption={fallbackCaption}
-              onWatch={onWatch}
+              onWatch={onWatch ?? ((cutId) => setWatching({ cutId, label: t.label }))}
               pending={pending}
               run={run}
               field={field}
@@ -298,6 +303,24 @@ function TrialRow({
     shares: t.shares?.toString() ?? "",
   });
   const [editingNumbers, setEditingNumbers] = useState(false);
+  const toast = useToast();
+  const coverInput = useRef<HTMLInputElement>(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
+
+  async function uploadVariantCover(file: File) {
+    if (file.size > 20 * 1024 * 1024) return toast.error("Keep the cover under 20 MB.");
+    setUploadingCover(true);
+    try {
+      const up = await createFootageUploadUrlAction(videoId, file.name);
+      if (!up?.ok) throw new Error(up?.error ?? "Could not start the upload.");
+      const put = await fetch(up.signedUrl, { method: "PUT", body: file, headers: { "x-upsert": "true" } });
+      if (!put.ok) throw new Error(`Upload failed (${put.status}).`);
+      run(() => updateVariantAction(t.id, videoId, { coverPath: up.path }), () => toast.success("Cover saved for this variant."));
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+    setUploadingCover(false);
+  }
 
   const chip =
     t.status === "planned"
@@ -429,6 +452,51 @@ function TrialRow({
             }}
             className={`${field} min-h-32 w-full resize-y text-sm leading-relaxed`}
           />
+          <textarea
+            defaultValue={t.notes ?? ""}
+            rows={2}
+            placeholder="Notes for the VA about this variant only (optional)"
+            onBlur={(e) => {
+              if (e.target.value.trim() === (t.notes ?? "").trim()) return;
+              run(() => updateVariantAction(t.id, videoId, { notes: e.target.value }));
+            }}
+            className={`${field} w-full resize-y`}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={uploadingCover || pending}
+              onClick={() => coverInput.current?.click()}
+              className="rounded-md border border-line px-2.5 py-1 text-[11px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
+            >
+              {uploadingCover ? "Uploading…" : t.cover_path ? "Replace this variant's cover" : "Upload a cover for this variant"}
+            </button>
+            {t.cover_path ? (
+              <>
+                <span className="text-[11px] text-ok">✓ Own cover set</span>
+                <button
+                  type="button"
+                  onClick={() => run(() => updateVariantAction(t.id, videoId, { coverPath: null }))}
+                  className="text-[11px] text-ink-3 underline hover:text-ink-2"
+                >
+                  Use the video&rsquo;s cover instead
+                </button>
+              </>
+            ) : (
+              <span className="text-[11px] text-ink-3">Uses the video&rsquo;s cover unless you set one.</span>
+            )}
+            <input
+              ref={coverInput}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void uploadVariantCover(f);
+                e.target.value = "";
+              }}
+            />
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="flex w-full items-center gap-1">
               <input
@@ -512,6 +580,46 @@ function TrialRow({
           Promoted — live metrics flow in through the API on the Analytics page.
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/** A variant's latest cut, playable in place — for pages that have no player of their own. */
+function WatchDialog({ cutId, label, onClose }: { cutId: string; label: string; onClose: () => void }) {
+  const [src, setSrc] = useState<Awaited<ReturnType<typeof getCutPlaybackAction>> | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    getCutPlaybackAction(cutId).then((r) => !cancelled && setSrc(r));
+    return () => {
+      cancelled = true;
+    };
+  }, [cutId]);
+  return (
+    <div
+      role="dialog"
+      aria-modal
+      aria-label={`Watch ${label}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 px-3 py-6"
+    >
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl border border-line bg-app p-3 shadow-2xl">
+        <div className="mb-2 flex items-center gap-2">
+          <p className="min-w-0 flex-1 truncate text-sm font-medium">{label}</p>
+          <button type="button" onClick={onClose} aria-label="Close" className="px-2 text-lg leading-none text-ink-3 hover:text-ink">
+            ×
+          </button>
+        </div>
+        {src === undefined ? (
+          <p className="py-10 text-center text-xs text-ink-3">Loading…</p>
+        ) : src === null ? (
+          <p className="py-10 text-center text-xs text-ink-3">There&rsquo;s no finished version of this cut to play yet.</p>
+        ) : (
+          <StreamPlayer playbackUrl={src.playbackUrl} poster={src.poster} className="max-h-[70vh] w-full rounded-lg bg-black" />
+        )}
+      </div>
     </div>
   );
 }

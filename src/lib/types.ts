@@ -899,6 +899,8 @@ export interface TrialPost {
   winner: boolean;
   promoted_job_id: string | null;
   notes: string | null;
+  /** This variant's own cover image (footage bucket); the video-wide cover is the fallback. */
+  cover_path: string | null;
   /** Where this variant goes: an Instagram trial reel, or straight to the main feed. */
   post_as: "trial" | "main" | "none";
   /** When it was handed to the VA — null while it's still a draft. */

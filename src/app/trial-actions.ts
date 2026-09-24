@@ -122,8 +122,6 @@ export async function sendToVaAction(input: {
       .update({
         post_as: postAs,
         caption: t.caption?.trim() || shared,
-        // Instructions live on the video, so editing them later reaches the VA.
-        notes: null,
         sent_to_va_at: t.sent_to_va_at ?? now,
       })
       .eq("id", t.id);
@@ -190,13 +188,15 @@ export async function getVaHandoffInfoAction(videoId: string) {
 export async function updateVariantAction(
   id: string,
   videoId: string,
-  patch: { postAs?: "trial" | "main" | "none"; caption?: string | null }
+  patch: { postAs?: "trial" | "main" | "none"; caption?: string | null; notes?: string | null; coverPath?: string | null }
 ) {
   await requireRole("owner", "admin");
   const supabase = await supabaseServer();
   const clean: Record<string, unknown> = {};
   if (patch.postAs) clean.post_as = patch.postAs;
   if ("caption" in patch) clean.caption = patch.caption?.trim() || null;
+  if ("notes" in patch) clean.notes = patch.notes?.trim() || null;
+  if ("coverPath" in patch) clean.cover_path = patch.coverPath || null;
   if (Object.keys(clean).length === 0) return { ok: true as const };
   const { error } = await supabase.from("trial_posts").update(clean).eq("id", id);
   if (error) return { error: error.message };
@@ -428,4 +428,20 @@ export async function takeBackFromVaAction(videoId: string) {
   revalidateTrials(videoId);
   revalidatePath("/board");
   return { ok: true as const };
+}
+
+/** The latest ready version of a cut, for watching it without leaving the page. */
+export async function getCutPlaybackAction(cutId: string) {
+  await requireRole("owner", "admin");
+  const supabase = await supabaseServer();
+  const { data: v } = await supabase
+    .from("cut_versions")
+    .select("playback_url, thumbnail_url, version, status")
+    .eq("cut_id", cutId)
+    .eq("status", "ready")
+    .order("version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!v?.playback_url) return null;
+  return { playbackUrl: v.playback_url as string, poster: (v.thumbnail_url as string | null) ?? null, version: v.version as number };
 }
