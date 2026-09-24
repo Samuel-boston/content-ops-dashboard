@@ -29,6 +29,7 @@ import { updateVideoAction } from "@/app/actions";
 import { readTime } from "@/lib/format";
 import { PLANNING_STAGES, type CarouselImage, type Profile, type ReferenceItem, type ScriptComment, type Video } from "@/lib/types";
 import { ParkButton } from "@/components/pipeline/ParkButton";
+import { ThumbnailPanel } from "@/components/workspace/ThumbnailPanel";
 
 /**
  * The client's writing room. Deliberately one job per pane: the script on the
@@ -248,6 +249,8 @@ export function ScriptWorkspace({
                 </div>
           ) : null}
         </div>
+
+        <ThumbnailPanel videoId={video.id} />
 
         {isCarouselFormat(video.formats) ? (
           <CarouselSlides

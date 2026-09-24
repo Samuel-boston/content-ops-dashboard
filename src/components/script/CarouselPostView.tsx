@@ -18,6 +18,7 @@ import {
 import { IconCheck, IconChevronRight, IconSparkles } from "@/components/ui/icons";
 import { STATUS_COLOR, STATUS_LABELS, type CarouselImage, type Profile, type ScriptComment, type Video } from "@/lib/types";
 import { ParkButton } from "@/components/pipeline/ParkButton";
+import { ThumbnailPanel } from "@/components/workspace/ThumbnailPanel";
 
 /**
  * The carousel's whole life after the script is approved, in one place.
@@ -149,6 +150,8 @@ export function CarouselPostView({
           )}
         </div>
       </div>
+
+      <ThumbnailPanel videoId={video.id} />
 
       <CarouselSlides
         videoId={video.id}

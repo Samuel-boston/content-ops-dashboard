@@ -18,6 +18,7 @@ import { IconChart, IconCheck, IconFile, IconMic, IconTrash } from "@/components
 import { STATUS_COLOR, STATUS_LABELS } from "@/lib/types";
 import type { GuestLink, Video, VideoAsset } from "@/lib/types";
 import { ParkButton } from "@/components/pipeline/ParkButton";
+import { ThumbnailPanel } from "@/components/workspace/ThumbnailPanel";
 
 /**
  * The assembly step between "script done" and "sent to editors" — everything
@@ -137,6 +138,8 @@ export function FilmingWorkspace({
           </span>
         </div>
       </div>
+
+      <ThumbnailPanel videoId={video.id} />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">

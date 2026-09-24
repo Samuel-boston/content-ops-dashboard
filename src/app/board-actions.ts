@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/auth";
 import { setStatusAction } from "@/app/actions";
 import { getWorkspaceSettings, integrationStatus } from "@/lib/workspace";
@@ -75,12 +76,25 @@ export async function listBoardCards(): Promise<BoardCard[]> {
     openByCut.set(c.cut_id, (openByCut.get(c.cut_id) ?? 0) + 1);
   }
 
+  // A video's own thumbnail (uploaded or designed) beats the frame Stream picked.
+  const custom = new Map<string, string>();
+  const withThumb = rows.filter((v) => (v as { thumbnail_path?: string | null }).thumbnail_path);
+  if (withThumb.length) {
+    const { data: signed } = await supabaseAdmin()
+      .storage.from("thumbnails")
+      .createSignedUrls(withThumb.map((v) => (v as { thumbnail_path: string }).thumbnail_path), 3600);
+    withThumb.forEach((v, i) => {
+      const url = signed?.[i]?.signedUrl;
+      if (url) custom.set(v.id, url);
+    });
+  }
+
   return rows.map((v) => {
     const cutId = cutByVideo.get(v.id);
     const top = cutId ? topByCut.get(cutId) : undefined;
     return {
       ...v,
-      thumbnail_url: top?.thumbnail_url ?? null,
+      thumbnail_url: custom.get(v.id) ?? top?.thumbnail_url ?? null,
       duration_seconds: top?.duration_seconds ?? null,
       version: top?.version ?? null,
       open_comments: cutId ? openByCut.get(cutId) ?? 0 : 0,

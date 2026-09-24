@@ -22,6 +22,7 @@ import {
 } from "@/app/engine-actions";
 import { StageActions } from "@/components/pipeline/StageActions";
 import { isCarouselFormat } from "@/lib/taxonomy";
+import { ThumbnailPanel } from "@/components/workspace/ThumbnailPanel";
 import type {
   Series,
   CarouselImage,
@@ -41,7 +42,7 @@ import type {
   VideoMetrics,
 } from "@/lib/types";
 
-type Tab = "comments" | "brief" | "files" | "chat" | "post";
+type Tab = "comments" | "brief" | "files" | "chat" | "post" | "thumbnail";
 
 /**
  * Post only belongs on screen once there's something to post — everywhere
@@ -51,15 +52,16 @@ type Tab = "comments" | "brief" | "files" | "chat" | "post";
 function visibleTabs(status: Video["status"], editor = false): Tab[] {
   // Editors don't post, so they never get the Post tab.
   if (editor) return ["comments", "brief", "files", "chat"];
+  const withThumb = (tabs: Tab[]): Tab[] => [...tabs, "thumbnail"];
   if (status === "with_va" || status === "posted") {
-    return ["post", "comments", "brief", "files", "chat"];
+    return withThumb(["post", "comments", "brief", "files", "chat"]);
   }
   // Once variants are being handed over, the list of them (and what to do with
   // each) is the main thing to see — even before there's more than one.
   if (status === "awaiting_variants" || status === "final_review") {
-    return ["post", "comments", "brief", "files", "chat"];
+    return withThumb(["post", "comments", "brief", "files", "chat"]);
   }
-  return ["comments", "brief", "files", "chat"];
+  return withThumb(["comments", "brief", "files", "chat"]);
 }
 
 const TAB_LABELS: Record<Tab, string> = {
@@ -68,6 +70,7 @@ const TAB_LABELS: Record<Tab, string> = {
   files: "Files & Share",
   chat: "Chat",
   post: "Post",
+  thumbnail: "Thumbnail",
 };
 
 // Narrower than this and the player header (title, version, download) no longer
@@ -378,6 +381,12 @@ export function VideoWorkspace({
             metrics={metrics}
             instagramConfigured={integrations.instagram}
           />
+        ) : null}
+
+        {tab === "thumbnail" ? (
+          <div className="h-full overflow-y-auto px-3 py-3">
+            <ThumbnailPanel videoId={video.id} defaultOpen />
+          </div>
         ) : null}
 
         {tab === "post" ? (

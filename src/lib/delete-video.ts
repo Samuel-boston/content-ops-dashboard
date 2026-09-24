@@ -17,7 +17,7 @@ export async function purgeVideo(videoId: string): Promise<{ title: string; file
   const db = supabaseAdmin();
   const { data: video } = await db
     .from("videos")
-    .select("title, brief_voice_path, cover_path")
+    .select("title, brief_voice_path, cover_path, thumbnail_path")
     .eq("id", videoId)
     .maybeSingle();
   if (!video) throw new Error("Not found.");
@@ -26,16 +26,18 @@ export async function purgeVideo(videoId: string): Promise<{ title: string; file
   const carousels = new Set<string>();
   const references = new Set<string>();
   const media = new Set<string>();
+  const thumbs = new Set<string>();
   const add = (set: Set<string>, p: unknown) => {
     if (typeof p === "string" && p) set.add(p);
   };
   add(footage, video.brief_voice_path);
   add(footage, video.cover_path);
+  add(thumbs, video.thumbnail_path);
 
   const { data: cuts } = await db.from("video_cuts").select("id").eq("video_id", videoId);
   const cutIds = (cuts ?? []).map((c) => c.id as string);
 
-  const [versions, assets, slides, refs, comments, trials, msgs] = await Promise.all([
+  const [versions, assets, slides, refs, comments, trials, msgs, thumbRefs] = await Promise.all([
     cutIds.length
       ? db.from("cut_versions").select("stream_uid, original_path").in("cut_id", cutIds)
       : Promise.resolve({ data: [] as { stream_uid: string | null; original_path: string | null }[] }),
@@ -47,6 +49,7 @@ export async function purgeVideo(videoId: string): Promise<{ title: string; file
       : Promise.resolve({ data: [] as { voice_path: string | null }[] }),
     db.from("trial_posts").select("cover_path").eq("video_id", videoId),
     db.from("video_messages").select("id").eq("video_id", videoId).limit(1),
+    db.from("video_thumbnail_refs").select("storage_path").eq("video_id", videoId),
   ]);
   void msgs;
 
@@ -59,6 +62,7 @@ export async function purgeVideo(videoId: string): Promise<{ title: string; file
   for (const s of slides.data ?? []) add(carousels, s.storage_path);
   for (const r of refs.data ?? []) add(references, r.storage_path);
   for (const c of comments.data ?? []) add(media, c.voice_path);
+  for (const t of thumbRefs.data ?? []) add(thumbs, t.storage_path);
   for (const t of trials.data ?? []) add(footage, (t as { cover_path?: string | null }).cover_path);
 
   // Cloudflare Stream first: it is the part that keeps costing money.
@@ -84,6 +88,7 @@ export async function purgeVideo(videoId: string): Promise<{ title: string; file
   await remove("carousels", carousels);
   await remove("references", references);
   await remove("comment-media", media);
+  await remove("thumbnails", thumbs);
 
   // Reference items point at the video with "on delete set null", so they'd be
   // left behind as orphans. They go with it.

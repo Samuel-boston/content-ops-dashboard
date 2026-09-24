@@ -15,6 +15,7 @@ import { updateVideoAction } from "@/app/actions";
 import { isCarouselFormat } from "@/lib/taxonomy";
 import type { CarouselImage, Profile, ReferenceItem, Video } from "@/lib/types";
 import { ParkButton } from "@/components/pipeline/ParkButton";
+import { ThumbnailPanel } from "@/components/workspace/ThumbnailPanel";
 
 /**
  * The idea shelf, opened up.
@@ -96,6 +97,8 @@ export function IdeaWorkspace({
             </span>
           </div>
         </div>
+
+        <ThumbnailPanel videoId={video.id} />
 
         {isCarouselFormat(video.formats) ? (
           <CarouselSlides

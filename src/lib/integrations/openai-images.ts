@@ -19,6 +19,8 @@ import { NotConfiguredError } from "@/lib/integrations/stream";
 
 const SIZE = "1024x1536";
 
+export type ImageSize = "1024x1536" | "1536x1024" | "1024x1024";
+
 async function apiKey(): Promise<string> {
   const s = await getWorkspaceSettings();
   if (!s.openai_api_key) throw new NotConfiguredError("OpenAI (for image generation)");
@@ -34,7 +36,10 @@ export interface SlideReference {
 export async function generateSlideImage(opts: {
   prompt: string;
   references?: SlideReference[];
+  /** Defaults to portrait (carousel slides); a thumbnail asks for landscape. */
+  size?: ImageSize;
 }): Promise<Buffer> {
+  const size = opts.size ?? SIZE;
   const key = await apiKey();
   const refs = opts.references ?? [];
 
@@ -46,7 +51,7 @@ export async function generateSlideImage(opts: {
       body: JSON.stringify({
         model: "gpt-image-1",
         prompt: opts.prompt,
-        size: SIZE,
+        size,
         quality: "high",
         n: 1,
       }),
@@ -55,7 +60,7 @@ export async function generateSlideImage(opts: {
     const form = new FormData();
     form.append("model", "gpt-image-1");
     form.append("prompt", opts.prompt);
-    form.append("size", SIZE);
+    form.append("size", size);
     form.append("quality", "high");
     for (const r of refs) {
       form.append("image[]", new Blob([new Uint8Array(r.data)], { type: r.mime }), r.name);

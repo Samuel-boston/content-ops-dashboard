@@ -41,6 +41,7 @@ import {
   type VideoAsset,
 } from "@/lib/types";
 import { ParkButton } from "@/components/pipeline/ParkButton";
+import { ThumbnailPanel } from "@/components/workspace/ThumbnailPanel";
 
 /**
  * The last stop before a video is the editors' — everything that makes the
@@ -231,6 +232,8 @@ export function EditorBriefWorkspace({
           carouselStyle={video.carousel_style}
         />
       ) : null}
+
+      <ThumbnailPanel videoId={video.id} />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">
