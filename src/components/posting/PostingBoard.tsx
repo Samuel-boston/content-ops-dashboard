@@ -8,7 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { vaMarkVideoPostedAction, type PostedVideoRow, type PostingJobItem, type PostingTrialItem } from "@/app/posting-actions";
 import { VideoWorkDialog } from "@/components/posting/PostingDialogs";
-import { PostedArchiveList } from "@/components/posting/PostedArchiveList";
+import { VaArchive } from "@/components/posting/PostedArchiveList";
 import { isToPost } from "@/lib/variant-state";
 
 /**
@@ -185,12 +185,14 @@ export function PostingBoard({
             {label}
           </button>
         ))}
+        {tab === "board" ? (
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search videos…"
           className="ml-auto w-56 rounded-md border border-line bg-raised px-2 py-1.5 text-sm placeholder:text-ink-3 focus:border-accent focus:outline-none"
         />
+        ) : null}
       </div>
 
       {tab === "board" ? (
@@ -222,7 +224,7 @@ export function PostingBoard({
           </DndContext>
         </>
       ) : (
-        <PostedArchiveList rows={archive} clientName={clientName} query={query} />
+        <VaArchive rows={archive} clientName={clientName} />
       )}
 
       {opened ? (
