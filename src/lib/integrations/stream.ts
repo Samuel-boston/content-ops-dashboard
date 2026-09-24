@@ -89,16 +89,33 @@ export async function getStreamVideo(uid: string): Promise<StreamVideoState> {
   };
 }
 
+/**
+ * An MP4 download link for a Stream video. Cloudflare builds the file after
+ * downloads are switched on, so the first response has a URL that isn't ready
+ * yet — Instagram or Drive fetching it at that moment would get an error. So
+ * this waits (up to about 90 seconds) for the file to report ready.
+ */
 export async function getDownloadUrl(uid: string): Promise<string | null> {
   const cf = await cfConfig();
-  // Enable MP4 downloads, then return the URL (Cloudflare generates it async).
-  const res = await fetch(`${CF_API}/accounts/${cf.accountId}/stream/${uid}/downloads`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${cf.token}` },
-  });
-  const json = await res.json();
+  const endpoint = `${CF_API}/accounts/${cf.accountId}/stream/${uid}/downloads`;
+  const headers = { Authorization: `Bearer ${cf.token}` };
+
+  let res = await fetch(endpoint, { method: "POST", headers });
+  let json = await res.json();
   if (!res.ok || !json.success) return null;
-  return json.result?.default?.url ?? null;
+
+  for (let i = 0; i < 18; i++) {
+    const d = json.result?.default;
+    if (d?.url && (d.status === "ready" || d.percentComplete === 100)) return d.url as string;
+    if (d?.status === "error") return null;
+    await new Promise((r) => setTimeout(r, 5000));
+    res = await fetch(endpoint, { headers });
+    json = await res.json();
+    if (!res.ok || !json.success) return null;
+  }
+  // Still building after the wait — hand back the URL anyway; the caller's
+  // own fetch will say if it isn't there.
+  return (json.result?.default?.url as string | undefined) ?? null;
 }
 
 export async function deleteStreamVideo(uid: string): Promise<void> {

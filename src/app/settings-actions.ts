@@ -99,3 +99,20 @@ export async function saveBrandingAction(input: {
   updateTag("branding");
   return { ok: true };
 }
+
+/** "Test the connection" for Google Drive: a real write-and-delete in the configured folder. */
+export async function testDriveAction(): Promise<{ ok: boolean; message: string }> {
+  await requireRole("owner");
+  try {
+    const { testDriveConnection } = await import("@/lib/integrations/drive");
+    return { ok: true, message: await testDriveConnection() };
+  } catch (e) {
+    const msg = (e as Error).message;
+    return {
+      ok: false,
+      message: /storageQuota|Service Accounts do not have storage quota/i.test(msg)
+        ? "Google says a service account has no storage of its own. Use a Shared Drive (Google Workspace), or paste an “authorized user” login instead. " + msg
+        : msg,
+    };
+  }
+}

@@ -12,7 +12,39 @@ interface ServiceAccount {
   token_uri?: string;
 }
 
-async function getAccessToken(sa: ServiceAccount): Promise<string> {
+/**
+ * Google's standard "authorized user" credentials: a person's own account
+ * acting through an OAuth client. Files are created as (and count against the
+ * storage of) that person, so it works with an ordinary Gmail "My Drive" —
+ * which a service account can't. The workspace's Drive field accepts either
+ * shape; this one is the easy way to connect a personal account for a trial.
+ */
+interface AuthorizedUser {
+  type: "authorized_user";
+  client_id: string;
+  client_secret: string;
+  refresh_token: string;
+}
+
+type DriveCredentials = ServiceAccount | AuthorizedUser;
+
+async function getAccessToken(creds: DriveCredentials): Promise<string> {
+  if ((creds as AuthorizedUser).type === "authorized_user") {
+    const u = creds as AuthorizedUser;
+    const res = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: u.client_id,
+        client_secret: u.client_secret,
+        refresh_token: u.refresh_token,
+        grant_type: "refresh_token",
+      }),
+    }).then((r) => r.json());
+    if (!res.access_token) throw new Error(`Google refused the saved login: ${JSON.stringify(res)}`);
+    return res.access_token as string;
+  }
+  const sa = creds as ServiceAccount;
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: "RS256", typ: "JWT" };
   const claim = {
@@ -80,7 +112,7 @@ async function uploadBytes(
 export async function uploadFromUrl(sourceUrl: string, name: string): Promise<string> {
   const s = await getWorkspaceSettings();
   if (!s.drive_folder_id || !s.drive_service_account) throw new NotConfiguredError("Google Drive");
-  const sa = s.drive_service_account as ServiceAccount;
+  const sa = s.drive_service_account as DriveCredentials;
   const token = await getAccessToken(sa);
 
   const src = await fetch(sourceUrl);
@@ -122,7 +154,7 @@ async function ensureBackupsFolder(token: string, parentId: string): Promise<str
 export async function uploadBackupJson(name: string, json: string, keepDays = 30): Promise<string> {
   const s = await getWorkspaceSettings();
   if (!s.drive_folder_id || !s.drive_service_account) throw new NotConfiguredError("Google Drive");
-  const sa = s.drive_service_account as ServiceAccount;
+  const sa = s.drive_service_account as DriveCredentials;
   const token = await getAccessToken(sa);
   const folderId = await ensureBackupsFolder(token, s.drive_folder_id);
 
@@ -143,4 +175,27 @@ export async function uploadBackupJson(name: string, json: string, keepDays = 30
   }
 
   return res.webViewLink ?? `https://drive.google.com/file/d/${res.id}/view`;
+}
+
+/**
+ * A round trip that proves the saved Drive login works: sign in, write a tiny
+ * file into the configured folder, read back its link, delete it. Throws a
+ * readable error if any step fails.
+ */
+export async function testDriveConnection(): Promise<string> {
+  const s = await getWorkspaceSettings();
+  if (!s.drive_folder_id || !s.drive_service_account) throw new NotConfiguredError("Google Drive");
+  const token = await getAccessToken(s.drive_service_account as DriveCredentials);
+  const file = await uploadBytes(
+    token,
+    Buffer.from(`Content Ops connection test — ${new Date().toISOString()}`),
+    "content-ops-connection-test.txt",
+    "text/plain",
+    s.drive_folder_id
+  );
+  await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?supportsAllDrives=true`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return "Connected — a test file was written to the folder and removed again.";
 }

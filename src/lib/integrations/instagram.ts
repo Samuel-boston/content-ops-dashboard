@@ -164,3 +164,15 @@ export async function createCarouselContainer(imageUrls: string[], caption?: str
   if (!res?.id) throw new Error(`IG carousel container failed: ${JSON.stringify(res)}`);
   return res.id;
 }
+
+/** A single-photo feed post (JPEG). Returns the creation id to publish. */
+export async function createImageContainer(imageUrl: string, caption?: string): Promise<string> {
+  const ig = await igConfig();
+  const res = await fetch(`${GRAPH}/${ig.userId}/media`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image_url: imageUrl, caption: caption ?? "", access_token: ig.token }),
+  }).then((r) => r.json());
+  if (!res?.id) throw new Error(`IG image container failed: ${JSON.stringify(res)}`);
+  return res.id;
+}

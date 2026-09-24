@@ -23,7 +23,10 @@ function whisperError(status: number, body: string): string {
 /** Transcribe an audio file (from a URL) with OpenAI Whisper. */
 export async function transcribeAudio(audioUrl: string): Promise<{ text: string } | { error: string }> {
   const s = await getWorkspaceSettings();
-  if (!s.openai_api_key) return { error: NO_OPENAI_KEY };
+  // Groq hosts Whisper on its free tier through the same API shape, so voice
+  // notes cost nothing when a Groq key is set. OpenAI is the fallback.
+  const useGroq = Boolean(s.groq_api_key);
+  if (!useGroq && !s.openai_api_key) return { error: NO_OPENAI_KEY };
 
   const audio = await fetch(audioUrl);
   if (!audio.ok) return { error: "Couldn't read the recording." };
@@ -31,14 +34,19 @@ export async function transcribeAudio(audioUrl: string): Promise<{ text: string 
 
   const form = new FormData();
   form.append("file", blob, "voice-note.ogg");
-  form.append("model", "whisper-1");
+  form.append("model", useGroq ? "whisper-large-v3-turbo" : "whisper-1");
   form.append("response_format", "text");
 
-  const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${s.openai_api_key}` },
-    body: form,
-  });
+  const res = await fetch(
+    useGroq
+      ? "https://api.groq.com/openai/v1/audio/transcriptions"
+      : "https://api.openai.com/v1/audio/transcriptions",
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${useGroq ? s.groq_api_key : s.openai_api_key}` },
+      body: form,
+    }
+  );
   if (!res.ok) return { error: whisperError(res.status, await res.text()) };
   return { text: (await res.text()).trim() };
 }

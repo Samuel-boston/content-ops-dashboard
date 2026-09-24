@@ -289,7 +289,8 @@ export function PostTab({
               cutId,
               caption,
               channels,
-              scheduledFor: when || null,
+              // Converted here so the time means the browser's local time, not the server's.
+              scheduledFor: when ? new Date(when).toISOString() : null,
               coverOffsetMs: Math.round(coverSeconds * 1000),
               shareToFeed,
             });

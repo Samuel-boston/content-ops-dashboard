@@ -7,7 +7,7 @@ import { getDownloadUrl } from "@/lib/integrations/stream";
 import { getWorkspaceSettings, integrationStatus } from "@/lib/workspace";
 import { markVideoPosted } from "@/lib/archive";
 import { mintPhoneToken } from "@/lib/phone-link";
-import { runPublishJob } from "@/app/publishing-actions";
+import { runPublishJob } from "@/lib/publish-runner";
 import type { PublishStatus, TrialPost, TrialStatus } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -336,6 +336,28 @@ export async function vaSaveTrialMetricsAction(
   revalidatePath("/posting");
   revalidatePath("/analytics");
   return { ok: true };
+}
+
+/**
+ * Take a scheduled post back off the schedule. The job is cancelled and the
+ * variant goes back to "to post", so it can be rescheduled or posted by hand.
+ */
+export async function vaCancelScheduledAction(jobId: string) {
+  await requireRole("va", "owner", "admin");
+  const db = supabaseAdmin();
+  const { data: job } = await db.from("publish_jobs").select("status").eq("id", jobId).maybeSingle();
+  if (!job || job.status !== "scheduled") return { error: "That one isn't scheduled any more." };
+  const { error } = await db.from("publish_jobs").update({ status: "cancelled" }).eq("id", jobId);
+  if (error) return { error: error.message };
+  await db
+    .from("trial_posts")
+    .update({ status: "planned", promoted_job_id: null })
+    .eq("promoted_job_id", jobId)
+    .eq("status", "promoted");
+  revalidatePath("/posting");
+  revalidatePath("/publishing");
+  revalidatePath("/calendar");
+  return { ok: true as const };
 }
 
 /** The VA (or a manager) flips a variant between trial reel and main feed. */

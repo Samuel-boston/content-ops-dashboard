@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { updateWorkspaceSettingsAction } from "@/app/settings-actions";
+import { testDriveAction, updateWorkspaceSettingsAction } from "@/app/settings-actions";
 import type { IntegrationStatus } from "@/lib/types";
 
 type Redacted = Record<string, unknown>;
@@ -54,6 +54,8 @@ export function SettingsForm({
 }) {
   const router = useRouter();
   const [msg, setMsg] = useState<string | null>(null);
+  const [driveMsg, setDriveMsg] = useState<{ ok: boolean; message: string } | null>(null);
+  const [testing, setTesting] = useState(false);
   const s = settings as Record<string, string | null>;
 
   return (
@@ -91,11 +93,30 @@ export function SettingsForm({
         <Field name="drive_folder_id" label="Target folder ID" defaultValue={s.drive_folder_id} />
         <Field
           name="drive_service_account"
-          label="Service-account JSON"
+          label="Google login JSON"
           textarea
           defaultValue={s.drive_service_account}
-          hint="Paste the full JSON key. Share the folder with the service account's email."
+          hint="Either a service-account key (for a Shared Drive — add its email as a member) or an “authorized user” login {type, client_id, client_secret, refresh_token} for a personal Google account. Save, then test."
         />
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={testing}
+            onClick={async () => {
+              setTesting(true);
+              setDriveMsg(await testDriveAction());
+              setTesting(false);
+            }}
+            className="rounded-lg border border-line-strong px-3 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
+          >
+            {testing ? "Testing…" : "Test the connection"}
+          </button>
+          {driveMsg ? (
+            <span className={`text-xs ${driveMsg.ok ? "text-emerald-400" : "text-red-400"}`}>{driveMsg.message}</span>
+          ) : (
+            <span className="text-[11px] text-ink-3">Save first — it tests what&rsquo;s saved.</span>
+          )}
+        </div>
       </section>
 
       <section className="rounded-xl border border-line bg-app p-4 space-y-3">

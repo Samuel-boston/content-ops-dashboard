@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth";
-import { runPublishJob } from "@/app/publishing-actions";
+import { runPublishJob } from "@/lib/publish-runner";
 import { isCarouselFormat } from "@/lib/taxonomy";
 import type { TrialPost } from "@/lib/types";
 

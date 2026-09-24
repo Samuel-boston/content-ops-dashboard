@@ -1,7 +1,8 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getFileUrl, isAuthorised, sendMessage } from "@/lib/integrations/telegram";
 import { transcribeAudio } from "@/lib/integrations/whisper";
-import { chatJSON } from "@/lib/integrations/ai";
+import { triageIdea } from "@/lib/intake";
+import { CAROUSEL_FORMAT } from "@/lib/taxonomy";
 
 /**
  * The private automations channel — idea capture, mostly.
@@ -51,20 +52,15 @@ export async function POST(req: Request) {
     const transcribed = url ? await transcribeAudio(url) : null;
     const transcript = transcribed && "text" in transcribed ? transcribed.text : null;
     const notes = transcript || "(voice note received — transcription unavailable)";
-    let title = transcript ? firstLine(transcript, 70) : "Idea from a voice note";
+    let title = "Idea from a voice note";
     let brief: string | null = null;
+    let carousel = false;
 
     if (transcript) {
-      const drafted = await chatJSON<{ title: string; brief: string }>(
-        `You triage quick voice-note ideas for a video content agency. Keep it light — a rough guide for later, not a finished brief.`,
-        `Raw transcript of someone thinking out loud about a video idea:\n"${transcript}"\n\n` +
-          `Give a short working title and a 1-2 sentence rough brief (just enough to remember what they meant). ` +
-          `Respond as JSON: {"title": "...", "brief": "..."}`
-      );
-      if (drafted?.title) {
-        title = drafted.title.trim();
-        brief = drafted.brief?.trim() || null;
-      }
+      const t = await triageIdea(transcript);
+      title = t.title;
+      brief = t.brief;
+      carousel = t.carousel;
     }
 
     const { data: video } = await db
@@ -76,6 +72,7 @@ export async function POST(req: Request) {
         needs_script: true,
         status: "ideation",
         priority: "standard",
+        ...(carousel ? { formats: [CAROUSEL_FORMAT] } : {}),
       })
       .select("id")
       .single();
@@ -86,7 +83,7 @@ export async function POST(req: Request) {
       detail: { hasTranscript: Boolean(transcript), hasDraftedBrief: Boolean(brief) },
     });
     await sendMessage(
-      `💡 Parked in <b>Ideation</b>: “${escapeHtml(title)}”${
+      `💡 Parked in <b>Ideation</b>${carousel ? " as a carousel" : ""}: “${escapeHtml(title)}”${
         transcript ? "" : " — I couldn't transcribe it, so the note is empty."
       }`,
       msg.chat.id
@@ -198,11 +195,12 @@ export async function POST(req: Request) {
     // A shared post is a reference: the link matters more than the words
     // around it, which are usually empty or "look at this".
     const withoutLinks = links.reduce((s, l) => s.replace(l, ""), text).trim();
-    const title = isShare
-      ? withoutLinks
-        ? firstLine(withoutLinks, 70)
-        : `${sourceOf(links[0])} reference`
-      : firstLine(text, 70);
+    // Real words (not just a link) get a proper heading and a format guess;
+    // a bare link keeps the "<source> reference" title.
+    const wordsToTriage = isShare ? withoutLinks : text;
+    const triage = wordsToTriage.length > 0 ? await triageIdea(wordsToTriage) : null;
+    const title = triage ? triage.title : `${sourceOf(links[0])} reference`;
+    const carousel = triage?.carousel ?? false;
 
     const notes = isShare
       ? [withoutLinks, "", "Reference:", ...links].filter(Boolean).join("\n")
@@ -212,10 +210,12 @@ export async function POST(req: Request) {
       .from("videos")
       .insert({
         title,
+        brief: triage?.brief ?? null,
         idea_notes: notes,
         needs_script: true,
         status: "ideation",
         priority: "standard",
+        ...(carousel ? { formats: [CAROUSEL_FORMAT] } : {}),
       })
       .select("id")
       .single();
@@ -243,8 +243,8 @@ export async function POST(req: Request) {
 
     await sendMessage(
       isShare
-        ? `🔗 Saved as an idea with the link attached: “${escapeHtml(title)}”`
-        : `💡 Parked in <b>Ideation</b>: “${escapeHtml(title)}”`,
+        ? `🔗 Saved as an idea with the link attached${carousel ? " (carousel)" : ""}: “${escapeHtml(title)}”`
+        : `💡 Parked in <b>Ideation</b>${carousel ? " as a carousel" : ""}: “${escapeHtml(title)}”`,
       msg.chat.id
     );
     return new Response("ok");

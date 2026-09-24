@@ -2,7 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { notify, notifyTelegram } from "@/lib/notify";
 import { buildDigest, digestHtml, digestTelegram, digestText } from "@/lib/digest";
 import { sendEmail } from "@/lib/integrations/email";
-import { runPublishJob } from "@/app/publishing-actions";
+import { runDuePublishJobs } from "@/lib/publish-runner";
 import { runBackupJob } from "@/lib/backup";
 import { STALLED_AFTER_DAYS, STATUS_LABELS, type VideoStatus } from "@/lib/types";
 
@@ -18,6 +18,9 @@ import { STALLED_AFTER_DAYS, STATUS_LABELS, type VideoStatus } from "@/lib/types
  *   - once a day: back up every content table to Drive, independent of Supabase
  *   - Mondays: push a weekly stage + priority report to Telegram and inboxes
  */
+// Publishing a Reel and backing up every table can each take a while.
+export const maxDuration = 300;
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const secret = process.env.CRON_SECRET;
@@ -108,19 +111,8 @@ export async function GET(req: Request) {
     .select("id");
   out.referencesArchived = archived?.length ?? 0;
 
-  // --- due publish jobs ---
-  const { data: due } = await db
-    .from("publish_jobs")
-    .select("id")
-    .eq("status", "scheduled")
-    .not("scheduled_for", "is", null)
-    .lte("scheduled_for", new Date().toISOString());
-  let published = 0;
-  for (const j of due ?? []) {
-    const r = await runPublishJob(j.id);
-    if (r.ok) published++;
-  }
-  out.publishJobsRun = published;
+  // --- due publish jobs (also run on their own, more often, by /api/cron/publish) ---
+  out.publish = await runDuePublishJobs();
 
   // --- daily backup to Drive (03:00 UTC, or ?backup=1 to force) ---
   if (new Date().getUTCHours() === 3 || url.searchParams.get("backup") === "1") {

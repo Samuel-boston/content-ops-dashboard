@@ -6,6 +6,7 @@ import { useTrackedTransition } from "@/components/ui/Pending";
 import { useToast } from "@/components/ui/Toast";
 import {
   trialPostingKitAction,
+  vaCancelScheduledAction,
   vaMarkTrialPostedAction,
   vaPublishAction,
   variantPhoneTokenAction,
@@ -82,7 +83,9 @@ function TrialCard({
   function publish(schedule: boolean) {
     if (schedule && !when) return toast.error("Pick when it should go out.");
     startTransition(async () => {
-      const res = await vaPublishAction(trial.id, schedule ? when : null);
+      // datetime-local has no time zone; convert here, where the browser knows
+      // the VA's, so "3pm" means 3pm for them and not 3pm on the server.
+      const res = await vaPublishAction(trial.id, schedule ? new Date(when).toISOString() : null);
       if (res?.error) toast.error(res.error);
       else {
         toast.success(res.scheduled ? "Scheduled — it'll go out by itself." : "Posted to Instagram ✓");
@@ -373,6 +376,52 @@ function TrialCard({
   );
 }
 
+function JobRow({ job: j }: { job: PostingJobItem }) {
+  const toast = useToast();
+  const router = useRouter();
+  const [pending, startTransition] = useTrackedTransition();
+  return (
+    <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-2.5 last:border-0">
+      <span
+        className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+          j.status === "failed"
+            ? "bg-red-500/15 text-red-400"
+            : j.status === "publishing"
+              ? "bg-sky-500/15 text-sky-400"
+              : "bg-raised text-ink-3"
+        }`}
+      >
+        {j.status}
+      </span>
+      <p className="min-w-0 flex-1 truncate text-sm">{j.videoTitle}</p>
+      <span className="text-[11px] text-ink-3">
+        {j.scheduled_for
+          ? new Date(j.scheduled_for).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+          : "unscheduled"}
+      </span>
+      {j.error ? <span className="basis-full text-[11px] text-red-400">{j.error}</span> : null}
+      {j.status === "scheduled" ? (
+        <button
+          onClick={() =>
+            startTransition(async () => {
+              const res = await vaCancelScheduledAction(j.id);
+              if (res?.error) toast.error(res.error);
+              else {
+                toast.success("Taken off the schedule — it's back in To post.");
+                router.refresh();
+              }
+            })
+          }
+          disabled={pending}
+          className="rounded-md border border-line px-2 py-1 text-[11px] text-ink-2 hover:border-red-400 hover:text-red-400 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function PostingQueue({
   trials,
   jobs,
@@ -422,7 +471,7 @@ export function PostingQueue({
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-ink-2">Automatic queue (no action needed)</h2>
+        <h2 className="text-sm font-semibold text-ink-2">Scheduled — these go out by themselves</h2>
         <p className="text-[11px] text-ink-3">
           These publish themselves through the Instagram API — listed so nothing gets posted twice.
           {viewerRole === "va" ? " If one shows Failed, tell the team." : ""}
@@ -434,25 +483,7 @@ export function PostingQueue({
         ) : (
           <div className="overflow-hidden rounded-xl border border-line bg-app">
             {jobs.map((j) => (
-              <div key={j.id} className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-2.5 last:border-0">
-                <span
-                  className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                    j.status === "failed"
-                      ? "bg-red-500/15 text-red-400"
-                      : j.status === "publishing"
-                        ? "bg-sky-500/15 text-sky-400"
-                        : "bg-raised text-ink-3"
-                  }`}
-                >
-                  {j.status}
-                </span>
-                <p className="min-w-0 flex-1 truncate text-sm">{j.videoTitle}</p>
-                <span className="text-[11px] text-ink-3">
-                  {j.scheduled_for
-                    ? new Date(j.scheduled_for).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
-                    : "unscheduled"}
-                </span>
-              </div>
+              <JobRow key={j.id} job={j} />
             ))}
           </div>
         )}
