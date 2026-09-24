@@ -185,13 +185,20 @@ export function previousStage(status: VideoStatus, carousel = false): VideoStatu
   // -> Creative Review -> Ready to Post, no filming, brief, or edit chain.
   // Checked first: a plain video's "ready_to_post -> in_review" rule below
   // would otherwise win and send a carousel somewhere it never was.
-  if (carousel) {
+  // These three stages only ever exist for carousels, so they count as one
+  // even when the caller didn't say so.
+  const carouselOnly = status === "needs_creatives" || status === "creative_review" || status === "creative_revisions";
+  if (carousel || carouselOnly) {
     if (status === "needs_creatives") return "script_review";
     if (status === "creative_review") return "needs_creatives";
     if (status === "creative_revisions") return "creative_review";
     if (status === "ready_to_post") return "creative_review";
     if (status === "editor_brief") return "script_review"; // legacy safety net
   }
+  // A video's script goes straight from Script Review to Ready to Film, so the
+  // step before Ready to Film is Scripting — never the carousel-only stages
+  // that sit between them in the stage order.
+  if (status === "ready_to_film") return "scripting";
   if (status === "awaiting_variants" || status === "ready_to_post") return "in_review";
   if (status === "revisions") return "in_review";
   const i = STATUS_ORDER.indexOf(status);
@@ -285,6 +292,8 @@ export interface Video {
   parked_reason: string | null;
   raw_footage_url: string | null;
   drive_file_url: string | null;
+  /** The video's own folder in the Drive archive (<month>/<title>/). */
+  drive_folder_url: string | null;
   archived_at: string | null;
   /** Generated column: urgent=3, high=2, standard=1. Ordering happens on this. */
   priority_rank: number;

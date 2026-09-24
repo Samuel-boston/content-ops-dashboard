@@ -119,7 +119,10 @@ async function mirrorFootageToDrive(videoId: string, storagePath: string, label?
     const { uploadFromUrl } = await import("@/lib/integrations/drive");
     // Named after the file as it was uploaded, not the random storage key.
     const name = label || (storagePath.split("/").pop() ?? "footage.mp4");
-    const link = await uploadFromUrl(signed.signedUrl, name);
+    // Into the video's own folder (<month>/<title>/Raw footage), not the Drive root.
+    const { videoFolder } = await import("@/lib/drive-layout");
+    const folder = await videoFolder(videoId);
+    const link = await uploadFromUrl(signed.signedUrl, name, await folder.sub("Raw footage"), "application/octet-stream");
     await db.from("video_assets").update({ drive_url: link }).eq("storage_path", storagePath);
     // Storage copy is redundant once Drive holds it.
     await db.storage.from("footage").remove([storagePath]);

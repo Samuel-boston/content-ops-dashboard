@@ -14,6 +14,9 @@ import { MusicPicker } from "@/components/workspace/MusicPicker";
 import { ScreenRecorder, type ScreenCapture } from "@/components/workspace/ScreenRecorder";
 import { VoicePlayer, VoiceRecorder, type VoiceCapture } from "@/components/workspace/Voice";
 import { uploadCommentMedia } from "@/lib/upload-client";
+import { sendWithProgress } from "@/lib/upload-progress";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/limits";
+import { UploadStatus, type UploadState } from "@/components/ui/UploadStatus";
 import { saveBriefVoiceAction } from "@/app/script-actions";
 import { updateVideoAction } from "@/app/actions";
 import { createFootageUploadUrlAction, registerAssetAction } from "@/app/asset-actions";
@@ -78,7 +81,8 @@ export function EditorBriefWorkspace({
   const [brief, setBrief] = useState(video.brief ?? "");
   const [priority, setPriority] = useState<Priority>(video.priority);
   const [screenRecording, setScreenRecording] = useState(false);
-  const [uploadingClip, setUploadingClip] = useState(false);
+  const [clipUpload, setClipUpload] = useState<UploadState | null>(null);
+  const uploadingClip = clipUpload?.phase === "uploading";
   const footageInputRef = useRef<HTMLInputElement>(null);
 
   const clips = assets.filter((a) => a.kind === "other");
@@ -115,64 +119,57 @@ export function EditorBriefWorkspace({
     }
   };
 
-  async function onClipDone(capture: ScreenCapture) {
-    setScreenRecording(false);
-    setUploadingClip(true);
-    const ext = capture.mimeType.includes("mp4") ? "mp4" : "webm";
-    const up = await createFootageUploadUrlAction(video.id, `brief-clip.${ext}`);
+  /** Send one file to the video's attachments, with visible progress. */
+  async function sendClip(blob: Blob, name: string, label: string, title: string, doneNote: string) {
+    setClipUpload({ phase: "uploading", title, pct: 0, detail: name });
+    const up = await createFootageUploadUrlAction(video.id, name);
     if (!up?.ok) {
-      toast.error(up?.error ?? "Could not start the upload.");
-      setUploadingClip(false);
+      setClipUpload({ phase: "error", title, detail: up?.error ?? "Could not start the upload." });
       return;
     }
     try {
-      const put = await fetch(up.signedUrl, {
+      await sendWithProgress(up.signedUrl, blob, {
         method: "PUT",
-        body: capture.blob,
         headers: { "x-upsert": "true" },
+        onProgress: (pct) => setClipUpload({ phase: "uploading", title, pct, detail: name }),
       });
-      if (!put.ok) throw new Error(put.status === 413 ? "That recording is too large to upload." : `Upload failed (${put.status}).`);
       const res = await registerAssetAction({
         videoId: video.id,
-        label: `Screen recording — ${new Date().toLocaleDateString()}`,
+        label,
         storagePath: up.path,
-        sizeBytes: capture.blob.size,
+        sizeBytes: blob.size,
         kind: "other",
       });
-      if (toast.result(res, "Recording added.")) router.refresh();
+      if ("error" in res && res.error) throw new Error(res.error);
+      setClipUpload({ phase: "done", title, detail: doneNote });
+      router.refresh();
     } catch (e) {
-      toast.error((e as Error).message);
+      setClipUpload({ phase: "error", title, detail: (e as Error).message });
     }
-    setUploadingClip(false);
+  }
+
+  async function onClipDone(capture: ScreenCapture) {
+    setScreenRecording(false);
+    const ext = capture.mimeType.includes("mp4") ? "mp4" : "webm";
+    await sendClip(
+      capture.blob,
+      `brief-clip.${ext}`,
+      `Screen recording — ${new Date().toLocaleDateString()}`,
+      "Screen recording",
+      "The recording is attached to the brief."
+    );
   }
 
   async function uploadClipFile(file: File) {
-    if (file.size > 50 * 1024 * 1024) {
-      toast.error(`${file.name} is over the 50 MB upload limit.`);
-      return;
-    }
-    setUploadingClip(true);
-    const up = await createFootageUploadUrlAction(video.id, file.name);
-    if (!up?.ok) {
-      toast.error(up?.error ?? "Could not start the upload.");
-      setUploadingClip(false);
-      return;
-    }
-    try {
-      const put = await fetch(up.signedUrl, { method: "PUT", body: file, headers: { "x-upsert": "true" } });
-      if (!put.ok) throw new Error(put.status === 413 ? "That file is over the 50 MB upload limit." : `Upload failed (${put.status}).`);
-      const res = await registerAssetAction({
-        videoId: video.id,
-        label: file.name,
-        storagePath: up.path,
-        sizeBytes: file.size,
-        kind: "other",
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setClipUpload({
+        phase: "error",
+        title: "Reference file",
+        detail: `${file.name} is over the ${MAX_UPLOAD_MB} MB upload limit.`,
       });
-      if (toast.result(res, "Reference added.")) router.refresh();
-    } catch (e) {
-      toast.error((e as Error).message);
+      return;
     }
-    setUploadingClip(false);
+    await sendClip(file, file.name, file.name, "Reference file", `${file.name} is attached to the brief.`);
   }
 
   return (
@@ -317,6 +314,7 @@ export function EditorBriefWorkspace({
               </div>
             ) : null}
 
+            {clipUpload ? <UploadStatus state={clipUpload} className="mb-2" /> : null}
             {screenRecording ? (
               <ScreenRecorder onDone={onClipDone} onCancel={() => setScreenRecording(false)} />
             ) : (
@@ -337,7 +335,7 @@ export function EditorBriefWorkspace({
                   className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
                 >
                   <IconFile size={13} />
-                  {uploadingClip ? "Uploading…" : "Upload a clip or screenshot"}
+                  Upload a clip or screenshot
                 </button>
                 <input
                   ref={footageInputRef}

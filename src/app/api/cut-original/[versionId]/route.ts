@@ -1,7 +1,8 @@
 import { getCurrentProfile } from "@/lib/auth";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { ORIGINAL_COLUMNS, originalResponse } from "@/lib/cut-files";
+import { ORIGINAL_COLUMNS, hasOriginal, originalResponse } from "@/lib/cut-files";
+import { getDownloadUrl } from "@/lib/integrations/stream";
 
 export const maxDuration = 300;
 
@@ -19,9 +20,16 @@ export async function GET(_req: Request, ctx: { params: Promise<{ versionId: str
   const db = privileged ? supabaseAdmin() : await supabaseServer();
   const { data: v } = await db
     .from("cut_versions")
-    .select(ORIGINAL_COLUMNS)
+    .select(`stream_uid, ${ORIGINAL_COLUMNS}`)
     .eq("id", versionId)
     .maybeSingle();
   if (!v) return new Response("Not found.", { status: 404 });
-  return originalResponse(v as never);
+  if (hasOriginal(v as never)) return originalResponse(v as never);
+
+  // Versions uploaded before originals were kept: Stream's copy is all there is.
+  if (v.stream_uid) {
+    const dl = await getDownloadUrl(v.stream_uid as string).catch(() => null);
+    if (dl) return Response.redirect(dl, 302);
+  }
+  return new Response("No downloadable file for this version yet.", { status: 404 });
 }

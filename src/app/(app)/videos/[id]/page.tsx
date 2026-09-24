@@ -1,4 +1,6 @@
 import { notFound, redirect } from "next/navigation";
+import { after } from "next/server";
+import { syncPendingVersions } from "@/lib/stream-sync";
 import { isManager, requireUser } from "@/lib/auth";
 import { getVideo, listTaxonomyCustoms, listTeam } from "@/app/actions";
 import { PLANNING_STAGES, type VideoStatus } from "@/lib/types";
@@ -27,6 +29,8 @@ import type { CutComment } from "@/lib/types";
 export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
   const { id } = await params;
   const viewer = await requireUser();
+  // Finish any upload whose page was closed while Cloudflare was still processing.
+  after(() => syncPendingVersions(id));
 
   const [
     video,

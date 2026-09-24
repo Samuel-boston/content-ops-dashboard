@@ -1,9 +1,10 @@
 "use client";
 
+import { sendWithProgress } from "@/lib/upload-progress";
+import { UploadStatus, type UploadState } from "@/components/ui/UploadStatus";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTrackedTransition } from "@/components/ui/Pending";
-import { useToast } from "@/components/ui/Toast";
 import {
   createCarouselUploadUrlAction,
   deleteCarouselImageAction,
@@ -21,22 +22,15 @@ import type { CarouselImage } from "@/lib/types";
  */
 export function CarouselDeliver({ videoId, images }: { videoId: string; images: CarouselImage[] }) {
   const router = useRouter();
-  const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [, startTransition] = useTrackedTransition();
-  const [uploading, setUploading] = useState<{ done: number; total: number } | null>(null);
+  const [upload, setUpload] = useState<UploadState | null>(null);
+  const uploading = upload?.phase === "uploading" ? upload : null;
 
-  async function uploadOne(file: File) {
+  async function uploadOne(file: File, onProgress: (pct: number) => void) {
     const res = await createCarouselUploadUrlAction(videoId, file.name);
     if (!res?.ok) throw new Error(res?.error ?? "Could not start upload.");
-    await new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("PUT", res.signedUrl);
-      xhr.setRequestHeader("x-upsert", "true");
-      xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status})`)));
-      xhr.onerror = () => reject(new Error("Upload failed"));
-      xhr.send(file);
-    });
+    await sendWithProgress(res.signedUrl, file, { method: "PUT", headers: { "x-upsert": "true" }, onProgress });
     const r = await registerCarouselImageAction({ videoId, storagePath: res.path, sizeBytes: file.size });
     if (r?.error) throw new Error(r.error);
   }
@@ -44,17 +38,18 @@ export function CarouselDeliver({ videoId, images }: { videoId: string; images: 
   async function uploadFiles(fileList: FileList | File[]) {
     const files = Array.from(fileList).filter((f) => f.type.startsWith("image/"));
     if (files.length === 0) return;
-    setUploading({ done: 0, total: files.length });
+    const title = files.length === 1 ? "Carousel image" : `${files.length} carousel images`;
     try {
-      for (const f of files) {
-        await uploadOne(f);
-        setUploading((s) => (s ? { done: s.done + 1, total: s.total } : s));
+      for (const [i, f] of files.entries()) {
+        const step = files.length > 1 ? `Image ${i + 1} of ${files.length}` : undefined;
+        setUpload({ phase: "uploading", title, pct: 0, step, detail: f.name });
+        await uploadOne(f, (pct) => setUpload({ phase: "uploading", title, pct, step, detail: f.name }));
       }
+      setUpload({ phase: "done", title, detail: "Added to the carousel." });
       router.refresh();
     } catch (e) {
-      toast.error((e as Error).message);
+      setUpload({ phase: "error", title, detail: (e as Error).message });
     }
-    setUploading(null);
   }
 
   return (
@@ -142,14 +137,10 @@ export function CarouselDeliver({ videoId, images }: { videoId: string; images: 
           e.preventDefault();
           if (e.dataTransfer.files?.length) uploadFiles(e.dataTransfer.files);
         }}
-        onClick={() => uploading === null && inputRef.current?.click()}
+        onClick={() => !uploading && inputRef.current?.click()}
         className="cursor-pointer rounded-lg border border-dashed border-line-strong px-3 py-4 text-center text-xs text-ink-2 hover:border-accent"
       >
-        {uploading
-          ? `Uploading ${uploading.done}/${uploading.total}…`
-          : images.length > 0
-            ? "Add more images"
-            : "Drop carousel images here, or click to choose"}
+        {images.length > 0 ? "Add more images" : "Drop carousel images here, or click to choose"}
         <input
           ref={inputRef}
           type="file"
@@ -162,6 +153,7 @@ export function CarouselDeliver({ videoId, images }: { videoId: string; images: 
           }}
         />
       </div>
+      {upload ? <UploadStatus state={upload} /> : null}
     </div>
   );
 }

@@ -236,7 +236,7 @@ function TrialCard({
               disabled={pending}
               className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hi disabled:opacity-50"
             >
-              {trial.images?.length ? `Get the images (${trial.images.length})` : "Get the file"}
+              {trial.images?.length ? `Download the images (${trial.images.length})` : "Download the video"}
             </button>
             <button
               onClick={showPhoneCode}

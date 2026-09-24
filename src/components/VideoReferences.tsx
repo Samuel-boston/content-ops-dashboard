@@ -1,5 +1,7 @@
 "use client";
 
+import { sendWithProgress } from "@/lib/upload-progress";
+import { UploadStatus, type UploadState } from "@/components/ui/UploadStatus";
 import { useRef, useState } from "react";
 import { useTrackedTransition } from "@/components/ui/Pending";
 import { useRouter } from "next/navigation";
@@ -22,18 +24,27 @@ export function VideoReferences({
   const [link, setLink] = useState("");
   const [note, setNote] = useState("");
   const [, startTransition] = useTrackedTransition();
-  const [busy, setBusy] = useState(false);
+  const [upload, setUpload] = useState<UploadState | null>(null);
+  const busy = upload?.phase === "uploading";
 
   async function uploadImage(file: File) {
-    setBusy(true);
-    const res = await createReferenceUploadUrlAction(file.name);
-    if (res?.ok) {
-      await fetch(res.signedUrl, { method: "PUT", body: file, headers: { "x-upsert": "true" } });
+    const title = "Reference image";
+    setUpload({ phase: "uploading", title, pct: 0, detail: file.name });
+    try {
+      const res = await createReferenceUploadUrlAction(file.name);
+      if (!res?.ok) throw new Error("Could not start the upload.");
+      await sendWithProgress(res.signedUrl, file, {
+        method: "PUT",
+        headers: { "x-upsert": "true" },
+        onProgress: (pct) => setUpload({ phase: "uploading", title, pct, detail: file.name }),
+      });
       await addReferenceAction({ videoId, kind: "image", storagePath: res.path, note });
       setNote("");
+      setUpload({ phase: "done", title, detail: `${file.name} is attached.` });
       router.refresh();
+    } catch (e) {
+      setUpload({ phase: "error", title, detail: (e as Error).message });
     }
-    setBusy(false);
   }
 
   return (
@@ -112,7 +123,7 @@ export function VideoReferences({
             disabled={busy}
             className="rounded bg-hover px-2 py-1 text-xs hover:bg-line-strong disabled:opacity-50"
           >
-            {busy ? "…" : "Upload image"}
+            Upload image
           </button>
           <input
             ref={inputRef}
@@ -122,9 +133,11 @@ export function VideoReferences({
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) uploadImage(f);
+              e.target.value = "";
             }}
           />
         </div>
+        {upload ? <UploadStatus state={upload} /> : null}
       </div>
     </div>
   );

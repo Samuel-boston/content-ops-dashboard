@@ -10,6 +10,8 @@ import {
 } from "@/app/asset-actions";
 import { useToast } from "@/components/ui/Toast";
 import type { VideoAsset } from "@/lib/types";
+import { sendWithProgress } from "@/lib/upload-progress";
+import { UploadStatus, type UploadState } from "@/components/ui/UploadStatus";
 
 import { MAX_UPLOAD_BYTES } from "@/lib/limits"; // see lib/limits.ts — the plan's per-file cap
 
@@ -37,36 +39,35 @@ export function VideoFootage({
   const toast = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const [link, setLink] = useState("");
-  const [progress, setProgress] = useState<number | null>(null);
+  const [state, setState] = useState<UploadState | null>(null);
+  const uploading = state?.phase === "uploading";
   const [, startTransition] = useTrackedTransition();
   // Raw footage only. Finished-video links are the deliverable and have their
   // own panel; screenshots and clips attached to the brief live with the brief.
   assets = assets.filter((a) => a.kind === "raw");
 
   async function upload(file: File) {
+    const title = "Raw footage";
     if (file.size > MAX_UPLOAD_BYTES) {
-      toast.error(
-        `${file.name} is ${Math.round(file.size / 1024 / 1024)} MB — over the ${MAX_UPLOAD_BYTES / 1024 / 1024} MB upload limit. Paste a Drive or Dropbox link below instead.`
-      );
+      setState({
+        phase: "error",
+        title,
+        detail: `${file.name} is ${Math.round(file.size / 1024 / 1024)} MB — over the ${MAX_UPLOAD_BYTES / 1024 / 1024} MB upload limit. Paste a Drive or Dropbox link below instead.`,
+      });
       return;
     }
-    setProgress(0);
+    const detail = `Uploading ${file.name}`;
+    setState({ phase: "uploading", title, pct: 0, detail });
     const res = await createFootageUploadUrlAction(videoId, file.name);
     if (!res?.ok) {
-      toast.error(res?.error ?? "Could not start upload.");
-      setProgress(null);
+      setState({ phase: "error", title, detail: res?.error ?? "Could not start upload." });
       return;
     }
     try {
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("PUT", res.signedUrl);
-        xhr.setRequestHeader("x-upsert", "true");
-        xhr.upload.onprogress = (e) =>
-          e.lengthComputable && setProgress(Math.round((e.loaded / e.total) * 100));
-        xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(xhr.status === 413 ? "That file is too large to upload — paste a link instead." : `Upload failed (${xhr.status})`)));
-        xhr.onerror = () => reject(new Error("Upload failed"));
-        xhr.send(file);
+      await sendWithProgress(res.signedUrl, file, {
+        method: "PUT",
+        headers: { "x-upsert": "true" },
+        onProgress: (pct) => setState({ phase: "uploading", title, pct, detail }),
       });
       const r = await registerAssetAction({
         videoId,
@@ -74,13 +75,20 @@ export function VideoFootage({
         storagePath: res.path,
         sizeBytes: file.size,
       });
-      if (toast.result(r, driveConfigured ? "Uploaded — mirroring to Drive" : "Footage uploaded")) {
-        router.refresh();
-      }
+      if ("error" in r && r.error) throw new Error(r.error);
+      setState(
+        driveConfigured
+          ? {
+              phase: "processing",
+              title,
+              detail: `${file.name} is saved. It is being copied to Google Drive in the background.`,
+            }
+          : { phase: "done", title, detail: `${file.name} is saved.` }
+      );
+      router.refresh();
     } catch (e) {
-      toast.error((e as Error).message);
+      setState({ phase: "error", title, detail: (e as Error).message });
     }
-    setProgress(null);
   }
 
   return (
@@ -104,6 +112,15 @@ export function VideoFootage({
               {a.size_bytes ? (
                 <span className="shrink-0 font-mono text-[11px] text-ink-3">
                   {size(a.size_bytes)}
+                </span>
+              ) : null}
+              {a.storage_path && !a.drive_url && driveConfigured ? (
+                <span className="shrink-0 text-[10px] text-ink-3" title="Uploaded — copying to Google Drive in the background">
+                  Copying to Drive…
+                </span>
+              ) : a.drive_url ? (
+                <span className="shrink-0 text-[10px] text-ok" title="Saved in Google Drive">
+                  In Drive ✓
                 </span>
               ) : null}
               {/* One way to get a file, whoever you are: through the dashboard, which
@@ -149,10 +166,10 @@ export function VideoFootage({
           const f = e.dataTransfer.files?.[0];
           if (f) upload(f);
         }}
-        onClick={() => progress === null && inputRef.current?.click()}
+        onClick={() => !uploading && inputRef.current?.click()}
         className="cursor-pointer rounded-lg border border-dashed border-line-strong px-3 py-4 text-center text-xs text-ink-2 hover:border-accent"
       >
-        {progress !== null ? `Uploading… ${progress}%` : "Drop raw footage here, or click to choose"}
+        Drop raw footage here, or click to choose
         <input
           ref={inputRef}
           type="file"
@@ -160,9 +177,11 @@ export function VideoFootage({
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) upload(f);
+            e.target.value = "";
           }}
         />
       </div>
+      {state ? <UploadStatus state={state} className="mt-2" /> : null}
 
       <div className="mt-2 flex gap-2">
         <input

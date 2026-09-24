@@ -16,6 +16,7 @@ import {
 import { VoiceRecorder, VoicePlayer, type VoiceCapture } from "@/components/workspace/Voice";
 import { ScreenRecorder, type ScreenCapture } from "@/components/workspace/ScreenRecorder";
 import { uploadCommentMedia } from "@/lib/upload-client";
+import { UploadStatus, type UploadState } from "@/components/ui/UploadStatus";
 import { displayName, fileSize, timeRange } from "@/lib/format";
 import type { CommentAttachment, CommentVisibility, Drawing, Profile } from "@/lib/types";
 import type { Selection } from "@/components/workspace/Timeline";
@@ -84,7 +85,8 @@ export function Composer({
   const [recording, setRecording] = useState(false);
   const [screenRec, setScreenRec] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [upload, setUpload] = useState<UploadState | null>(null);
+  const uploading = upload?.phase === "uploading";
   const [menu, setMenu] = useState<"assignee" | "visibility" | "mention" | null>(null);
 
   const fileInput = useRef<HTMLInputElement>(null);
@@ -134,19 +136,18 @@ export function Composer({
         toast.error("That recording is too large to attach. Try a shorter one.");
         return;
       }
-      setUploading(true);
+      const ext = capture.mimeType.includes("mp4") ? "mp4" : "webm";
+      const name = `screen-recording-${Math.round(capture.duration)}s.${ext}`;
+      const title = "Screen recording";
+      setUpload({ phase: "uploading", title, pct: 0, detail: name });
       try {
-        const ext = capture.mimeType.includes("mp4") ? "mp4" : "webm";
-        const up = await uploadCommentMedia(
-          capture.blob,
-          `screen-recording-${Math.round(capture.duration)}s.${ext}`,
-          viewer.id
+        const up = await uploadCommentMedia(capture.blob, name, viewer.id, (pct) =>
+          setUpload({ phase: "uploading", title, pct, detail: name })
         );
         setAttachments((prev) => [...prev, up]);
+        setUpload({ phase: "done", title, detail: name, doneText: "Attached to your comment — press send to post it." });
       } catch (e) {
-        toast.error((e as Error).message);
-      } finally {
-        setUploading(false);
+        setUpload({ phase: "error", title, detail: (e as Error).message });
       }
     },
     [viewer.id, toast]
@@ -154,16 +155,29 @@ export function Composer({
 
   async function addFiles(files: FileList | null) {
     if (!files?.length) return;
-    setUploading(true);
+    const list = [...files];
+    const title = list.length === 1 ? "Attachment" : `${list.length} attachments`;
+    const progress = new Array<number>(list.length).fill(0);
+    const detail = list.map((f) => f.name).join(", ");
+    setUpload({ phase: "uploading", title, pct: 0, detail });
     try {
       const uploaded = await Promise.all(
-        [...files].map((f) => uploadCommentMedia(f, f.name, viewer.id))
+        list.map((f, i) =>
+          uploadCommentMedia(f, f.name, viewer.id, (pct) => {
+            progress[i] = pct;
+            setUpload({
+              phase: "uploading",
+              title,
+              pct: Math.round(progress.reduce((a, b) => a + b, 0) / list.length),
+              detail,
+            });
+          })
+        )
       );
       setAttachments((prev) => [...prev, ...uploaded]);
+      setUpload({ phase: "done", title, detail, doneText: "Attached to your comment — press send to post it." });
     } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setUploading(false);
+      setUpload({ phase: "error", title, detail: (e as Error).message });
     }
   }
 
@@ -195,12 +209,18 @@ export function Composer({
       let voicePath: string | null = null;
       if (voice) {
         const ext = voice.capture.blob.type.includes("mp4") ? "mp4" : "webm";
-        const up = await uploadCommentMedia(
-          voice.capture.blob,
-          `voice-note.${ext}`,
-          viewer.id
-        );
-        voicePath = up.path;
+        const title = "Voice note";
+        setUpload({ phase: "uploading", title, pct: 0, detail: "Sending your comment" });
+        try {
+          const up = await uploadCommentMedia(voice.capture.blob, `voice-note.${ext}`, viewer.id, (pct) =>
+            setUpload({ phase: "uploading", title, pct, detail: "Sending your comment" })
+          );
+          voicePath = up.path;
+          setUpload(null);
+        } catch (e) {
+          setUpload({ phase: "error", title, detail: (e as Error).message });
+          return;
+        }
       }
       const res = await onSubmit({
         body: body.trim(),
@@ -219,6 +239,7 @@ export function Composer({
       // Reset for the next note but keep the panel open — reviewers usually
       // leave several in a row.
       setBody("");
+      setUpload(null);
       setAttachments([]);
       setVoice(null);
       setAssigneeId(null);
@@ -370,6 +391,8 @@ export function Composer({
             ))}
           </div>
         ) : null}
+
+        {upload ? <UploadStatus state={upload} /> : null}
 
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-1.5">

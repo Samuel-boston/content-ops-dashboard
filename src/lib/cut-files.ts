@@ -2,6 +2,7 @@ import "server-only";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { driveFileIdFromLink, openDriveFile, uploadFromUrl } from "@/lib/integrations/drive";
 import { getWorkspaceSettings } from "@/lib/workspace";
+import { videoFolder } from "@/lib/drive-layout";
 
 /**
  * The original file of a cut version.
@@ -59,13 +60,21 @@ export async function mirrorCutOriginalToDrive(versionId: string): Promise<void>
     const db = supabaseAdmin();
     const { data: v } = await db
       .from("cut_versions")
-      .select("original_path, original_name, cut_id, version")
+      .select("original_path, original_name, cut_id, version, video_cuts (label, video_id)")
       .eq("id", versionId)
       .maybeSingle();
     if (!v?.original_path) return;
     const { data: signed } = await db.storage.from("footage").createSignedUrl(v.original_path, 900);
     if (!signed?.signedUrl) return;
-    const link = await uploadFromUrl(signed.signedUrl, (v.original_name as string) || "cut.mp4");
+    // Into the video's own folder (<month>/<title>/Finished video), not the Drive root.
+    const cut = v.video_cuts as unknown as { label: string; video_id: string } | null;
+    let parent: string | undefined;
+    if (cut?.video_id) {
+      const folder = await videoFolder(cut.video_id);
+      parent = await folder.sub("Finished video");
+    }
+    const name = `${cut?.label ? `${cut.label} v${v.version} — ` : ""}${(v.original_name as string) || "cut.mp4"}`;
+    const link = await uploadFromUrl(signed.signedUrl, name, parent);
     await db.from("cut_versions").update({ original_drive_url: link, original_path: null }).eq("id", versionId);
     await db.storage.from("footage").remove([v.original_path as string]);
   } catch {

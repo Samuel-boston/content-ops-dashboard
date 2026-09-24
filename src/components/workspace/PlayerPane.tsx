@@ -8,6 +8,7 @@ import { Timeline, type Selection } from "@/components/workspace/Timeline";
 import {
   IconChevronDown,
   IconComment,
+  IconDownload,
   IconDraw,
   IconFullscreen,
   IconLayers,
@@ -207,6 +208,19 @@ export function PlayerPane({
               </>
             ) : null}
           </div>
+        ) : null}
+
+        {/* Anyone who can open this cut can take the file away — the untouched
+            upload where there is one, Stream's copy for older versions. */}
+        {version?.status === "ready" ? (
+          <a
+            href={`/api/cut-original/${version.id}`}
+            title={`Download version ${version.version}`}
+            className="flex shrink-0 items-center gap-1.5 rounded-md bg-raised px-2 py-1 text-[11px] font-semibold text-ink-2 hover:bg-hover hover:text-ink"
+          >
+            <IconDownload size={12} />
+            Download the video
+          </a>
         ) : null}
 
         {/* Allowed to shrink and wrap: the stage controls grew past a phone's

@@ -60,6 +60,7 @@ function forViewOnly(rows: VideoWithEditor[] | null): VideoWithEditor[] {
         frameio_url: null,
         raw_footage_url: null,
         drive_file_url: null,
+        drive_folder_url: null,
       }) as VideoWithEditor
   );
 }

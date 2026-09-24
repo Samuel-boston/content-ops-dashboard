@@ -260,6 +260,13 @@ export const IconFile = (p: Props) => (
     <path d="M13.5 3.5V8.5h5" />
   </Svg>
 );
+export const IconDownload = (p: Props) => (
+  <Svg {...p}>
+    <path d="M12 4v11" />
+    <path d="M7.5 10.5 12 15l4.5-4.5" />
+    <path d="M5 19.5h14" />
+  </Svg>
+);
 export const IconScreenRecord = (p: Props) => (
   <Svg {...p}>
     <rect x="2.5" y="4" width="19" height="13" rx="2" />

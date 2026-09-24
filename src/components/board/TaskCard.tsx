@@ -1,5 +1,6 @@
 "use client";
 
+import { sendWithProgress } from "@/lib/upload-progress";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -43,6 +44,7 @@ export function TaskCardBody({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [footageState, setFootageState] = useState<"idle" | "uploading" | "done">("idle");
+  const [footagePct, setFootagePct] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -52,6 +54,8 @@ export function TaskCardBody({
 
   async function uploadFootage(file: File) {
     setFootageState("uploading");
+    setFootagePct(0);
+    toast.info(`Uploading ${file.name} — keep this page open until it finishes.`);
     const res = await createFootageUploadUrlAction(card.id, file.name);
     if (!res?.ok) {
       toast.error(res?.error ?? "Could not start upload.");
@@ -59,17 +63,14 @@ export function TaskCardBody({
       return;
     }
     try {
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("PUT", res.signedUrl);
-        xhr.setRequestHeader("x-upsert", "true");
-        xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status})`)));
-        xhr.onerror = () => reject(new Error("Upload failed"));
-        xhr.send(file);
+      await sendWithProgress(res.signedUrl, file, {
+        method: "PUT",
+        headers: { "x-upsert": "true" },
+        onProgress: setFootagePct,
       });
       await registerAssetAction({ videoId: card.id, label: file.name, storagePath: res.path, sizeBytes: file.size });
       setFootageState("done");
-      toast.success("Footage added.");
+      toast.success(`${file.name} uploaded. It finishes copying to Drive on its own — you can close the page.`);
       router.refresh();
       setTimeout(() => setFootageState("idle"), 1800);
     } catch (e) {
@@ -145,7 +146,7 @@ export function TaskCardBody({
             className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition hover:bg-black/50 hover:opacity-100"
           >
             {footageState === "uploading" ? (
-              <span className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-white border-t-transparent" />
+              <span className="text-[9px] font-semibold text-white">{footagePct}%</span>
             ) : footageState === "done" ? (
               "✓"
             ) : (

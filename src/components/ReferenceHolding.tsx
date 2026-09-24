@@ -1,5 +1,7 @@
 "use client";
 
+import { sendWithProgress } from "@/lib/upload-progress";
+import { UploadStatus, type UploadState } from "@/components/ui/UploadStatus";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -15,6 +17,7 @@ export function ReferenceHolding({ items }: { items: ReferenceItem[] }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [link, setLink] = useState("");
   const [note, setNote] = useState("");
+  const [upload, setUpload] = useState<UploadState | null>(null);
   const [tab, setTab] = useState<"open" | "archived">("open");
 
   const open = items.filter((i) => i.status === "open" || i.status === "used" || i.status === "dismissed");
@@ -22,12 +25,22 @@ export function ReferenceHolding({ items }: { items: ReferenceItem[] }) {
   const shown = tab === "open" ? open : archived;
 
   async function uploadImage(file: File) {
-    const res = await createReferenceUploadUrlAction(file.name);
-    if (res?.ok) {
-      await fetch(res.signedUrl, { method: "PUT", body: file, headers: { "x-upsert": "true" } });
+    const title = "Reference image";
+    setUpload({ phase: "uploading", title, pct: 0, detail: file.name });
+    try {
+      const res = await createReferenceUploadUrlAction(file.name);
+      if (!res?.ok) throw new Error("Could not start the upload.");
+      await sendWithProgress(res.signedUrl, file, {
+        method: "PUT",
+        headers: { "x-upsert": "true" },
+        onProgress: (pct) => setUpload({ phase: "uploading", title, pct, detail: file.name }),
+      });
       await addReferenceAction({ kind: "image", storagePath: res.path, note });
       setNote("");
+      setUpload({ phase: "done", title, detail: `${file.name} is saved.` });
       router.refresh();
+    } catch (e) {
+      setUpload({ phase: "error", title, detail: (e as Error).message });
     }
   }
 
@@ -77,9 +90,11 @@ export function ReferenceHolding({ items }: { items: ReferenceItem[] }) {
             onChange={(e) => {
               const f = e.target.files?.[0];
               if (f) uploadImage(f);
+              e.target.value = "";
             }}
           />
         </div>
+        {upload ? <UploadStatus state={upload} className="mt-2" /> : null}
       </div>
 
       <div className="flex gap-1">

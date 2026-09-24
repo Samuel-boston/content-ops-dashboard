@@ -108,18 +108,117 @@ async function uploadBytes(
   return res;
 }
 
-/** Upload a file from a URL into the configured Drive folder. Returns webViewLink. */
-export async function uploadFromUrl(sourceUrl: string, name: string): Promise<string> {
+/** Signs in and returns the token plus the configured root folder — the base of every archive path. */
+export async function driveSession(): Promise<{ token: string; rootId: string }> {
   const s = await getWorkspaceSettings();
   if (!s.drive_folder_id || !s.drive_service_account) throw new NotConfiguredError("Google Drive");
-  const sa = s.drive_service_account as DriveCredentials;
-  const token = await getAccessToken(sa);
+  const token = await getAccessToken(s.drive_service_account as DriveCredentials);
+  return { token, rootId: s.drive_folder_id };
+}
 
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+const esc = (v: string) => v.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+const driveList = (token: string, query: string, fields: string) =>
+  fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=${fields}&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&pageSize=100`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  ).then((r) => r.json());
+
+async function createFolder(token: string, parentId: string, name: string, appProperties?: Record<string, string>): Promise<string> {
+  const created = await fetch("https://www.googleapis.com/drive/v3/files?fields=id&supportsAllDrives=true", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ name, mimeType: FOLDER_MIME, parents: [parentId], ...(appProperties ? { appProperties } : {}) }),
+  }).then((r) => r.json());
+  if (!created.id) throw new Error(`Could not create folder "${name}": ${JSON.stringify(created)}`);
+  return created.id as string;
+}
+
+/** Finds a folder by name inside `parentId`, creating it if it isn't there yet. */
+export async function ensureFolder(token: string, parentId: string, name: string): Promise<string> {
+  const list = await driveList(
+    token,
+    `name='${esc(name)}' and '${parentId}' in parents and mimeType='${FOLDER_MIME}' and trashed=false`,
+    "files(id)"
+  );
+  return (list.files?.[0]?.id as string | undefined) ?? (await createFolder(token, parentId, name));
+}
+
+/**
+ * The folder that holds one video's files, tagged with the video's id so it is
+ * found again even if the title is edited later. Created in `parentId` if new;
+ * moved there if it exists under another parent (e.g. the month changed).
+ */
+export async function ensureTaggedFolder(token: string, parentId: string, name: string, tag: string): Promise<{ id: string; link: string }> {
+  const list = await driveList(
+    token,
+    `appProperties has { key='videoId' and value='${esc(tag)}' } and mimeType='${FOLDER_MIME}' and trashed=false`,
+    "files(id,parents,name)"
+  );
+  const found = list.files?.[0] as { id: string; parents?: string[]; name: string } | undefined;
+  let id: string;
+  if (found) {
+    id = found.id;
+    if (!found.parents?.includes(parentId)) await moveDriveFile(token, id, parentId);
+    if (found.name !== name) {
+      await fetch(`https://www.googleapis.com/drive/v3/files/${id}?supportsAllDrives=true`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+    }
+  } else {
+    id = await createFolder(token, parentId, name, { videoId: tag });
+  }
+  return { id, link: `https://drive.google.com/drive/folders/${id}` };
+}
+
+/** Moves a file to `toParent` (nothing happens if it is already only there). */
+export async function moveDriveFile(token: string, fileId: string, toParent: string): Promise<void> {
+  const info = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=parents&supportsAllDrives=true`, {
+    headers: { Authorization: `Bearer ${token}` },
+  }).then((r) => r.json());
+  const parents: string[] = info.parents ?? [];
+  if (parents.length === 1 && parents[0] === toParent) return;
+  const params = new URLSearchParams({ addParents: toParent, supportsAllDrives: "true" });
+  if (parents.length) params.set("removeParents", parents.join(","));
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?${params}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (!res.ok) throw new Error(`Could not move Drive file (${res.status})`);
+}
+
+/** Writes a file into `parentId`, replacing any earlier file of the same name so a re-run doesn't pile up copies. */
+export async function putBytes(
+  token: string,
+  parentId: string,
+  name: string,
+  bytes: Buffer,
+  mimeType: string,
+  replace = true
+): Promise<string> {
+  if (replace) {
+    const old = await driveList(token, `name='${esc(name)}' and '${parentId}' in parents and trashed=false`, "files(id)");
+    for (const f of old.files ?? []) {
+      await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?supportsAllDrives=true`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {});
+    }
+  }
+  const res = await uploadBytes(token, bytes, name, mimeType, parentId);
+  return res.webViewLink ?? `https://drive.google.com/file/d/${res.id}/view`;
+}
+
+/** Upload a file from a URL into a Drive folder (the configured root unless `parentId` is given). Returns webViewLink. */
+export async function uploadFromUrl(sourceUrl: string, name: string, parentId?: string, mimeType = "video/mp4"): Promise<string> {
+  const { token, rootId } = await driveSession();
   const src = await fetch(sourceUrl);
   if (!src.ok) throw new Error(`Could not fetch source file (${src.status})`);
   const bytes = Buffer.from(await src.arrayBuffer());
-
-  const res = await uploadBytes(token, bytes, name, "video/mp4", s.drive_folder_id);
+  const res = await uploadBytes(token, bytes, name, mimeType, parentId ?? rootId);
   return res.webViewLink ?? `https://drive.google.com/file/d/${res.id}/view`;
 }
 

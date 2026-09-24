@@ -111,6 +111,9 @@ export function GuestUpload({ token, videoTitle }: { token: string; videoTitle: 
           <p className="mt-1 text-right text-[11px] tabular-nums text-ink-3">
             {Math.round(progress.percent)}%
           </p>
+          <p className="mt-1 text-[11px] font-medium text-warn">
+            Keep this page open until it reaches 100%.
+          </p>
         </div>
       ) : null}
 
@@ -132,8 +135,8 @@ export function GuestUpload({ token, videoTitle }: { token: string; videoTitle: 
               <span className="text-ink-3">{fileSize(d.size)}</span>
             </div>
           ))}
-          <p className="pt-1 text-center text-[11px] text-ink-3">
-            Sent. You can close this page.
+          <p className={`pt-1 text-center text-[11px] ${busy ? "font-medium text-warn" : "text-ok"}`}>
+            {busy ? "Keep this page open until the last file finishes." : "Sent. You can close this page."}
           </p>
         </div>
       ) : null}

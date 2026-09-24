@@ -631,7 +631,9 @@ export async function postVariantsToDriveAction(videoId: string) {
         failed.push(cut.label);
         continue;
       }
-      const link = await uploadFromUrl(dl, `${video.title} — ${cut.label} v${top.version}.mp4`);
+      const { videoFolder } = await import("@/lib/drive-layout");
+      const folder = await videoFolder(videoId);
+      const link = await uploadFromUrl(dl, `${cut.label} v${top.version} — ${video.title}.mp4`, await folder.sub("Finished video"));
       links.push(link);
       uploaded += 1;
     } catch (e) {
@@ -646,9 +648,15 @@ export async function postVariantsToDriveAction(videoId: string) {
 
   const { getWorkspaceSettings } = await import("@/lib/workspace");
   const settings = await getWorkspaceSettings();
-  const folderLink = settings.drive_folder_id
+  let folderLink: string | null = settings.drive_folder_id
     ? `https://drive.google.com/drive/folders/${settings.drive_folder_id}`
     : null;
+  try {
+    const { videoFolder } = await import("@/lib/drive-layout");
+    folderLink = (await videoFolder(videoId)).link;
+  } catch {
+    /* keep the root link */
+  }
 
   // Close the loop the same way a posted video already does — a Telegram
   // ping with the link, so this can be picked up from a phone without

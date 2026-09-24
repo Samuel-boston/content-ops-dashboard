@@ -1,10 +1,12 @@
 import { runDuePublishJobs } from "@/lib/publish-runner";
+import { syncPendingVersions } from "@/lib/stream-sync";
 
 // A single Reel can take a couple of minutes to be accepted by Instagram.
 export const maxDuration = 300;
 
 /**
- * Just the scheduled posts — nothing else.
+ * The scheduled posts, plus finishing uploads that were still processing when
+ * their page was closed — nothing else.
  *
  * The main job (/api/cron) runs once a day, which is far too slow for "post
  * this at 3pm". Point a scheduler at THIS route every 5–10 minutes instead
@@ -22,5 +24,7 @@ export async function GET(req: Request) {
   if (!authorized) return new Response("unauthorized", { status: 401 });
 
   const result = await runDuePublishJobs();
-  return Response.json({ ok: true, ...result });
+  // Also finishes any upload whose page was closed before Cloudflare was done.
+  const synced = await syncPendingVersions();
+  return Response.json({ ok: true, ...result, synced });
 }

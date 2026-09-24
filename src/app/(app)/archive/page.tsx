@@ -150,9 +150,10 @@ export default async function ArchivePage({ searchParams }: PageProps<"/archive"
                       is why this only ever showed the word "Drive" before.
                     */}
                     <span className="flex shrink-0 items-center gap-1.5">
+                      <ArchiveLink href={v.drive_folder_url} label="Folder" />
                       <ArchiveLink href={v.drive_file_url} label="Edit" />
                       <ArchiveLink href={v.raw_footage_url} label="Raw" />
-                      {!v.drive_file_url && !v.raw_footage_url ? (
+                      {!v.drive_file_url && !v.raw_footage_url && !v.drive_folder_url ? (
                         <span className="text-[10px] text-ink-3">no files</span>
                       ) : null}
                     </span>

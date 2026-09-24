@@ -8,6 +8,9 @@ import { saveBriefVoiceAction } from "@/app/script-actions";
 import { createFootageUploadUrlAction, registerAssetAction } from "@/app/asset-actions";
 import { createGuestLinkAction } from "@/app/guest-actions";
 import { uploadCommentMedia } from "@/lib/upload-client";
+import { sendWithProgress } from "@/lib/upload-progress";
+import { UploadStatus } from "@/components/ui/UploadStatus";
+import { useToast } from "@/components/ui/Toast";
 import { TaxonomyMultiSelect } from "@/components/TaxonomyMultiSelect";
 import { isCarouselFormat } from "@/lib/taxonomy";
 import { VoiceRecorder, type VoiceCapture } from "@/components/workspace/Voice";
@@ -79,6 +82,7 @@ export function NewVideoDialog({
   customs?: { content_pillar: string[]; format: string[]; platform: string[] };
   viewerId: string;
 }) {
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTrackedTransition();
   const [status, setStatus] = useState<VideoStatus | null>(null);
@@ -218,17 +222,10 @@ export function NewVideoDialog({
               const up = await createFootageUploadUrlAction(res.id, footageFile.name);
               if (up?.ok) {
                 try {
-                  await new Promise<void>((resolve, reject) => {
-                    const xhr = new XMLHttpRequest();
-                    xhr.open("PUT", up.signedUrl);
-                    xhr.setRequestHeader("x-upsert", "true");
-                    xhr.upload.onprogress = (e) =>
-                      e.lengthComputable &&
-                      setFootageProgress(Math.round((e.loaded / e.total) * 100));
-                    xhr.onload = () =>
-                      xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status})`));
-                    xhr.onerror = () => reject(new Error("Upload failed"));
-                    xhr.send(footageFile);
+                  await sendWithProgress(up.signedUrl, footageFile, {
+                    method: "PUT",
+                    headers: { "x-upsert": "true" },
+                    onProgress: setFootageProgress,
                   });
                   await registerAssetAction({
                     videoId: res.id,
@@ -236,8 +233,10 @@ export function NewVideoDialog({
                     storagePath: up.path,
                     sizeBytes: footageFile.size,
                   });
-                } catch {
-                  /* the video still exists — footage can be added again from its page */
+                  toast.success("Footage uploaded. It finishes copying to Drive on its own — you can close the page.");
+                } catch (e) {
+                  // The video still exists — footage can be added again from its page.
+                  toast.error(`The video was created, but the footage didn't upload (${(e as Error).message}). Add it again from the video's page.`);
                 }
               }
               setFootageProgress(null);
@@ -517,6 +516,10 @@ export function NewVideoDialog({
         )}
 
         {error ? <p className="text-sm text-danger">{error}</p> : null}
+
+        {footageProgress !== null && footageFile ? (
+          <UploadStatus state={{ phase: "uploading", title: "Raw footage", pct: footageProgress, detail: footageFile.name }} />
+        ) : null}
 
         <div className="flex justify-end gap-2 border-t border-line pt-4">
           <button

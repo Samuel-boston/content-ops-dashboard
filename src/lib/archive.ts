@@ -10,13 +10,17 @@ import { notifyTelegram } from "@/lib/notify";
  */
 export async function archivePostedToDrive(videoId: string) {
   try {
-    const { supabaseAdmin } = await import("@/lib/supabase/admin");
-    const { uploadFromUrl } = await import("@/lib/integrations/drive");
-    const { getDownloadUrl } = await import("@/lib/integrations/stream");
-    const { deleteStreamVideo } = await import("@/lib/integrations/stream");
+    const { uploadFromUrl, moveDriveFile, driveFileIdFromLink } = await import("@/lib/integrations/drive");
+    const { getDownloadUrl, deleteStreamVideo } = await import("@/lib/integrations/stream");
+    const { videoFolder, syncVideoFolder } = await import("@/lib/drive-layout");
     const db = supabaseAdmin();
     const { data: video } = await db.from("videos").select("title").eq("id", videoId).single();
     const { data: cuts } = await db.from("video_cuts").select("id, label").eq("video_id", videoId);
+
+    // Everything for this video lives in one folder: <month>/<title>/.
+    const folder = await videoFolder(videoId);
+    const finishedId = (cuts ?? []).length ? await folder.sub("Finished video") : null;
+
     let firstLink: string | null = null;
     for (const cut of cuts ?? []) {
       const { data: top } = await db
@@ -26,33 +30,43 @@ export async function archivePostedToDrive(videoId: string) {
         .order("version", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (!top) continue;
+      if (!top || !finishedId) continue;
 
       // The archive should be the file that was uploaded, not Stream's smaller
-      // re-encode of it. Original already in Drive: just point at it. Still in
-      // Storage: copy it across. Only versions uploaded before originals were
-      // kept fall back to Stream's download.
+      // re-encode of it. Original already in Drive: move it into the folder.
+      // Still in Storage: copy it across. Only versions uploaded before
+      // originals were kept fall back to Stream's download.
+      const niceName = `${cut.label} v${top.version} — ${top.original_name ?? `${video?.title ?? "video"}.mp4`}`;
       let link: string | null = top.original_drive_url ?? null;
-      if (!link && top.original_path) {
+      if (link) {
+        const fileId = driveFileIdFromLink(link);
+        if (fileId) await moveDriveFile(folder.token, fileId, finishedId);
+      } else if (top.original_path) {
         const { data: signed } = await db.storage.from("footage").createSignedUrl(top.original_path, 900);
         if (signed?.signedUrl) {
-          link = await uploadFromUrl(signed.signedUrl, top.original_name ?? `${video?.title ?? "video"} — ${cut.label} v${top.version}.mp4`);
+          link = await uploadFromUrl(signed.signedUrl, niceName, finishedId);
           await db.from("cut_versions").update({ original_drive_url: link, original_path: null }).eq("id", top.id);
           await db.storage.from("footage").remove([top.original_path]);
         }
       }
       if (!link && top.stream_uid) {
         const dl = await getDownloadUrl(top.stream_uid);
-        if (dl) link = await uploadFromUrl(dl, `${video?.title ?? "video"} — ${cut.label} v${top.version}.mp4`);
+        if (dl) link = await uploadFromUrl(dl, niceName, finishedId);
       }
       if (!link) continue;
       firstLink ??= link;
       await db.from("cut_versions").update({ drive_file_url: link }).eq("id", top.id);
       if (top.stream_uid) await deleteStreamVideo(top.stream_uid);
     }
-    if (firstLink) await db.from("videos").update({ drive_file_url: firstLink }).eq("id", videoId);
+
+    // Script, caption, cover, info, raw footage, carousel slides.
+    const folderLink = await syncVideoFolder(videoId);
+    await db
+      .from("videos")
+      .update({ drive_folder_url: folderLink, ...(firstLink ? { drive_file_url: firstLink } : {}) })
+      .eq("id", videoId);
   } catch {
-    /* Drive not configured, or transient failure — leave the file in Stream. */
+    /* Drive not configured, or transient failure — leave the files where they are. */
   }
 }
 
