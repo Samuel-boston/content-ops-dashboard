@@ -2,6 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { mintFileToken, readPhoneToken } from "@/lib/phone-link";
 import { ORIGINAL_COLUMNS, hasOriginal } from "@/lib/cut-files";
 import { getDownloadUrl } from "@/lib/integrations/stream";
+import { effectiveCaption } from "@/lib/caption";
 
 /**
  * The page a phone lands on after scanning a variant's QR code: the file to
@@ -36,14 +37,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const db = supabaseAdmin();
   const { data: t } = await db
     .from("trial_posts")
-    .select("video_id, cut_id, label, caption, video:videos (title, post_caption)")
+    .select("id, video_id, cut_id, label, caption, video:videos (title)")
     .eq("id", trialId)
     .maybeSingle();
   if (!t) return page("<h1>Not found</h1>", 404);
   const title = (t.video as unknown as { title: string } | null)?.title ?? "Video";
-  const caption =
-    (t.caption as string | null)?.trim() ||
-    (t.video as unknown as { post_caption: string | null } | null)?.post_caption?.trim();
+  const caption = (await effectiveCaption(db, { id: t.id as string, video_id: t.video_id as string, caption: t.caption as string | null }))?.trim();
 
   let files = "";
   if (t.cut_id) {

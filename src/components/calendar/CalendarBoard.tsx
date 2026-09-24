@@ -174,7 +174,11 @@ export function CalendarBoard({
   const router = useRouter();
   const [, startTransition] = useTrackedTransition();
 
-  const [colourBy, setColourBy] = useState<"stage" | "pillar">("stage");
+  // Everything on the calendar is finished or scheduled, so stage tells you nothing —
+  // it filters by format and pillar instead, and colours by pillar.
+  const colourBy = "pillar" as const;
+  const [fmtFilter, setFmtFilter] = useState("");
+  const [pillarFilter, setPillarFilter] = useState("");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
 
@@ -189,16 +193,28 @@ export function CalendarBoard({
   const grid = useMemo(() => buildMonthGrid(year, month), [year, month]);
   const todayISO = useMemo(() => iso(new Date()), []);
 
+  const matches = (v: CalendarVideo) =>
+    (!fmtFilter || v.formats?.includes(fmtFilter)) && (!pillarFilter || v.content_pillars?.includes(pillarFilter));
+  const formatOptions = useMemo(
+    () => [...new Set([...items.scheduled, ...items.unscheduled].flatMap((v) => v.formats ?? []))].sort(),
+    [items]
+  );
+  const pillarOptions = useMemo(
+    () => [...new Set([...items.scheduled, ...items.unscheduled].flatMap((v) => v.content_pillars ?? []))].sort(),
+    [items]
+  );
+
   const byDay = useMemo(() => {
     const map = new Map<string, CalendarVideo[]>();
-    for (const v of items.scheduled) {
+    for (const v of items.scheduled.filter(matches)) {
       if (!v.post_date) continue;
       const list = map.get(v.post_date) ?? [];
       list.push(v);
       map.set(v.post_date, list);
     }
     return map;
-  }, [items.scheduled]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.scheduled, fmtFilter, pillarFilter]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const dragging =
@@ -265,22 +281,33 @@ export function CalendarBoard({
         <div className="min-w-0 space-y-3">
           {/* Colour legend */}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-0.5 rounded-lg border border-line p-0.5">
-              {(["stage", "pillar"] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setColourBy(mode)}
-                  aria-pressed={colourBy === mode}
-                  className={`rounded-md px-2.5 py-1 text-[11px] capitalize transition ${
-                    colourBy === mode ? "bg-accent text-white" : "text-ink-3 hover:text-ink"
-                  }`}
-                >
-                  By {mode}
-                </button>
+            <select
+              value={fmtFilter}
+              onChange={(e) => setFmtFilter(e.target.value)}
+              aria-label="Filter by format"
+              className="rounded-md border border-line bg-raised px-2 py-1 text-[11px] focus:border-accent focus:outline-none"
+            >
+              <option value="">All formats</option>
+              {formatOptions.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
               ))}
-            </div>
-            {colourBy === "pillar" && pillars.length ? (
+            </select>
+            <select
+              value={pillarFilter}
+              onChange={(e) => setPillarFilter(e.target.value)}
+              aria-label="Filter by pillar"
+              className="rounded-md border border-line bg-raised px-2 py-1 text-[11px] focus:border-accent focus:outline-none"
+            >
+              <option value="">All pillars</option>
+              {pillarOptions.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            {pillars.length ? (
               <div className="flex flex-wrap items-center gap-2">
                 {pillars.slice(0, 6).map(([name, colour]) => (
                   <span key={name} className="flex items-center gap-1 text-[11px] text-ink-3">
@@ -391,7 +418,7 @@ export function CalendarBoard({
             </div>
           ) : null}
 
-          <UnscheduledRail videos={items.unscheduled} colourBy={colourBy} canEdit={canEdit} />
+          <UnscheduledRail videos={items.unscheduled.filter(matches)} colourBy={colourBy} canEdit={canEdit} />
         </div>
       </div>
 

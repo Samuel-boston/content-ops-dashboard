@@ -1,6 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { listTeam } from "@/app/actions";
+import { listPostedVideos, listPostingWork } from "@/app/posting-actions";
+import { listVaTasks } from "@/app/task-actions";
+import { getClientName } from "@/lib/workspace";
+import { PostingBoard } from "@/components/posting/PostingBoard";
+import { VaTaskBoard } from "@/components/tasks/VaTaskBoard";
+import { supabaseServer } from "@/lib/supabase/server";
+import { STATUS_COLOR, STATUS_LABELS, type VideoStatus } from "@/lib/types";
 import { listTaxonomyCustoms } from "@/app/actions";
 import { editorSnapshot } from "@/app/team-actions";
 import {
@@ -40,6 +48,13 @@ export default async function EditorPage({
 
   // Editors can open their own page; everyone else needs to be staff-side.
   if (viewer.role === "editor" && viewer.id !== id) notFound();
+
+  // Not everyone on the team is an editor: the VA and the copywriter get their own view here.
+  if (viewer.role === "owner" || viewer.role === "admin") {
+    const person = (await listTeam()).find((p) => p.id === id);
+    if (person?.role === "va") return <VaPerson person={person} />;
+    if (person?.role === "copywriter") return <CopywriterPerson person={person} />;
+  }
 
   const snapshot = await editorSnapshot(id);
   if (!snapshot) notFound();
@@ -218,6 +233,95 @@ export default async function EditorPage({
           />
         </section>
       ) : null}
+    </div>
+  );
+}
+
+type Person = Awaited<ReturnType<typeof listTeam>>[number];
+
+/** The VA's dashboard, as the client sees it: what's with them to post, the archive, and their tasks. */
+async function VaPerson({ person }: { person: Person }) {
+  const [{ trials, jobs, instagramConnected }, archive, tasks, clientName] = await Promise.all([
+    listPostingWork(),
+    listPostedVideos(),
+    listVaTasks(),
+    getClientName(),
+  ]);
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-center gap-3">
+        <Link href="/team" className="text-sm text-ink-3 hover:text-ink">
+          ← Team
+        </Link>
+        <Avatar person={person} size="lg" />
+        <div className="min-w-0">
+          <h1 className="truncate text-xl font-semibold">{displayName(person)}</h1>
+          <p className="text-sm text-ink-2">VA — {person.email}</p>
+        </div>
+      </div>
+      <section className="space-y-3">
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">Posting desk</h2>
+        <PostingBoard trials={trials} jobs={jobs} archive={archive} instagramConnected={instagramConnected} clientName={clientName} />
+      </section>
+      <section className="space-y-3">
+        <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">Tasks</h2>
+        <VaTaskBoard tasks={tasks} canManage />
+      </section>
+    </div>
+  );
+}
+
+/** The copywriter's world: every script, by stage, straight into its script room. */
+async function CopywriterPerson({ person }: { person: Person }) {
+  const supabase = await supabaseServer();
+  const { data } = await supabase
+    .from("videos")
+    .select("id, title, status, priority")
+    .is("parked_at", null)
+    .in("status", ["ideation", "scripting", "script_review", "script_revisions", "ready_to_film"])
+    .order("stage_entered_at", { ascending: true });
+  const stages: VideoStatus[] = ["ideation", "scripting", "script_review", "script_revisions", "ready_to_film"];
+  return (
+    <div className="space-y-8">
+      <div className="flex flex-wrap items-center gap-3">
+        <Link href="/team" className="text-sm text-ink-3 hover:text-ink">
+          ← Team
+        </Link>
+        <Avatar person={person} size="lg" />
+        <div className="min-w-0">
+          <h1 className="truncate text-xl font-semibold">{displayName(person)}</h1>
+          <p className="text-sm text-ink-2">Copywriter — {person.email}</p>
+        </div>
+        <Link href="/scripting" className="ml-auto rounded-lg border border-line px-3 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink">
+          Open the scripting board →
+        </Link>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        {stages.map((st) => {
+          const list = (data ?? []).filter((v) => v.status === st);
+          return (
+            <div key={st} className="min-w-0 rounded-xl border border-line bg-app p-2">
+              <div className="flex items-center gap-2 px-1 pb-2">
+                <span className="h-2 w-2 rounded-full" style={{ background: STATUS_COLOR[st] }} />
+                <h2 className="text-sm font-medium">{STATUS_LABELS[st]}</h2>
+                <span className="text-xs text-ink-3">{list.length}</span>
+              </div>
+              <div className="space-y-1.5">
+                {list.length === 0 ? <p className="px-2 py-4 text-center text-xs text-ink-3">Nothing here.</p> : null}
+                {list.map((v) => (
+                  <Link
+                    key={v.id}
+                    href={`/videos/${v.id}`}
+                    className="block truncate rounded-lg border border-line bg-card px-2.5 py-2 text-xs hover:border-accent"
+                  >
+                    {v.title}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

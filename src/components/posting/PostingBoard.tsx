@@ -7,7 +7,8 @@ import { useTrackedTransition } from "@/components/ui/Pending";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { vaMarkVideoPostedAction, type PostedVideoRow, type PostingJobItem, type PostingTrialItem } from "@/app/posting-actions";
-import { PostedVideoDialog, VideoWorkDialog } from "@/components/posting/PostingDialogs";
+import { VideoWorkDialog } from "@/components/posting/PostingDialogs";
+import { PostedArchiveList } from "@/components/posting/PostedArchiveList";
 import { isToPost } from "@/lib/variant-state";
 
 /**
@@ -144,7 +145,6 @@ export function PostingBoard({
   const [tab, setTab] = useState<"board" | "archive">("board");
   const [query, setQuery] = useState("");
   const [openVideo, setOpenVideo] = useState<string | null>(null);
-  const [openArchived, setOpenArchived] = useState<{ id: string; title: string } | null>(null);
   const [confirmPosted, setConfirmPosted] = useState<VideoGroup | null>(null);
   // Videos just marked posted: gone from the board at once, without waiting for the refresh.
   const [gone, setGone] = useState<Set<string>>(new Set());
@@ -222,40 +222,7 @@ export function PostingBoard({
           </DndContext>
         </>
       ) : (
-        <div className="space-y-2">
-          <p className="text-[11px] text-ink-3">
-            Everything that&rsquo;s been posted. Open a video to add performance, see which trial is winning, and post it to the main feed.
-          </p>
-          {archive.filter((r) => match(r.title)).length === 0 ? (
-            <p className="rounded-xl border border-line bg-card px-4 py-8 text-center text-sm text-ink-3">Nothing in the archive yet.</p>
-          ) : (
-            <div className="overflow-hidden rounded-xl border border-line bg-card">
-              {archive
-                .filter((r) => match(r.title))
-                .map((r) => (
-                  <button
-                    key={r.videoId}
-                    type="button"
-                    onClick={() => setOpenArchived({ id: r.videoId, title: r.title })}
-                    className="flex w-full flex-wrap items-center gap-3 border-b border-line px-4 py-2.5 text-left last:border-0 hover:bg-hover"
-                  >
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{r.title}</span>
-                    <span className="text-[11px] text-ink-3">
-                      {r.variants} variant{r.variants === 1 ? "" : "s"}
-                      {r.trialsLive ? ` · ${r.trialsLive} trial` : ""}
-                      {r.onFeed ? ` · ${r.onFeed} on feed` : ""}
-                    </span>
-                    {r.best ? (
-                      <span className="text-[11px] text-ink-2">🏆 {r.best.label} · {r.best.views.toLocaleString()} views</span>
-                    ) : null}
-                    <span className="text-[11px] text-ink-3">
-                      {r.postedAt ? new Date(r.postedAt).toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" }) : ""}
-                    </span>
-                  </button>
-                ))}
-            </div>
-          )}
-        </div>
+        <PostedArchiveList rows={archive} clientName={clientName} query={query} />
       )}
 
       {opened ? (
@@ -266,9 +233,6 @@ export function PostingBoard({
           clientName={clientName}
           onClose={() => setOpenVideo(null)}
         />
-      ) : null}
-      {openArchived ? (
-        <PostedVideoDialog videoId={openArchived.id} title={openArchived.title} clientName={clientName} onClose={() => setOpenArchived(null)} />
       ) : null}
 
       <ConfirmDialog

@@ -75,6 +75,7 @@ const COPYWRITER_LINKS = [
  */
 const VA_LINKS = [
   { href: "/posting", label: "Posting" },
+  { href: "/archive", label: "Archive" },
   { href: "/calendar", label: "Calendar" },
   { href: "/library/visuals", label: "Library" },
   { href: "/time-off", label: "Time off" },

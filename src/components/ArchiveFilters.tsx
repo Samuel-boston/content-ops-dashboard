@@ -34,7 +34,7 @@ export function ArchiveFilters({
         {(["list", "calendar"] as const).map((v) => (
           <button
             key={v}
-            onClick={() => set("view", v === "list" ? "" : v)}
+            onClick={() => set("view", v === "calendar" ? "" : v)}
             className={`px-3 py-1.5 text-sm capitalize ${
               view === v ? "bg-hover text-ink" : "bg-card text-ink-2"
             }`}

@@ -98,7 +98,7 @@ export async function sendToVaAction(input: {
   const supabase = await supabaseServer();
   const { data: video } = await supabase
     .from("videos")
-    .select("cover_path, status, post_caption")
+    .select("cover_path, status")
     .eq("id", input.videoId)
     .single();
   if (!video) return { error: "Video not found." };
@@ -114,13 +114,12 @@ export async function sendToVaAction(input: {
   }
 
   const now = new Date().toISOString();
-  const shared = (video.post_caption as string | null)?.trim() || null;
   const results = await Promise.all(
     live.map((t) => {
       const postAs = t.post_as === "none" ? (t.cut_id === null ? "main" : "trial") : t.post_as;
       return supabase
         .from("trial_posts")
-        .update({ post_as: postAs, caption: t.caption?.trim() || shared, sent_to_va_at: t.sent_to_va_at ?? now })
+        .update({ post_as: postAs, sent_to_va_at: t.sent_to_va_at ?? now })
         .eq("id", t.id);
     })
   );

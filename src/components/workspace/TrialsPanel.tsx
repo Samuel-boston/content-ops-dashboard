@@ -10,7 +10,6 @@ import {
   listVideoTrials,
   markTrialPostedAction,
   markTrialWinnerAction,
-  promoteTrialAction,
   saveTrialMetricsAction,
   saveVaCoverAction,
   saveVaNotesAction,
@@ -23,7 +22,8 @@ import { StreamPlayer } from "@/components/engine/StreamPlayer";
 import { IconTrash } from "@/components/ui/icons";
 import type { TrialPost, VideoStatus } from "@/lib/types";
 import { SETTABLE_STATES, STATE_LABELS, STATE_TONE, variantState, type VariantState } from "@/lib/variant-state";
-import { vaSetVariantStateAction } from "@/app/posting-actions";
+import { vaPublishAction, vaSetVariantStateAction } from "@/app/posting-actions";
+import { PostComposer } from "@/components/posting/PostComposer";
 
 /**
  * Variants — every version of this video that could go out (the main cut and
@@ -45,6 +45,7 @@ export function TrialsPanel({
   onWatch,
   onSent,
   initial,
+  instagramConnected = false,
 }: {
   videoId: string;
   /** Variants already loaded by the parent (saves a round trip when opened from the board). */
@@ -55,6 +56,8 @@ export function TrialsPanel({
   /** Called once the video has been sent to (or taken back from) the VA. */
   onSent?: () => void;
   hasCover?: boolean;
+  /** Whether Instagram is connected — enables posting a winning trial to the feed from here. */
+  instagramConnected?: boolean;
   /** The Post tab's caption box — used for any variant that hasn't got its own. */
   fallbackCaption?: string;
   onWatch?: (cutId: string) => void;
@@ -271,6 +274,10 @@ export function TrialsPanel({
               isMain={cutKind(t) === "main" || t.cut_id === null}
               videoId={videoId}
               fallbackCaption={fallbackCaption}
+              isFirst={i === 0}
+              firstLabel={trials[0]?.label ?? "variant 1"}
+              baseCaption={trials[0]?.caption?.trim() || fallbackCaption}
+              instagramConnected={instagramConnected}
               onWatch={onWatch ?? ((cutId) => setWatching({ cutId, label: t.label }))}
               pending={pending}
               run={run}
@@ -291,6 +298,10 @@ function TrialRow({
   isMain,
   videoId,
   fallbackCaption,
+  isFirst,
+  firstLabel,
+  baseCaption,
+  instagramConnected,
   onWatch,
   pending,
   run,
@@ -303,13 +314,21 @@ function TrialRow({
   isMain: boolean;
   videoId: string;
   fallbackCaption: string;
+  /** The first variant carries the caption the others can share. */
+  isFirst: boolean;
+  firstLabel: string;
+  baseCaption: string;
+  instagramConnected: boolean;
   onWatch?: (cutId: string) => void;
   pending: boolean;
   run: (fn: () => Promise<{ error?: string } | void>, then?: () => void) => void;
   field: string;
 }) {
   const [permalink, setPermalink] = useState(t.permalink ?? "");
-  const [when, setWhen] = useState("");
+  // "Same caption as variant 1" is the default; a variant only gets its own box when asked.
+  const [custom, setCustom] = useState(Boolean(t.caption?.trim()));
+  const [promoting, setPromoting] = useState(false);
+  const [draft, setDraft] = useState(t.caption?.trim() || baseCaption);
   const [m, setM] = useState({
     views: t.views?.toString() ?? "",
     likes: t.likes?.toString() ?? "",
@@ -431,16 +450,45 @@ function TrialRow({
 
       {t.status === "planned" ? (
         <div className={`mt-2 space-y-2 ${open ? "" : "hidden"}`}>
-          <textarea
-            defaultValue={t.caption ?? ""}
-            rows={7}
-            placeholder={fallbackCaption ? "Caption — using the one from the box below unless you write one here" : "Caption for this variant"}
-            onBlur={(e) => {
-              if (e.target.value.trim() === (t.caption ?? "").trim()) return;
-              run(() => updateVariantAction(t.id, videoId, { caption: e.target.value }));
-            }}
-            className={`${field} min-h-32 w-full resize-y text-sm leading-relaxed`}
-          />
+          {isFirst ? (
+            <p className="text-[11px] text-ink-3">
+              Caption — the other variants use this one unless you give them their own.
+            </p>
+          ) : (
+            <label className="flex cursor-pointer items-center gap-2 text-[11px] text-ink-2">
+              <input
+                type="checkbox"
+                checked={!custom}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setCustom(false);
+                    run(() => updateVariantAction(t.id, videoId, { caption: null }));
+                  } else {
+                    setCustom(true);
+                  }
+                }}
+                className="h-3.5 w-3.5 accent-violet-500"
+              />
+              Same caption as {firstLabel}
+            </label>
+          )}
+          {isFirst || custom ? (
+            <textarea
+              defaultValue={t.caption ?? ""}
+              rows={7}
+              autoFocus={!isFirst && !t.caption}
+              placeholder={isFirst ? (fallbackCaption ? "Caption — using the one from the box below unless you write one here" : "Caption for this variant") : "A different caption for this variant"}
+              onBlur={(e) => {
+                if (e.target.value.trim() === (t.caption ?? "").trim()) return;
+                run(() => updateVariantAction(t.id, videoId, { caption: e.target.value }));
+              }}
+              className={`${field} min-h-32 w-full resize-y text-sm leading-relaxed`}
+            />
+          ) : (
+            <p className="whitespace-pre-wrap rounded-md bg-raised px-2.5 py-2 text-xs leading-relaxed text-ink-3">
+              {baseCaption || "No caption yet — write one on the first variant."}
+            </p>
+          )}
           <textarea
             defaultValue={t.notes ?? ""}
             rows={2}
@@ -539,28 +587,56 @@ function TrialRow({
       ) : null}
 
       {t.status === "posted" ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-line/60 pt-2">
-          {t.permalink ? (
-            <a href={t.permalink} target="_blank" rel="noreferrer" className="text-[10px] text-accent hover:underline">
-              Open trial ↗
-            </a>
+        <div className="mt-2 border-t border-line/60 pt-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {t.permalink ? (
+              <a href={t.permalink} target="_blank" rel="noreferrer" className="text-[10px] text-accent hover:underline">
+                Open post ↗
+              </a>
+            ) : null}
+            {variantState(t) === "trial_posted" ? (
+              // Only a live trial can be promoted — a variant already on the feed has nothing to promote to.
+              <button
+                type="button"
+                onClick={() => setPromoting((v) => !v)}
+                className="ml-auto rounded-md bg-accent px-2.5 py-1 text-[11px] font-medium text-white hover:bg-accent-hi"
+              >
+                {promoting ? "Close" : "Post to the feed…"}
+              </button>
+            ) : (
+              <span className="ml-auto text-[11px] text-sky-300">✓ On the main feed</span>
+            )}
+          </div>
+          {promoting ? (
+            <div className="mt-2 rounded-xl border border-accent/30 bg-accent-ghost/40 p-2.5">
+              <p className="mb-2 text-[11px] text-ink-3">
+                Check the caption, pick post now or a time, then post. Nothing goes to Instagram until you press the button.
+              </p>
+              <PostComposer
+                caption={draft}
+                onCaptionChange={setDraft}
+                connected={instagramConnected ? ["instagram"] : []}
+                emptyHint={<>Connect Instagram in Settings → Integrations and it shows up here.</>}
+                isVideo={t.cut_id !== null}
+                pending={pending}
+                onSubmit={(v) =>
+                  run(
+                    () =>
+                      vaPublishAction(t.id, {
+                        whenISO: v.whenISO,
+                        caption: v.caption,
+                        coverOffsetMs: v.coverOffsetMs,
+                        shareToFeed: v.shareToFeed,
+                      }),
+                    () => {
+                      toast.success(v.whenISO ? "Scheduled for the feed." : "Posted to the feed ✓");
+                      setPromoting(false);
+                    }
+                  )
+                }
+              />
+            </div>
           ) : null}
-          <span className="ml-auto flex items-center gap-1.5">
-            <input
-              type="datetime-local"
-              value={when}
-              onChange={(e) => setWhen(e.target.value)}
-              className={field}
-              title="Schedule the promotion (leave empty to publish now)"
-            />
-            <button
-              onClick={() => run(() => promoteTrialAction(t.id, videoId, when || null), () => setWhen(""))}
-              disabled={pending}
-              className="rounded-md bg-accent px-2.5 py-1 text-[10px] font-medium text-white hover:bg-accent-hi disabled:opacity-50"
-            >
-              {when ? "Schedule promotion" : "Promote to feed now"}
-            </button>
-          </span>
         </div>
       ) : null}
 

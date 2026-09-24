@@ -91,6 +91,25 @@ function buildServer(profile: Profile) {
   );
 
   server.registerTool(
+    "set_stage",
+    {
+      title: "Move a video between planning stages",
+      description:
+        "Move a video through the scripting pipeline — e.g. once a script is final, set it to script_review so the " +
+        "client sees it, or pull an idea into scripting. Copywriters can use ideation, scripting and script_review; " +
+        "owners and admins can also use script_revisions and ready_to_film.",
+      inputSchema: tools.setStageSchema.shape,
+    },
+    async (args) => {
+      try {
+        return ok(await tools.setStage(profile, args));
+      } catch (e) {
+        return fail((e as Error).message);
+      }
+    }
+  );
+
+  server.registerTool(
     "add_hook_variants",
     {
       title: "Add hook variants",

@@ -10,6 +10,7 @@ import { mintPhoneToken } from "@/lib/phone-link";
 import { ORIGINAL_COLUMNS, hasOriginal } from "@/lib/cut-files";
 import { runPublishJob } from "@/lib/publish-runner";
 import { linkMainFeedAnalytics } from "@/lib/analytics-link";
+import { effectiveCaption } from "@/lib/caption";
 import { isOnMainFeed, variantState, type VariantState } from "@/lib/variant-state";
 import { notify } from "@/lib/notify";
 import { releaseFromVa } from "@/lib/va-handoff";
@@ -94,6 +95,11 @@ type DB = ReturnType<typeof supabaseAdmin>;
 /** Turn trial rows (with their video joined) into what the screens show. */
 async function buildItems(db: DB, rows: (TrialPost & { video: VideoJoin })[], jobs: { id: string; scheduled_for: string | null }[]) {
   const jobById = new Map(jobs.map((j) => [j.id, j]));
+  // "Same as variant 1": the first variant of each video (by creation order) is the base.
+  const firstOf = new Map<string, TrialPost>();
+  for (const t of [...rows].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))) {
+    if (!firstOf.has(t.video_id)) firstOf.set(t.video_id, t);
+  }
   return Promise.all(
     rows.map(async (t): Promise<PostingTrialItem> => {
       let images: string[] | null = null;
@@ -139,8 +145,14 @@ async function buildItems(db: DB, rows: (TrialPost & { video: VideoJoin })[], jo
         videoTitle: t.video?.title ?? "Untitled",
         videoStatus: t.video?.status ?? "",
         label: t.label,
-        // The variant's own caption, else the video's shared one from the Post tab.
-        caption: t.caption?.trim() ? t.caption : t.video?.post_caption?.trim() ? t.video.post_caption : null,
+        // The variant's own caption, else variant 1's, else the video's shared one from the Post tab.
+        caption: t.caption?.trim()
+          ? t.caption
+          : firstOf.get(t.video_id)?.id !== t.id && firstOf.get(t.video_id)?.caption?.trim()
+            ? (firstOf.get(t.video_id)!.caption as string)
+            : t.video?.post_caption?.trim()
+              ? t.video.post_caption
+              : null,
         state: variantState(t),
         postAs: t.post_as === "main" ? "main" : "trial",
         notes: t.video?.va_notes ?? null,
@@ -353,7 +365,7 @@ export async function trialPostingKitAction(trialId: string): Promise<
 
   const { data: trial } = await db
     .from("trial_posts")
-    .select("cut_id, caption, label, video:videos (post_caption)")
+    .select("cut_id, caption, label, video_id")
     .eq("id", trialId)
     .maybeSingle();
   if (!trial) return { error: "Trial not found." };
@@ -383,8 +395,7 @@ export async function trialPostingKitAction(trialId: string): Promise<
       }
     }
   }
-  const shared = (trial.video as unknown as { post_caption: string | null } | null)?.post_caption;
-  const caption = (trial.caption as string | null)?.trim() ? (trial.caption as string) : shared?.trim() ? shared : null;
+  const caption = await effectiveCaption(db, { id: trialId, video_id: trial.video_id as string, caption: trial.caption as string | null });
   return { ok: true, downloadUrl, caption, label: trial.label, original };
 }
 
@@ -421,7 +432,10 @@ export async function vaPublishAction(
   }
   if (!t.cut_id && !t.post_as) return { error: "Nothing to post." };
 
-  const caption = opts.caption !== undefined ? opts.caption?.trim() || null : (t.caption as string | null);
+  const caption =
+    opts.caption !== undefined
+      ? opts.caption?.trim() || null
+      : await effectiveCaption(db, { id: trialId, video_id: t.video_id as string, caption: t.caption as string | null });
   if (opts.caption !== undefined) await db.from("trial_posts").update({ caption }).eq("id", trialId);
 
   const when = whenISO ? new Date(whenISO) : null;

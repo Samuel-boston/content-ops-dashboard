@@ -83,6 +83,7 @@ export function PostTab({
         videoId={video.id}
         vaNotes={video.va_notes}
         status={video.status}
+        instagramConnected={instagramConfigured}
         hasCover={Boolean(video.cover_path)}
         fallbackCaption={caption}
         onWatch={onWatch}

@@ -10,6 +10,8 @@ import { shiftMonth } from "@/lib/calendar";
 import { isOnMainFeed } from "@/lib/variant-state";
 import { ArchivePerformanceButton } from "@/components/posting/ArchivePerformanceButton";
 import { getClientName } from "@/lib/workspace";
+import { listPostedVideos } from "@/app/posting-actions";
+import { VaArchive } from "@/components/posting/PostedArchiveList";
 import type { TrialStatus, VideoWithEditor } from "@/lib/types";
 
 function first(v: string | string[] | undefined) {
@@ -17,11 +19,24 @@ function first(v: string | string[] | undefined) {
 }
 
 export default async function ArchivePage({ searchParams }: PageProps<"/archive">) {
-  await requireUser();
+  const viewer = await requireUser();
+  // The VA has no row access (by design), so their archive is the posting desk's own list.
+  if (viewer.role === "va") {
+    const [rows, clientName] = await Promise.all([listPostedVideos(), getClientName()]);
+    return (
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-xl font-semibold">Archive</h1>
+          <p className="text-sm text-ink-2">Everything that&rsquo;s been posted — performance, and posting the best trial to the feed.</p>
+        </div>
+        <VaArchive rows={rows} clientName={clientName} />
+      </div>
+    );
+  }
   const sp = await searchParams;
   const supabase = await supabaseServer();
 
-  const view = first(sp.view) === "calendar" ? "calendar" : "list";
+  const view = first(sp.view) === "list" ? "list" : "calendar";
   const search = first(sp.search);
   const format = first(sp.format);
   const pillar = first(sp.pillar);

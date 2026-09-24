@@ -11,7 +11,8 @@ import { Avatar } from "@/components/ui/Avatar";
 import { EtaBadge } from "@/components/pipeline/Eta";
 import { IconChevronRight } from "@/components/ui/icons";
 import { dayMonth, displayName, money } from "@/lib/format";
-import { STATUS_COLOR, STATUS_LABELS } from "@/lib/types";
+import { STATUS_COLOR, STATUS_LABELS, type VideoStatus } from "@/lib/types";
+import { supabaseServer } from "@/lib/supabase/server";
 
 export default async function TeamPage() {
   const viewer = await requireRole("owner", "admin");
@@ -25,14 +26,26 @@ export default async function TeamPage() {
   const todayISO = new Date().toISOString().slice(0, 10);
   const away = timeOff.filter((t) => t.ends_on >= todayISO).slice(0, 12);
   const vas = team.filter((p) => p.role === "va" && p.active);
+  const copywriters = team.filter((p) => p.role === "copywriter" && p.active);
   const currency = settings.currency ?? "USD";
+
+  // The two seats that don't hold assigned videos: what's in the script pipeline (the copywriter's
+  // world) and what is with the VA to post. Counted per stage so any new seat just gets a card.
+  const supabase = await supabaseServer();
+  const { data: stageRows } = await supabase
+    .from("videos")
+    .select("status")
+    .is("parked_at", null)
+    .in("status", ["ideation", "scripting", "script_review", "script_revisions", "with_va"]);
+  const stageCount = (st: VideoStatus) => (stageRows ?? []).filter((r) => r.status === st).length;
+  const openTasks = vaTasks.filter((t) => t.status === "todo").length;
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-xl font-semibold">Team</h1>
         <p className="text-sm text-ink-2">
-          What each editor is holding, when it lands, and what shipped this month.
+          Everyone on the team — editors&rsquo; work and pay, the copywriter&rsquo;s scripting pipeline, and the VA&rsquo;s posting desk.
         </p>
       </div>
 
@@ -121,6 +134,43 @@ export default async function TeamPage() {
         </p>
       ) : null}
 
+      {/* Copywriters: the scripting pipeline, stage by stage. */}
+      {copywriters.length > 0 ? (
+        <section className="space-y-3">
+          <h2 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+            Copywriter{copywriters.length > 1 ? "s" : ""}
+          </h2>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {copywriters.map((p) => (
+              <Link
+                key={p.id}
+                href={`/team/${p.id}`}
+                className="min-w-0 rounded-2xl border border-line bg-card p-4 transition hover:border-accent sm:p-5"
+              >
+                <div className="flex items-center gap-3">
+                  <Avatar person={p} size="lg" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold">{displayName(p)}</p>
+                    <p className="truncate text-[11px] text-ink-3">{p.email}</p>
+                  </div>
+                  <span className="flex items-center gap-1 text-[11px] text-ink-3">
+                    Open <IconChevronRight size={11} />
+                  </span>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {(["ideation", "scripting", "script_review", "script_revisions"] as VideoStatus[]).map((st) => (
+                    <div key={st} className="rounded-lg bg-panel px-2.5 py-2">
+                      <p className="truncate text-[10px] uppercase tracking-wider text-ink-3">{STATUS_LABELS[st]}</p>
+                      <p className="mt-0.5 text-base font-semibold tabular-nums">{stageCount(st)}</p>
+                    </div>
+                  ))}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {away.length > 0 ? (
         <section>
           <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
@@ -160,6 +210,38 @@ export default async function TeamPage() {
               : `${vaTasks.filter((t) => t.status === "todo").length} open · give them a task, and see what's been done.`}
           </p>
         </div>
+        {vas.length ? (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {vas.map((p) => (
+              <Link
+                key={p.id}
+                href={`/team/${p.id}`}
+                className="min-w-0 rounded-2xl border border-line bg-card p-4 transition hover:border-accent sm:p-5"
+              >
+                <div className="flex items-center gap-3">
+                  <Avatar person={p} size="lg" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold">{displayName(p)}</p>
+                    <p className="truncate text-[11px] text-ink-3">{p.email}</p>
+                  </div>
+                  <span className="flex items-center gap-1 text-[11px] text-ink-3">
+                    Open their dashboard <IconChevronRight size={11} />
+                  </span>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <div className="rounded-lg bg-panel px-2.5 py-2">
+                    <p className="text-[10px] uppercase tracking-wider text-ink-3">To post</p>
+                    <p className="mt-0.5 text-base font-semibold tabular-nums">{stageCount("with_va")}</p>
+                  </div>
+                  <div className="rounded-lg bg-panel px-2.5 py-2">
+                    <p className="text-[10px] uppercase tracking-wider text-ink-3">Open tasks</p>
+                    <p className="mt-0.5 text-base font-semibold tabular-nums">{openTasks}</p>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        ) : null}
         <VaTaskBoard tasks={vaTasks} canManage />
       </section>
 

@@ -191,6 +191,47 @@ export async function saveScript(profile: Profile, args: z.infer<typeof saveScri
   return { ok: true, link: videoLink(args.video_id) };
 }
 
+export const setStageSchema = z.object({
+  video_id: z.string().uuid(),
+  stage: z
+    .enum(["ideation", "scripting", "script_review", "script_revisions", "ready_to_film"])
+    .describe(
+      "Where to move it in the planning half: ideation, scripting, script_review (ready for the client to read), " +
+        "script_revisions, or ready_to_film. A copywriter can use ideation, scripting and script_review only — " +
+        "approving a script for filming (ready_to_film) is the client's call."
+    ),
+});
+
+/**
+ * Move a video between the planning stages — "this script is final, send it for review".
+ * Same rule as the dashboard's own guard: a copywriter moves scripts between
+ * Ideation / Scripting / Script Review; everything else is an owner/admin move.
+ */
+export async function setStage(profile: Profile, args: z.infer<typeof setStageSchema>) {
+  if (!isScriptStaff(profile)) return { error: "Only an owner, admin or copywriter can move a script between stages." };
+  const db = supabaseAdmin();
+  const { data: v } = await db.from("videos").select("title, status").eq("id", args.video_id).maybeSingle();
+  if (!v) return { error: "No video with that id." };
+  if (profile.role === "copywriter") {
+    if (!COPYWRITER_VISIBLE.includes(v.status as VideoStatus)) {
+      return { error: "That video has left the planning stages — it isn't a copywriter's to move." };
+    }
+    if (!["ideation", "scripting", "script_review"].includes(args.stage)) {
+      return { error: "A copywriter can move a script between Ideation, Scripting and Script Review — approving it for filming is the client's call." };
+    }
+  }
+  if (v.status === args.stage) return { ok: true, note: "It was already there.", link: videoLink(args.video_id) };
+  const { error } = await db.from("videos").update({ status: args.stage }).eq("id", args.video_id);
+  if (error) throw new Error(error.message);
+  await db.from("video_activity").insert({
+    video_id: args.video_id,
+    actor_id: profile.id,
+    kind: "status",
+    summary: `Moved ${v.status} → ${args.stage} (via AI assistant)`,
+  });
+  return { ok: true, from: v.status, to: args.stage, link: videoLink(args.video_id) };
+}
+
 export const addHookVariantsSchema = z.object({
   video_id: z.string().uuid(),
   hooks: z.array(z.string()).min(1),
