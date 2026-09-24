@@ -49,12 +49,16 @@ export function VariantDetail({
   instagramConnected,
   clientName,
   onBack,
+  onChanged,
 }: {
   trial: PostingTrialItem;
   feedMetrics: PostingFeedMetrics | null;
   instagramConnected: boolean;
   clientName: string;
-  onBack: () => void;
+  /** When given, shows an "← All variants" link. */
+  onBack?: () => void;
+  /** Called after any change, so a parent that holds its own copy of the data can reload it. */
+  onChanged?: () => void;
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -78,6 +82,7 @@ export function VariantDetail({
   const done = (msg: string) => {
     toast.success(msg);
     router.refresh();
+    onChanged?.();
   };
 
   function setState(next: Exclude<VariantState, "scheduled_feed">) {
@@ -158,9 +163,11 @@ export function VariantDetail({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={onBack} className="text-xs text-ink-3 hover:text-ink">
-          ← All variants
-        </button>
+        {onBack ? (
+          <button type="button" onClick={onBack} className="text-xs text-ink-3 hover:text-ink">
+            ← All variants
+          </button>
+        ) : null}
         <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
           {trial.winner ? "🏆 " : ""}
           {trial.label}

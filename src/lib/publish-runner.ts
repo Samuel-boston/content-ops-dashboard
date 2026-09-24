@@ -119,8 +119,11 @@ export async function runPublishJob(jobId: string): Promise<{ ok: boolean; error
       .update({ status: "posted", post_as: "main", posted_at: new Date().toISOString() })
       .eq("promoted_job_id", jobId)
       .eq("status", "promoted");
-    // Published: do everything "Mark as posted" does (stamp, calendar date, archive).
-    await markVideoPosted(job.video_id);
+    // Published: do everything "Mark as posted" does (stamp, calendar date, archive) —
+    // unless the video is on the VA's desk, where the VA closes it out themselves
+    // (other variants may still be waiting to be posted).
+    const { data: vid } = await db.from("videos").select("status").eq("id", job.video_id).maybeSingle();
+    if (vid?.status !== "with_va") await markVideoPosted(job.video_id);
     return { ok: true };
   } catch (e) {
     if (tempFiles.length) await db.storage.from("carousels").remove(tempFiles);

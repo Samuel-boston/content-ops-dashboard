@@ -1,5 +1,5 @@
 import { requireRole } from "@/lib/auth";
-import { listPostingWork } from "@/app/posting-actions";
+import { listPostedVideos, listPostingWork } from "@/app/posting-actions";
 import { PostingBoard } from "@/components/posting/PostingBoard";
 import { listVaTasks } from "@/app/task-actions";
 import { getClientName } from "@/lib/workspace";
@@ -15,8 +15,9 @@ import { VaTaskBoard } from "@/components/tasks/VaTaskBoard";
  */
 export default async function PostingPage() {
   const viewer = await requireRole("va", "owner", "admin");
-  const [{ trials, jobs, feedMetrics, instagramConnected }, tasks, clientName] = await Promise.all([
+  const [{ trials, jobs, instagramConnected }, archive, tasks, clientName] = await Promise.all([
     listPostingWork(),
+    listPostedVideos(),
     listVaTasks(),
     getClientName(),
   ]);
@@ -26,14 +27,14 @@ export default async function PostingPage() {
       <div>
         <h1 className="text-xl font-semibold">Posting</h1>
         <p className="text-sm text-ink-2">
-          {trials.filter((t) => t.state === "to_trial" || t.state === "to_feed").length} to post ·{" "}
-          {trials.filter((t) => t.state === "trial_posted" && !t.hasMetrics).length} trial numbers to bring back
+          {new Set(trials.filter((t) => t.videoStatus === "with_va").map((t) => t.videoId)).size} to post ·{" "}
+          {archive.filter((r) => r.trialsLive > 0 && !r.best).length} posted videos waiting for trial numbers
         </p>
       </div>
       <PostingBoard
         trials={trials}
         jobs={jobs}
-        feedMetrics={feedMetrics}
+        archive={archive}
         instagramConnected={instagramConnected}
         clientName={clientName}
       />

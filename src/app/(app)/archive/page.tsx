@@ -8,6 +8,8 @@ import { CalendarMonth } from "@/components/CalendarMonth";
 import { Chip } from "@/components/badges";
 import { shiftMonth } from "@/lib/calendar";
 import { isOnMainFeed } from "@/lib/variant-state";
+import { ArchivePerformanceButton } from "@/components/posting/ArchivePerformanceButton";
+import { getClientName } from "@/lib/workspace";
 import type { TrialStatus, VideoWithEditor } from "@/lib/types";
 
 function first(v: string | string[] | undefined) {
@@ -25,7 +27,7 @@ export default async function ArchivePage({ searchParams }: PageProps<"/archive"
   const pillar = first(sp.pillar);
   const editorId = first(sp.editor);
 
-  const [customs, editors] = await Promise.all([listTaxonomyCustoms(), listEditors()]);
+  const [customs, editors, clientName] = await Promise.all([listTaxonomyCustoms(), listEditors(), getClientName()]);
 
   let q = supabase
     .from("videos")
@@ -185,6 +187,7 @@ export default async function ArchivePage({ searchParams }: PageProps<"/archive"
                       is why this only ever showed the word "Drive" before.
                     */}
                     <span className="flex shrink-0 items-center gap-1.5">
+                      <ArchivePerformanceButton videoId={v.id} title={v.title} clientName={clientName} />
                       <ArchiveLink href={v.drive_folder_url} label="Folder" />
                       <ArchiveLink href={v.drive_file_url} label="Edit" />
                       <ArchiveLink href={v.raw_footage_url} label="Raw" />
