@@ -632,3 +632,28 @@ export async function listParked() {
     .order("parked_at", { ascending: false });
   return (data ?? []) as import("@/lib/types").VideoWithEditor[];
 }
+
+/**
+ * Delete a video for good — its cuts (including the heavy files in Stream and
+ * Storage), comments, slides and everything else. Owner and admin only; there is
+ * no undo, so the button confirms first. The Google Drive archive is not touched.
+ */
+export async function deleteVideoAction(videoId: string) {
+  const me = await requireRole("owner", "admin");
+  try {
+    const { purgeVideo } = await import("@/lib/delete-video");
+    const done = await purgeVideo(videoId);
+    // The video (and its activity feed) is gone, so keep the record where it survives.
+    const supabase = await supabaseServer();
+    await supabase.from("automation_events").insert({
+      kind: "video_deleted",
+      detail: { title: done.title, by: me.id, files: done.files, streams: done.streams },
+    });
+    revalidateAll(videoId);
+    revalidatePath("/parked");
+    revalidatePath("/archive");
+    return { ok: true as const, title: done.title };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}

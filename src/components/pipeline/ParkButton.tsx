@@ -6,6 +6,7 @@ import { useTrackedTransition } from "@/components/ui/Pending";
 import { useToast } from "@/components/ui/Toast";
 import { parkVideoAction, unparkVideoAction } from "@/app/pipeline-actions";
 import { IconClock, IconPlay } from "@/components/ui/icons";
+import { DeleteVideoButton } from "@/components/pipeline/DeleteVideoButton";
 
 /**
  * Shelve a video, or take it back off the shelf.
@@ -31,6 +32,7 @@ export function ParkButton({
 
   if (parked) {
     return (
+      <span className="inline-flex items-center gap-1">
       <button
         type="button"
         disabled={pending}
@@ -49,11 +51,14 @@ export function ParkButton({
         <IconPlay size={11} />
         Pick back up
       </button>
+      <DeleteVideoButton videoId={videoId} compact={compact} />
+      </span>
     );
   }
 
   if (!open) {
     return (
+      <span className="inline-flex items-center gap-1">
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -65,6 +70,8 @@ export function ParkButton({
         <IconClock size={compact ? 10 : 11} />
         Later
       </button>
+      <DeleteVideoButton videoId={videoId} compact={compact} />
+      </span>
     );
   }
 
