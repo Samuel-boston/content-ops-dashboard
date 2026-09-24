@@ -445,6 +445,9 @@ export async function vaPublishAction(
   }
   if (opts.asTrial && st !== "to_trial") return { error: "Only a variant marked as a trial reel can be posted as one." };
   if (!t.cut_id && !t.post_as) return { error: "Nothing to post." };
+  if (!t.cut_id && !connected.instagram) {
+    return { error: "Carousels can't be posted through Publer yet. Post it by hand in Instagram and tick Posted, or connect Instagram (Meta) in Settings." };
+  }
 
   const caption =
     opts.caption !== undefined

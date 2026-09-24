@@ -8,6 +8,7 @@ import {
   publishContainer,
 } from "@/lib/integrations/instagram";
 import { getDownloadUrl } from "@/lib/integrations/stream";
+import { getWorkspaceSettings } from "@/lib/workspace";
 import { postReelViaPubler, publerSettings } from "@/lib/integrations/publer";
 import { markVideoPosted } from "@/lib/archive";
 import { mintFileToken } from "@/lib/phone-link";
@@ -81,7 +82,15 @@ export async function runPublishJob(jobId: string): Promise<{ ok: boolean; error
         shareToFeed: job.share_to_feed ?? true,
       });
     } else {
-      // No cut: this is a carousel. Instagram only takes JPEG for feed images,
+      // No cut: this is a carousel. Publer isn't wired up for these yet, so
+      // they need the Instagram Graph API connection.
+      const ws = await getWorkspaceSettings();
+      if (!ws.ig_user_id || !ws.ig_access_token) {
+        throw new Error(
+          "Carousels can't be posted through Publer yet. Post it by hand in Instagram and tick Posted, or connect Instagram (Meta) in Settings."
+        );
+      }
+      // Instagram only takes JPEG for feed images,
       // and the slides are stored as PNG — so each is converted to a temporary
       // JPEG, handed over by signed link, and cleaned up afterwards.
       const { default: sharp } = await import("sharp");
