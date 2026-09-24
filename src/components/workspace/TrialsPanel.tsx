@@ -13,6 +13,7 @@ import {
   saveTrialMetricsAction,
   sendToVaAction,
   sendVariantToVaAction,
+  takeBackVariantAction,
   updateVariantAction,
 } from "@/app/trial-actions";
 import { createFootageUploadUrlAction } from "@/app/asset-actions";
@@ -314,7 +315,7 @@ function TrialRow({
               Watch
             </button>
           ) : null}
-          {t.status === "planned" && !t.sent_to_va_at ? (
+          {t.status === "planned" ? (
             <select
               value={t.post_as ?? "none"}
               disabled={pending}
@@ -378,20 +379,29 @@ function TrialRow({
           <textarea
             defaultValue={t.caption ?? ""}
             rows={7}
-            disabled={Boolean(t.sent_to_va_at)}
             placeholder={fallbackCaption ? "Caption — using the one from the box below unless you write one here" : "Caption for this variant"}
             onBlur={(e) => {
               if (e.target.value.trim() === (t.caption ?? "").trim()) return;
               run(() => updateVariantAction(t.id, videoId, { caption: e.target.value }));
             }}
-            className={`${field} min-h-32 w-full resize-y text-sm leading-relaxed disabled:opacity-60`}
+            className={`${field} min-h-32 w-full resize-y text-sm leading-relaxed`}
           />
           <div className="flex flex-wrap items-center gap-2">
             {t.sent_to_va_at ? (
-              <span className="text-[11px] text-ok">
-                ✓ Sent to the VA{" "}
-                {new Date(t.sent_to_va_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-              </span>
+              <>
+                <span className="text-[11px] text-ok">
+                  ✓ With the VA since{" "}
+                  {new Date(t.sent_to_va_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} — changes
+                  here reach them straight away.
+                </span>
+                <button
+                  onClick={() => run(() => takeBackVariantAction(t.id, videoId))}
+                  disabled={pending}
+                  className="ml-auto rounded-md border border-line px-2.5 py-1 text-[11px] text-ink-2 hover:border-warn hover:text-ink disabled:opacity-50"
+                >
+                  Take it back from the VA
+                </button>
+              </>
             ) : (
               <button
                 onClick={() => run(() => sendVariantToVaAction(t.id, videoId, fallbackCaption))}

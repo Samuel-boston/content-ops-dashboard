@@ -396,3 +396,18 @@ export async function savePostCaptionAction(videoId: string, caption: string) {
   revalidatePath("/posting");
   return { ok: true as const };
 }
+
+/** Take a variant back off the VA's desk (e.g. to rework it). Its caption and destination are kept. */
+export async function takeBackVariantAction(id: string, videoId: string) {
+  await requireRole("owner", "admin");
+  const supabase = await supabaseServer();
+  const { error } = await supabase
+    .from("trial_posts")
+    .update({ sent_to_va_at: null })
+    .eq("id", id)
+    .eq("status", "planned");
+  if (error) return { error: error.message };
+  revalidateTrials(videoId);
+  revalidatePath("/posting");
+  return { ok: true as const };
+}
