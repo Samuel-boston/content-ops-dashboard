@@ -278,9 +278,9 @@ async function CopywriterPerson({ person }: { person: Person }) {
     .from("videos")
     .select("id, title, status, priority")
     .is("parked_at", null)
-    .in("status", ["ideation", "scripting", "script_review", "script_revisions", "ready_to_film"])
+    .in("status", ["ideation", "scripting", "ready_to_film"])
     .order("stage_entered_at", { ascending: true });
-  const stages: VideoStatus[] = ["ideation", "scripting", "script_review", "script_revisions", "ready_to_film"];
+  const stages: VideoStatus[] = ["ideation", "scripting", "ready_to_film"];
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-center gap-3">
@@ -292,7 +292,7 @@ async function CopywriterPerson({ person }: { person: Person }) {
           <h1 className="truncate text-xl font-semibold">{displayName(person)}</h1>
           <p className="text-sm text-ink-2">Copywriter — {person.email}</p>
         </div>
-        <Link href="/scripting" className="ml-auto rounded-lg border border-line px-3 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink">
+        <Link href="/board" className="ml-auto rounded-lg border border-line px-3 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink">
           Open the scripting board →
         </Link>
       </div>

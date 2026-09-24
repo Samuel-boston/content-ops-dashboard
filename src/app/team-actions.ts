@@ -107,7 +107,6 @@ export async function editorSnapshot(editorId: string): Promise<EditorSnapshot |
 export interface ClientActions {
   toReview: VideoWithEditor[];
   toFinalReview: VideoWithEditor[];
-  readyToPost: VideoWithEditor[];
   /** Scripted and waiting to be shot — the client's own input. */
   toFilm: VideoWithEditor[];
   poolCount: number;
@@ -133,7 +132,6 @@ export async function clientActions(): Promise<ClientActions> {
   return {
     toReview: rows.filter((v) => v.status === "in_review"),
     toFinalReview: rows.filter((v) => v.status === "final_review"),
-    readyToPost: rows.filter((v) => v.status === "ready_to_post"),
     toFilm: rows.filter((v) => v.status === "ready_to_film"),
     poolCount: pool.length,
     // Three is roughly a week of work for a small team; below that the client

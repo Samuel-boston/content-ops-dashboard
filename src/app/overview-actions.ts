@@ -180,7 +180,7 @@ export async function runway(): Promise<Runway> {
     totalUnposted: statuses.length,
     depth: [
       { label: "Ideas", count: count("ideation"), href: "/ideation" },
-      { label: "Scripting", count: count("scripting"), href: "/scripting" },
+      { label: "Scripting", count: count("scripting"), href: "/board" },
       { label: "To film", count: count("ready_to_film"), href: "/filming" },
       { label: "Editor brief", count: count("editor_brief"), href: "/editor-brief" },
       { label: "With editors", count: count("ready_to_edit") + count("in_progress"), href: "/board" },
@@ -213,21 +213,17 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 
 /** Stages that mean "your turn" come first, then the rest in pipeline order. */
 const GROUP_ORDER: VideoStatus[] = [
-  "script_review",
   "creative_review",
   "in_review",
   "final_review",
   "revisions",
   "ready_to_film",
-  "ready_to_post",
   "with_va",
   "posted",
 ];
 
 function groupLabel(status: VideoStatus, n: number): { label: string; href: string } {
   switch (status) {
-    case "script_review":
-      return { label: plural(n, "script to review", "scripts to review"), href: "/script-review" };
     case "creative_review":
       return { label: plural(n, "creative to review", "creatives to review"), href: "/board" };
     case "in_review":
@@ -235,9 +231,7 @@ function groupLabel(status: VideoStatus, n: number): { label: string; href: stri
     case "final_review":
       return { label: plural(n, "video ready for final review", "videos ready for final review"), href: "/review" };
     case "ready_to_film":
-      return { label: plural(n, "video ready to film", "videos ready to film"), href: "/filming" };
-    case "ready_to_post":
-      return { label: plural(n, "video ready to post", "videos ready to post"), href: "/board" };
+      return { label: plural(n, "video ready to film", "videos ready to film"), href: "/board" };
     case "with_va":
       return { label: plural(n, "video with the VA", "videos with the VA"), href: "/board" };
     case "posted":

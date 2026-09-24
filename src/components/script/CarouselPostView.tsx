@@ -13,7 +13,6 @@ import {
   approveCarouselCreativeAction,
   markPostedAction,
   requestCarouselRevisionsAction,
-  resubmitCarouselCreativeAction,
   submitCarouselCreativesAction,
 } from "@/app/pipeline-actions";
 import { IconCheck, IconChevronRight, IconSparkles } from "@/components/ui/icons";
@@ -26,11 +25,11 @@ import { ParkButton } from "@/components/pipeline/ParkButton";
  * deliverable — so this is slides-first, still fully editable, with the
  * action bar changing by status:
  *
- *   Creative Review    — the images are made, client checks them: approve
- *                         to Ready to Post, or send back for another pass.
- *   Creative Revisions — sent back; resubmit once the creatives are fixed.
- *   Ready to Post       — one button, mark it posted.
- *   Posted              — done, read-only.
+ *   Needs Creatives — the images are being made; hand them in for review.
+ *   Creative Review — client checks them: approve to send it to the VA, or
+ *                     send back for another pass (back to Needs Creatives).
+ *   With the VA     — one button, mark it posted.
+ *   Posted          — done, read-only.
  */
 export function CarouselPostView({
   video,
@@ -121,34 +120,15 @@ export function CarouselPostView({
                 type="button"
                 disabled={pending}
                 onClick={() =>
-                  run(() => approveCarouselCreativeAction(video.id), "Approved — ready to post.")
+                  run(() => approveCarouselCreativeAction(video.id), "Approved — with the VA.")
                 }
                 className="flex shrink-0 items-center gap-1 rounded-lg bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white transition hover:bg-accent-hi disabled:opacity-50"
               >
-                Approve — ready to post
+                Approve — send to the VA
                 <IconChevronRight size={11} />
               </button>
             </span>
-          ) : video.status === "creative_revisions" ? (
-            <span className="ml-auto flex items-center gap-1">
-              <StageBack videoId={video.id} status={video.status} carousel />
-              <span className="flex items-center gap-1.5 px-1 text-[11px] text-ink-3">
-                <IconSparkles size={12} />
-                Sent back — needs new creatives
-              </span>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() =>
-                  run(() => resubmitCarouselCreativeAction(video.id), "Resubmitted for review.")
-                }
-                className="flex shrink-0 items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-[11px] text-ink-2 transition hover:border-accent hover:text-ink disabled:opacity-50"
-              >
-                Resubmit — ready for review
-                <IconChevronRight size={11} />
-              </button>
-            </span>
-          ) : video.status === "ready_to_post" || video.status === "with_va" ? (
+          ) : video.status === "with_va" ? (
             <span className="ml-auto flex items-center gap-1">
               <StageBack videoId={video.id} status={video.status} carousel />
               <button
@@ -179,7 +159,7 @@ export function CarouselPostView({
       />
 
       {/* Approved: hand it to the VA to post — notes, a cover and a caption. */}
-      {video.status === "ready_to_post" || video.status === "with_va" || video.status === "posted" ? (
+      {video.status === "with_va" || video.status === "posted" ? (
         <div className="max-w-2xl">
           <TrialsPanel
             videoId={video.id}

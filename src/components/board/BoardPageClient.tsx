@@ -8,61 +8,75 @@ import { VideoQuickView } from "@/components/board/VideoQuickView";
 import { isCarouselFormat } from "@/lib/taxonomy";
 import type { BoardCard, Profile, Series, VideoStatus } from "@/lib/types";
 
-export type BoardScope = "videos" | "carousels" | "scripting" | "filming";
+export type BoardScope = "all" | "videos" | "carousels" | "filming" | "planning";
 
 /**
- * One continuous 12-column board reads as "everything, always" — nothing
- * ever looks finished or separated. These four scopes split it the way the
- * work actually splits: a video's post-production, a carousel's much
- * shorter life (no filming, no raw footage), the planning half both
- * copywriter and client watch, and the handoff between "filmed" and "with
- * the editors". Ready to Edit deliberately appears in both Filming and
- * Videos — it's the same handoff, viewed from either side of it.
+ * The default view is everything at once — videos and carousels side by side
+ * in one board, scripting included. The other tabs narrow it: a video's whole
+ * life, a carousel's much shorter one (no filming, no raw footage), or just the
+ * handoff between "filmed" and "with the editors". The copywriter only ever
+ * gets Planning: ideas in, scripts out.
  */
 const SCOPES: Record<
   BoardScope,
   { label: string; columns: VideoStatus[]; match: (c: BoardCard) => boolean }
 > = {
-  videos: {
-    label: "Videos",
+  all: {
+    label: "All",
     columns: [
       "ideation",
+      "scripting",
+      "needs_creatives",
+      "creative_review",
+      "ready_to_film",
+      "editor_brief",
       "ready_to_edit",
       "in_progress",
       "in_review",
       "revisions",
       "awaiting_variants",
       "final_review",
-      "ready_to_post",
+      "with_va",
+    ],
+    match: () => true,
+  },
+  videos: {
+    label: "Videos",
+    columns: [
+      "ideation",
+      "scripting",
+      "ready_to_film",
+      "editor_brief",
+      "ready_to_edit",
+      "in_progress",
+      "in_review",
+      "revisions",
+      "awaiting_variants",
+      "final_review",
       "with_va",
     ],
     match: (c) => !isCarouselFormat(c.formats),
   },
   carousels: {
     label: "Carousels",
-    // Scripting (the caption text) happens in the shared Scripting board —
-    // a carousel's own board picks up right after that: the images get
-    // made outside this dashboard (on the platform itself, no editor
-    // involved), reviewed here, and posted. No Editor Brief, Ready to Edit,
-    // Editing, In Review, Revisions or Final Review — none of that applies.
-    columns: ["ideation", "needs_creatives", "creative_review", "creative_revisions", "ready_to_post", "with_va"],
+    // The images get made outside this dashboard (on the platform itself, no
+    // editor involved), reviewed here, and go straight to the VA. No Editor
+    // Brief, Ready to Edit, Editing, In Review, Revisions or Final Review.
+    columns: ["ideation", "scripting", "needs_creatives", "creative_review", "with_va"],
     match: (c) => isCarouselFormat(c.formats),
-  },
-  scripting: {
-    label: "Scripting",
-    // Both formats' words-and-approval half, in one place — this is also
-    // where a carousel's Script Review approval happens, before it moves on
-    // to the separate Carousels board for the creative-review half.
-    columns: ["ideation", "scripting", "script_review", "script_revisions", "ready_to_film"],
-    match: () => true,
   },
   filming: {
     label: "Filming",
     columns: ["ready_to_film", "editor_brief", "ready_to_edit"],
     match: (c) => !isCarouselFormat(c.formats),
   },
+  planning: {
+    label: "Planning",
+    columns: ["ideation", "scripting", "ready_to_film"],
+    match: () => true,
+  },
 };
-const SCOPE_ORDER: BoardScope[] = ["videos", "carousels", "scripting", "filming"];
+const SCOPE_ORDER: BoardScope[] = ["all", "videos", "carousels", "filming"];
 
 /** Thin client wrapper so the board's "New video" button can open the dialog. */
 export function BoardPageClient({
@@ -80,7 +94,7 @@ export function BoardPageClient({
   customs: { content_pillar: string[]; format: string[]; platform: string[] };
   seriesOptions: Series[];
   viewerId: string;
-  /** Which scope tabs to offer — the copywriter only ever gets Scripting. */
+  /** Which scope tabs to offer — the copywriter only ever gets Planning. */
   scopes?: BoardScope[];
   /** The route this board lives on, so closing the quick view stays put. */
   basePath?: string;

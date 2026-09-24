@@ -25,15 +25,14 @@ const STAGE_ALIASES: Record<string, VideoStatus[]> = {
   ideation: ["ideation"],
   ready_to_script: ["scripting"],
   scripting: ["scripting"],
-  script_review: ["script_review"],
-  ready_to_review: ["script_review"],
   ready_to_film: ["ready_to_film"],
   editing: ["in_progress"],
   in_progress: ["in_progress"],
   review: ["in_review"],
   revisions: ["revisions"],
   awaiting_variants: ["awaiting_variants"],
-  ready_to_post: ["ready_to_post", "with_va", "final_review"],
+  ready_to_post: ["with_va", "final_review"],
+  with_va: ["with_va"],
   posted: ["posted"],
 };
 
@@ -47,10 +46,10 @@ function isScriptStaff(p: Profile) {
 }
 
 /** What a copywriter can see — mirrors videos_select_copywriter (migration 027). */
-const COPYWRITER_VISIBLE: VideoStatus[] = ["ideation", "scripting", "script_review", "ready_to_film"];
+const COPYWRITER_VISIBLE: VideoStatus[] = ["ideation", "scripting", "ready_to_film"];
 
 /** The client's private planning half — invisible to editors (RLS parity). */
-const PLANNING: VideoStatus[] = ["ideation", "scripting", "script_review", "ready_to_film", "editor_brief"];
+const PLANNING: VideoStatus[] = ["ideation", "scripting", "ready_to_film", "editor_brief"];
 
 const VIDEO_FIELDS =
   "id, title, status, priority, content_pillars, formats, platforms, brief, " +
@@ -194,18 +193,17 @@ export async function saveScript(profile: Profile, args: z.infer<typeof saveScri
 export const setStageSchema = z.object({
   video_id: z.string().uuid(),
   stage: z
-    .enum(["ideation", "scripting", "script_review", "script_revisions", "ready_to_film"])
+    .enum(["ideation", "scripting", "ready_to_film"])
     .describe(
-      "Where to move it in the planning half: ideation, scripting, script_review (ready for the client to read), " +
-        "script_revisions, or ready_to_film. A copywriter can use ideation, scripting and script_review only — " +
-        "approving a script for filming (ready_to_film) is the client's call."
+      "Where to move it in the planning half: ideation, scripting, or ready_to_film. A copywriter can use " +
+        "ideation and scripting only — approving a script for filming (ready_to_film) is the client's call."
     ),
 });
 
 /**
- * Move a video between the planning stages — "this script is final, send it for review".
- * Same rule as the dashboard's own guard: a copywriter moves scripts between
- * Ideation / Scripting / Script Review; everything else is an owner/admin move.
+ * Move a video between the planning stages. Same rule as the dashboard's own
+ * guard: a copywriter moves scripts between Ideation / Scripting; everything
+ * else is an owner/admin move.
  */
 export async function setStage(profile: Profile, args: z.infer<typeof setStageSchema>) {
   if (!isScriptStaff(profile)) return { error: "Only an owner, admin or copywriter can move a script between stages." };
@@ -216,8 +214,8 @@ export async function setStage(profile: Profile, args: z.infer<typeof setStageSc
     if (!COPYWRITER_VISIBLE.includes(v.status as VideoStatus)) {
       return { error: "That video has left the planning stages — it isn't a copywriter's to move." };
     }
-    if (!["ideation", "scripting", "script_review"].includes(args.stage)) {
-      return { error: "A copywriter can move a script between Ideation, Scripting and Script Review — approving it for filming is the client's call." };
+    if (!["ideation", "scripting"].includes(args.stage)) {
+      return { error: "A copywriter can move a script between Ideation and Scripting — approving it for filming is the client's call." };
     }
   }
   if (v.status === args.stage) return { ok: true, note: "It was already there.", link: videoLink(args.video_id) };

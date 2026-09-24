@@ -23,17 +23,16 @@ export interface Profile {
  *
  * `approved` is a decision, not a resting place. A database trigger routes it
  * onward the instant it's set — to `awaiting_variants` when the script has more
- * than one hook (or the client forced it), otherwise straight to
- * `ready_to_post`. No video ever sits in `approved`.
+ * than one hook (or the client forced it), otherwise straight to `with_va`.
+ * No video ever sits in `approved`. (There is no Script Review, Script
+ * Revisions, Creative Revisions or Ready to Post stage any more; the old values
+ * remain legal in the database but nothing sets them.)
  */
 export type VideoStatus =
   | "ideation"
   | "scripting"
-  | "script_review"
-  | "script_revisions"
   | "needs_creatives"
   | "creative_review"
-  | "creative_revisions"
   | "ready_to_film"
   | "editor_brief"
   | "ready_to_edit"
@@ -43,18 +42,14 @@ export type VideoStatus =
   | "approved"
   | "awaiting_variants"
   | "final_review"
-  | "ready_to_post"
   | "with_va"
   | "posted";
 
 export const STATUS_LABELS: Record<VideoStatus, string> = {
   ideation: "Ideation",
   scripting: "Scripting",
-  script_review: "Script Review",
-  script_revisions: "Script Revisions",
   needs_creatives: "Needs Creatives",
   creative_review: "Creatives to Review",
-  creative_revisions: "Creative Revisions",
   ready_to_film: "Ready to Film",
   editor_brief: "Editor Brief",
   ready_to_edit: "Ready to Edit",
@@ -64,7 +59,6 @@ export const STATUS_LABELS: Record<VideoStatus, string> = {
   approved: "Approved",
   awaiting_variants: "Awaiting Variants",
   final_review: "Final Review",
-  ready_to_post: "Ready to Post",
   with_va: "With the VA",
   posted: "Posted",
 };
@@ -73,11 +67,8 @@ export const STATUS_LABELS: Record<VideoStatus, string> = {
 export const STATUS_OWNER: Record<VideoStatus, "client" | "editor" | "va" | "done"> = {
   ideation: "client",
   scripting: "client",
-  script_review: "client",
-  script_revisions: "editor",
   needs_creatives: "client",
   creative_review: "client",
-  creative_revisions: "editor",
   ready_to_film: "client",
   editor_brief: "client",
   ready_to_edit: "editor",
@@ -87,7 +78,6 @@ export const STATUS_OWNER: Record<VideoStatus, "client" | "editor" | "va" | "don
   approved: "client",
   awaiting_variants: "editor",
   final_review: "client",
-  ready_to_post: "client",
   with_va: "va",
   posted: "done",
 };
@@ -96,11 +86,8 @@ export const STATUS_OWNER: Record<VideoStatus, "client" | "editor" | "va" | "don
 export const ACTIVE_STATUSES: VideoStatus[] = [
   "ideation",
   "scripting",
-  "script_review",
-  "script_revisions",
   "needs_creatives",
   "creative_review",
-  "creative_revisions",
   "ready_to_film",
   "editor_brief",
   "ready_to_edit",
@@ -109,7 +96,6 @@ export const ACTIVE_STATUSES: VideoStatus[] = [
   "revisions",
   "awaiting_variants",
   "final_review",
-  "ready_to_post",
   "with_va",
 ];
 
@@ -138,15 +124,13 @@ export const EDITOR_SETTABLE_STATUSES: VideoStatus[] = [
 
 /**
  * Client-only stages. Editors can't see these at all (enforced in RLS).
- * creative_review/creative_revisions are carousel-only and deliberately NOT
+ * needs_creatives/creative_review are carousel-only and deliberately NOT
  * here — they don't route to the /idea or /script rooms this list feeds,
  * they route to CarouselPostView instead (see videos/[id]/page.tsx).
  */
 export const PLANNING_STAGES: VideoStatus[] = [
   "ideation",
   "scripting",
-  "script_review",
-  "script_revisions",
   "ready_to_film",
   "editor_brief",
 ];
@@ -161,14 +145,11 @@ export const PLANNING_STAGES: VideoStatus[] = [
 export const COPYWRITER_STATUSES: VideoStatus[] = [
   "ideation",
   "scripting",
-  "script_review",
-  "script_revisions",
   "ready_to_film",
 ];
 export const COPYWRITER_SETTABLE_STATUSES: VideoStatus[] = [
   "ideation",
   "scripting",
-  "script_review",
 ];
 
 /** Stages where the editor owes the client an ETA before picking the work up. */
@@ -180,32 +161,30 @@ export const STATUS_ORDER: VideoStatus[] = [...ACTIVE_STATUSES, "posted"];
  * The stage a video came from, for undoing a move.
  *
  * `approved` is skipped: it's transient — a trigger immediately routes it on
- * to Awaiting Variants or Ready to Post — so stepping back into it would be
- * bounced straight out again. Stepping back from either of those lands on
+ * to Awaiting Variants or straight to the VA — so stepping back into it would
+ * be bounced straight out again. Stepping back from either of those lands on
  * In Review, which is where the decision was actually made.
  */
 export function previousStage(status: VideoStatus, carousel = false): VideoStatus | null {
-  // A carousel's life past Script Review is entirely its own: Script Review
-  // -> Creative Review -> Ready to Post, no filming, brief, or edit chain.
-  // Checked first: a plain video's "ready_to_post -> in_review" rule below
-  // would otherwise win and send a carousel somewhere it never was.
-  // These three stages only ever exist for carousels, so they count as one
-  // even when the caller didn't say so.
-  const carouselOnly = status === "needs_creatives" || status === "creative_review" || status === "creative_revisions";
+  // A carousel's life after Scripting is entirely its own: Needs Creatives ->
+  // Creatives to Review -> With the VA, no filming, brief, or edit chain.
+  // These two stages only ever exist for carousels, so they count as one even
+  // when the caller didn't say so.
+  const carouselOnly = status === "needs_creatives" || status === "creative_review";
   if (carousel || carouselOnly) {
-    if (status === "needs_creatives") return "script_review";
+    if (status === "needs_creatives") return "scripting";
     if (status === "creative_review") return "needs_creatives";
-    if (status === "creative_revisions") return "creative_review";
-    if (status === "ready_to_post") return "creative_review";
-    if (status === "editor_brief") return "script_review"; // legacy safety net
+    if (status === "with_va") return "creative_review";
+    if (status === "editor_brief") return "scripting"; // legacy safety net
   }
-  // A video's script goes straight from Script Review to Ready to Film, so the
+  // A video's script goes straight from Scripting to Ready to Film, so the
   // step before Ready to Film is Scripting — never the carousel-only stages
   // that sit between them in the stage order.
   if (status === "ready_to_film") return "scripting";
-  // With the VA is a step out from Ready to Post: taking it back lands there.
-  if (status === "with_va") return "ready_to_post";
-  if (status === "awaiting_variants" || status === "ready_to_post") return "in_review";
+  // With the VA is where an approved cut lands; taking it back returns to the
+  // review where it was approved.
+  if (status === "with_va") return "in_review";
+  if (status === "awaiting_variants") return "in_review";
   if (status === "revisions") return "in_review";
   const i = STATUS_ORDER.indexOf(status);
   if (i <= 0) return null;
@@ -221,11 +200,8 @@ export function previousStage(status: VideoStatus, carousel = false): VideoStatu
 export const STATUS_COLOR: Record<VideoStatus, string> = {
   ideation: "var(--color-stage-ideation)",
   scripting: "var(--color-stage-scripting)",
-  script_review: "var(--color-stage-script-review)",
-  script_revisions: "var(--color-stage-script-revisions)",
   needs_creatives: "var(--color-stage-needs-creatives)",
   creative_review: "var(--color-stage-creative-review)",
-  creative_revisions: "var(--color-stage-creative-revisions)",
   ready_to_film: "var(--color-stage-film)",
   editor_brief: "var(--color-stage-brief)",
   ready_to_edit: "var(--color-stage-ready)",
@@ -235,7 +211,6 @@ export const STATUS_COLOR: Record<VideoStatus, string> = {
   approved: "var(--color-stage-approved)",
   awaiting_variants: "var(--color-stage-variants)",
   final_review: "var(--color-stage-final)",
-  ready_to_post: "var(--color-stage-ready-post)",
   with_va: "var(--color-stage-with-va)",
   posted: "var(--color-stage-posted)",
 };
@@ -441,11 +416,8 @@ export interface TaxonomyOption {
 export const STALLED_AFTER_DAYS: Partial<Record<VideoStatus, number>> = {
   ideation: 14,
   scripting: 10,
-  script_review: 3,
-  script_revisions: 3,
   needs_creatives: 5,
   creative_review: 3,
-  creative_revisions: 3,
   ready_to_film: 7,
   ready_to_edit: 7,
   in_progress: 5,
@@ -453,7 +425,6 @@ export const STALLED_AFTER_DAYS: Partial<Record<VideoStatus, number>> = {
   revisions: 4,
   awaiting_variants: 3,
   final_review: 3,
-  ready_to_post: 5,
   with_va: 5,
 };
 

@@ -11,8 +11,6 @@ import { STATUS_COLOR, STATUS_LABELS, type VideoStatus } from "@/lib/types";
 type PlanningStage =
   | "ideation"
   | "scripting"
-  | "script_review"
-  | "script_revisions"
   | "ready_to_film"
   | "editor_brief"
   | "ready_to_edit";
@@ -20,8 +18,6 @@ type PlanningStage =
 const STAGES: PlanningStage[] = [
   "ideation",
   "scripting",
-  "script_review",
-  "script_revisions",
   "ready_to_film",
   "editor_brief",
   "ready_to_edit",
@@ -58,9 +54,8 @@ export function PlanningStageBar({
   const router = useRouter();
   const [pending, startTransition] = useTrackedTransition();
 
-  // A carousel never gets filmed, briefed, or handed to an editor — once
-  // Script Review is approved it jumps straight to Ready to Post, outside
-  // this stepper entirely.
+  // A carousel never gets filmed, briefed, or handed to an editor — once its
+  // script is approved it goes on to creatives, outside this stepper entirely.
   const stages = carousel
     ? STAGES.filter((s) => !["ready_to_film", "editor_brief", "ready_to_edit"].includes(s))
     : STAGES;

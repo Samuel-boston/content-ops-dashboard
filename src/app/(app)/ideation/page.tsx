@@ -13,7 +13,7 @@ import { CreateVideoButton } from "@/components/CreateVideoButton";
 export default async function IdeationPage() {
   const viewer = await requireRole("owner", "admin", "copywriter");
   // The copywriter works from the single planning board now.
-  if (viewer.role === "copywriter") redirect("/scripting");
+  if (viewer.role === "copywriter") redirect("/board");
   const [board, editors, customs] = await Promise.all([
     listActiveBoard(),
     listEditors(),

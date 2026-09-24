@@ -95,9 +95,9 @@ function buildServer(profile: Profile) {
     {
       title: "Move a video between planning stages",
       description:
-        "Move a video through the scripting pipeline — e.g. once a script is final, set it to script_review so the " +
-        "client sees it, or pull an idea into scripting. Copywriters can use ideation, scripting and script_review; " +
-        "owners and admins can also use script_revisions and ready_to_film.",
+        "Move a video through the scripting pipeline — e.g. pull an idea into scripting, or once a script is " +
+        "final and approved set it to ready_to_film. Copywriters can use ideation and scripting; " +
+        "owners and admins can also use ready_to_film.",
       inputSchema: tools.setStageSchema.shape,
     },
     async (args) => {

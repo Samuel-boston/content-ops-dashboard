@@ -19,8 +19,6 @@ export function StageMove({
     VideoStatus,
     | "ideation"
     | "scripting"
-    | "script_review"
-    | "script_revisions"
     | "ready_to_film"
     | "editor_brief"
     | "ready_to_edit"

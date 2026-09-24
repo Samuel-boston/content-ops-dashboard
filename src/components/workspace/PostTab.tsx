@@ -95,7 +95,7 @@ export function PostTab({
       {variantsOnly ? (
         <p className="text-[11px] leading-relaxed text-ink-3">
           Watch each variant, pick where it goes and write its caption. When you approve the
-          variants they move to Ready to Post, where scheduling opens up.
+          variants they go to the VA, where scheduling opens up.
         </p>
       ) : null}
 

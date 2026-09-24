@@ -6,7 +6,7 @@ import { useToast } from "@/components/ui/Toast";
 import { approveCarouselScriptAction } from "@/app/pipeline-actions";
 import { IconChevronRight } from "@/components/ui/icons";
 
-/** Approve a carousel's script — Script Review -> Creative Review, where the actual slide images get checked. */
+/** Approve a carousel's script — Scripting -> Needs Creatives, where the actual slide images get checked. */
 export function ApproveCarouselButton({ videoId }: { videoId: string }) {
   const router = useRouter();
   const toast = useToast();

@@ -9,7 +9,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getCurrentProfile, requireRole, requireUser } from "@/lib/auth";
 import { notify, notifyTelegram } from "@/lib/notify";
 import { STATUS_ORDER } from "@/lib/types";
-import { releaseFromVa } from "@/lib/va-handoff";
+import { handOffToVa, releaseFromVa } from "@/lib/va-handoff";
 import type {
   Priority,
   Profile,
@@ -33,7 +33,7 @@ function revalidateBoards() {
     "/calendar",
     "/team",
     "/ideation",
-    "/scripting",
+    "/board",
     "/review",
     "/ready-to-post",
   ]) {
@@ -373,13 +373,13 @@ export async function setStatusAction(id: string, status: VideoStatus) {
     .select("assigned_editor_id, title, status")
     .eq("id", id)
     .single();
-  // "With the VA" is entered through the hand-off (variants, captions,
-  // destinations, instructions), never by just changing the status.
-  if (status === "with_va" && before?.status !== "with_va") {
-    return { error: "Send it to the VA from Ready to Post — the VA needs each variant's destination and caption." };
+  // Only the client's side hands a video to the VA.
+  if (status === "with_va" && before?.status !== "with_va" && me.role !== "owner" && me.role !== "admin") {
+    return { error: "Only an owner or admin can send a video to the VA." };
   }
   const { error } = await supabase.from("videos").update({ status }).eq("id", id);
   if (error) return { error: error.message };
+  if (status === "with_va" && before?.status !== "with_va") await handOffToVa(id, me.id);
   // Leaving the VA's desk for anywhere but Posted clears their side.
   if (before?.status === "with_va" && status !== "with_va" && status !== "posted") await releaseFromVa(id);
 

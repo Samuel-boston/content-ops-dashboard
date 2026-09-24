@@ -5,7 +5,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireRole, requireUser } from "@/lib/auth";
 import { annotateOverdue } from "@/lib/priorities";
-import { releaseFromVa } from "@/lib/va-handoff";
+import { handOffToVa, releaseFromVa } from "@/lib/va-handoff";
 import type { VideoStatus, VideoWithEditor } from "@/lib/types";
 
 const EDITOR_SELECT =
@@ -85,7 +85,7 @@ export async function calendarData(fromISO: string, toISO: string): Promise<Cale
       .select(EDITOR_SELECT)
       .is("parked_at", null)
       .is("post_date", null)
-      .in("status", ["ready_to_post", "with_va", "final_review", "awaiting_variants", "in_review"])
+      .in("status", ["with_va", "final_review", "awaiting_variants", "in_review"])
       .order("priority_rank", { ascending: false })
       .order("stage_entered_at"),
   ]);
@@ -196,13 +196,15 @@ export async function bulkSetStatusAction(ids: string[], status: VideoStatus) {
   // of these roles may make.
   await requireRole("owner", "admin", "copywriter");
   if (!ids.length) return { error: "Nothing selected." };
-  if (status === "with_va") {
-    return { error: "Send videos to the VA one at a time from Ready to Post — each needs its variants' destinations and captions." };
-  }
   const supabase = await supabaseServer();
   const { data: leaving } = await supabase.from("videos").select("id").in("id", ids).eq("status", "with_va");
   const { error } = await supabase.from("videos").update({ status }).in("id", ids);
   if (error) return { error: error.message };
+  // Handed to the VA: give each its variant rows and tell the VAs.
+  if (status === "with_va") {
+    const already = new Set((leaving ?? []).map((v) => v.id as string));
+    for (const id of ids.filter((i) => !already.has(i))) await handOffToVa(id, null);
+  }
   // Anything pulled out of the VA's hands (other than to Posted) clears their side.
   if (status !== "posted") for (const v of leaving ?? []) await releaseFromVa(v.id as string);
   revalidatePath("/board");

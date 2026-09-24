@@ -1,5 +1,8 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { notify } from "@/lib/notify";
+import { isCarouselFormat } from "@/lib/taxonomy";
+import type { VideoStatus } from "@/lib/types";
 
 /**
  * A video is "with the VA" exactly when its status is `with_va` — nothing else
@@ -44,4 +47,74 @@ export async function releaseFromVa(videoId: string): Promise<void> {
     .eq("status", "posted");
   await db.from("trial_posts").update({ sent_to_va_at: null }).eq("video_id", videoId).eq("status", "planned");
   await db.from("videos").update({ va_sent_at: null }).eq("id", videoId);
+}
+
+/**
+ * Every cut of a video gets a row to hang its choices on — trial or main feed,
+ * its caption, whether it's been sent to the VA. A carousel has no cuts, so it
+ * gets the one row. Safe to call again: it only adds what's missing.
+ */
+export async function ensureVariantRows(videoId: string, createdBy: string | null): Promise<void> {
+  const db = supabaseAdmin();
+  const [{ data: video }, { data: cuts }, { data: existing }] = await Promise.all([
+    db.from("videos").select("formats").eq("id", videoId).maybeSingle(),
+    db.from("video_cuts").select("id, label, kind").eq("video_id", videoId).order("position"),
+    db.from("trial_posts").select("cut_id, status").eq("video_id", videoId),
+  ]);
+  const live = (existing ?? []).filter((t) => t.status !== "archived");
+  const rows: Record<string, unknown>[] = [];
+  if (video && isCarouselFormat(video.formats as string[])) {
+    if (!live.some((t) => t.cut_id === null)) {
+      rows.push({ video_id: videoId, cut_id: null, label: "Carousel", status: "planned", post_as: "main", created_by: createdBy });
+    }
+  } else {
+    const have = new Set(live.map((t) => t.cut_id as string | null));
+    for (const c of cuts ?? []) {
+      if (!have.has(c.id)) {
+        rows.push({ video_id: videoId, cut_id: c.id, label: c.label, status: "planned", post_as: "trial", created_by: createdBy });
+      }
+    }
+  }
+  if (rows.length) await db.from("trial_posts").insert(rows);
+}
+
+/**
+ * Approval hands a video straight to the VA: make sure every variant has a
+ * row, give any variant nobody picked a destination for its default (a trial
+ * reel; a carousel goes to the feed), mark them sent, and tell the VAs. The
+ * caller has already moved the video to `with_va`.
+ */
+export async function handOffToVa(videoId: string, byUserId: string | null): Promise<void> {
+  const db = supabaseAdmin();
+  await ensureVariantRows(videoId, byUserId);
+  const now = new Date().toISOString();
+  const { data: rows } = await db.from("trial_posts").select("id, cut_id, post_as, sent_to_va_at, status").eq("video_id", videoId);
+  for (const t of (rows ?? []).filter((r) => r.status === "planned")) {
+    const postAs = t.post_as === "none" ? (t.cut_id === null ? "main" : "trial") : t.post_as;
+    await db.from("trial_posts").update({ post_as: postAs, sent_to_va_at: t.sent_to_va_at ?? now }).eq("id", t.id);
+  }
+  await db.from("videos").update({ va_sent_at: now }).eq("id", videoId).is("va_sent_at", null);
+
+  const [{ data: video }, { data: vas }] = await Promise.all([
+    db.from("videos").select("title").eq("id", videoId).maybeSingle(),
+    db.from("profiles").select("id").eq("role", "va").eq("active", true),
+  ]);
+  await notify({
+    userIds: (vas ?? []).map((v) => v.id as string),
+    kind: "system",
+    title: `“${video?.title ?? "A video"}” is ready to post`,
+    link: "/posting",
+    videoId,
+  });
+}
+
+/**
+ * Where a video goes when it comes back off the VA's desk (the client takes it
+ * back, the VA sends it back, it's parked): the review where it was approved,
+ * or a carousel's creative review.
+ */
+export async function stageAfterVa(videoId: string): Promise<VideoStatus> {
+  const db = supabaseAdmin();
+  const { data } = await db.from("videos").select("formats").eq("id", videoId).maybeSingle();
+  return data && isCarouselFormat(data.formats as string[]) ? "creative_review" : "in_review";
 }

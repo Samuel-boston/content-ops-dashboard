@@ -8,7 +8,7 @@ import { displayName } from "@/lib/format";
 import { NUDGES, type NudgeKind } from "@/lib/nudges";
 import { previousStage, type VideoStatus } from "@/lib/types";
 import { isCarouselFormat } from "@/lib/taxonomy";
-import { releaseFromVa } from "@/lib/va-handoff";
+import { handOffToVa, releaseFromVa, stageAfterVa } from "@/lib/va-handoff";
 
 function revalidateAll(videoId?: string) {
   for (const p of [
@@ -18,7 +18,7 @@ function revalidateAll(videoId?: string) {
     "/ready-to-edit",
     "/review",
     "/ideation",
-    "/scripting",
+    "/board",
     "/ready-to-post",
     "/calendar",
     "/team",
@@ -235,13 +235,19 @@ export async function submitForReviewAction(videoId: string) {
 }
 
 /**
- * Client approves. A DB trigger decides where it goes next: Awaiting Variants
- * when the script has more than one hook, otherwise straight to Ready to Post.
+ * Client approves. From a first review a DB trigger decides where it goes:
+ * Awaiting Variants when the script has more than one hook (or the client
+ * forced it), otherwise straight to the VA. Approving Final Review — the
+ * variants are done — hands it to the VA too. There is no Ready to Post step:
+ * an approved video is on the VA's desk.
  * `needsVariants` is the client's explicit override at approval time.
  */
 export async function approveAction(videoId: string, needsVariants?: boolean | null) {
-  await requireRole("owner", "admin");
+  const me = await requireRole("owner", "admin");
   const supabase = await supabaseServer();
+
+  const { data: before } = await supabase.from("videos").select("status").eq("id", videoId).maybeSingle();
+  if (!before) return { error: "Not found." };
 
   if (needsVariants !== undefined) {
     const { error: oErr } = await supabase
@@ -251,7 +257,10 @@ export async function approveAction(videoId: string, needsVariants?: boolean | n
     if (oErr) return { error: oErr.message };
   }
 
-  const { error } = await supabase.from("videos").update({ status: "approved" }).eq("id", videoId);
+  // Final Review goes straight to the VA. Setting `approved` there would have
+  // the routing trigger send it round to Awaiting Variants again.
+  const target: VideoStatus = before.status === "final_review" ? "with_va" : "approved";
+  const { error } = await supabase.from("videos").update({ status: target }).eq("id", videoId);
   if (error) return { error: error.message };
 
   const { data: after } = await supabase
@@ -270,8 +279,10 @@ export async function approveAction(videoId: string, needsVariants?: boolean | n
       videoId,
     });
   }
+  if (after?.status === "with_va") await handOffToVa(videoId, me.id);
 
   revalidateAll(videoId);
+  revalidatePath("/posting");
   return { ok: true, status: after?.status as VideoStatus | undefined };
 }
 
@@ -285,16 +296,26 @@ export async function requestRevisionsAction(videoId: string) {
   return { ok: true };
 }
 
-/** Client sends a script back from Script Review — same shape as requestRevisionsAction for a cut. */
-export async function requestScriptRevisionsAction(videoId: string) {
-  await requireRole("owner", "admin");
+/**
+ * A copywriter says the script is finished. It can't approve its own work, so
+ * this doesn't move the stage — it tells the owner and admins it's ready for
+ * them to approve.
+ */
+export async function scriptDoneAction(videoId: string) {
+  const me = await requireRole("owner", "admin", "copywriter");
   const supabase = await supabaseServer();
-  const { error } = await supabase
-    .from("videos")
-    .update({ status: "script_revisions" })
-    .eq("id", videoId);
-  if (error) return { error: error.message };
-  revalidateAll(videoId);
+  const { data: v } = await supabase.from("videos").select("title, status").eq("id", videoId).maybeSingle();
+  if (!v) return { error: "Not found." };
+  if (v.status !== "scripting") return { error: "This one isn't in Scripting." };
+  const { data: managers } = await supabase.from("profiles").select("id").in("role", ["owner", "admin"]).eq("active", true);
+  await notify({
+    userIds: (managers ?? []).map((m) => m.id as string),
+    kind: "system",
+    title: `The script for “${v.title}” is done`,
+    body: `${displayName(me)} marked it ready — approve it to move it on.`,
+    link: `/videos/${videoId}/script`,
+    videoId,
+  });
   return { ok: true };
 }
 
@@ -305,8 +326,6 @@ export async function setPlanningStageAction(videoId: string, status: VideoStatu
     ![
       "ideation",
       "scripting",
-      "script_review",
-      "script_revisions",
       "ready_to_film",
       "editor_brief",
       "ready_to_edit",
@@ -315,9 +334,9 @@ export async function setPlanningStageAction(videoId: string, status: VideoStatu
     return { error: "Not a planning stage." };
   }
   // Mirrors the DB guard (migration 027): a copywriter moves scripts between
-  // Idea / Scripting / Script Review — approving one for filming is the
-  // client's call. Checked here too so the button fails with words, not SQL.
-  if (me.role === "copywriter" && !["ideation", "scripting", "script_review"].includes(status)) {
+  // Idea / Scripting — approving one for filming is the client's call.
+  // Checked here too so the button fails with words, not SQL.
+  if (me.role === "copywriter" && !["ideation", "scripting"].includes(status)) {
     return { error: "Approving a script for filming is the client's call." };
   }
   const supabase = await supabaseServer();
@@ -372,49 +391,37 @@ export async function submitCarouselCreativesAction(videoId: string) {
   return { ok: true };
 }
 
-/** Approve the finished slide images — Creative Review -> Ready to Post. */
+/** Approve the finished slide images — Creative Review -> With the VA. */
 export async function approveCarouselCreativeAction(videoId: string) {
-  await requireRole("owner", "admin");
+  const me = await requireRole("owner", "admin");
   if (!(await requireCarousel(videoId))) return { error: "Not a carousel." };
   const supabase = await supabaseServer();
   const { error } = await supabase
     .from("videos")
-    .update({ status: "ready_to_post" })
+    .update({ status: "with_va" })
     .eq("id", videoId);
   if (error) return { error: error.message };
+  await handOffToVa(videoId, me.id);
   revalidateAll(videoId);
+  revalidatePath("/posting");
   return { ok: true };
 }
 
-/** Send the creatives back for another pass — Creative Review -> Creative Revisions. */
+/** Send the creatives back for another pass — Creative Review -> Needs Creatives. */
 export async function requestCarouselRevisionsAction(videoId: string) {
   await requireRole("owner", "admin");
   if (!(await requireCarousel(videoId))) return { error: "Not a carousel." };
   const supabase = await supabaseServer();
   const { error } = await supabase
     .from("videos")
-    .update({ status: "creative_revisions" })
+    .update({ status: "needs_creatives" })
     .eq("id", videoId);
   if (error) return { error: error.message };
   revalidateAll(videoId);
   return { ok: true };
 }
 
-/** Reworked creatives are ready to look at again — Creative Revisions -> Creative Review. */
-export async function resubmitCarouselCreativeAction(videoId: string) {
-  await requireRole("owner", "admin");
-  if (!(await requireCarousel(videoId))) return { error: "Not a carousel." };
-  const supabase = await supabaseServer();
-  const { error } = await supabase
-    .from("videos")
-    .update({ status: "creative_review" })
-    .eq("id", videoId);
-  if (error) return { error: error.message };
-  revalidateAll(videoId);
-  return { ok: true };
-}
-
-/** Client marks a Ready to Post video as actually posted. */
+/** Client marks a video as actually posted. */
 export async function markPostedAction(videoId: string) {
   await requireRole("owner", "admin");
   const supabase = await supabaseServer();
@@ -567,10 +574,10 @@ export async function parkVideoAction(videoId: string, reason?: string) {
     .update({ parked_at: new Date().toISOString(), parked_reason: reason?.trim() || null })
     .eq("id", videoId);
   if (error) return { error: error.message };
-  // Shelved while with the VA: it comes off their desk and waits in Ready to Post.
+  // Shelved while with the VA: it comes off their desk and waits back in review.
   if (before.status === "with_va") {
     await releaseFromVa(videoId);
-    await supabase.from("videos").update({ status: "ready_to_post" }).eq("id", videoId);
+    await supabase.from("videos").update({ status: await stageAfterVa(videoId) }).eq("id", videoId);
   }
 
   await supabase.from("video_activity").insert({

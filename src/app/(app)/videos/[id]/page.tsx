@@ -76,7 +76,7 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
     const dest =
       video.status === "ideation"
         ? "idea"
-        : video.status === "scripting" || video.status === "script_review"
+        : video.status === "scripting"
           ? "script"
           : video.status === "ready_to_film"
             ? "film"
@@ -141,7 +141,7 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
     // the client reviews in — player, timeline comments, replies, resolving,
     // chat, files and share links, plus the stage buttons — for every stage
     // from there on (in review, revisions, awaiting variants, final review,
-    // ready to post, posted). The only thing they don't get is the client's
+    // with the VA, posted). The only thing they don't get is the client's
     // Post tab. Delivering more cuts and hook variants happens in its Files tab.
     // Before anything is uploaded, they get their own working view instead.
     const REVIEW_ROOM: VideoStatus[] = [
@@ -150,7 +150,6 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
       "approved",
       "awaiting_variants",
       "final_review",
-      "ready_to_post",
       "with_va",
       "posted",
     ];
@@ -214,15 +213,13 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
     return <EditingStatusCard video={video} editor={editor} briefVoiceUrl={briefVoice} />;
   }
 
-  // A carousel skips the whole editing chain — Script Review approval lands
-  // it on Creative Review (the images, not the caption text), then Ready to
-  // Post. This is the only room past Scripting it ever has — the generic
+  // A carousel skips the whole editing chain — approving its script lands it
+  // on Needs Creatives, then Creative Review (the images, not the caption
+  // text), then straight to the VA. This is the only room past Scripting it ever has — the generic
   // review workspace below assumes a cut exists, which a carousel never has.
   const CAROUSEL_POST_STATUSES: VideoStatus[] = [
     "needs_creatives",
     "creative_review",
-    "creative_revisions",
-    "ready_to_post",
     "with_va",
     "posted",
   ];

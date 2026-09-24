@@ -80,7 +80,7 @@ export const SETUP_GUIDES: SetupGuideItem[] = [
       "The app can stay in Development mode — it only ever posts to your own account, so Meta app review is not needed.",
     ],
     fields: ["Instagram Graph API → IG Business/Creator user ID", "Instagram Graph API → Long-lived access token"],
-    finish: "Save settings. Then, on any video that is Ready to Post, open the Post tab: the Instagram channel should now appear. Post a test to the feed to confirm.",
+    finish: "Save settings. Then, on any video that is with the VA, open the Post tab: the Instagram channel should now appear. Post a test to the feed to confirm.",
   },
   {
     id: "groq",
@@ -143,7 +143,7 @@ export const SETUP_GUIDES: SetupGuideItem[] = [
       "In a chat, ask “what videos are in ideation?” to confirm it can see the board.",
     ],
     fields: ["Done per person, on the Connect AI page"],
-    finish: "Copywriters can list ideas, write scripts and move them between Ideation, Scripting and Script Review; owners and admins can do more.",
+    finish: "Copywriters can list ideas, write scripts and move them between Ideation and Scripting; owners and admins can do more.",
   },
 ];
 

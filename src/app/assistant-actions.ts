@@ -128,11 +128,11 @@ const STATUS_VALUES = Object.keys(STATUS_LABELS) as VideoStatus[];
  * a page's purpose materially changes, not on every UI tweak.
  */
 const HOW_TO_KNOWLEDGE = `
-Pipeline, in order a video moves through it: Ideation -> Scripting -> Script Review (copywriter submits, client approves) -> Ready to Film -> Editor Brief -> Ready to Edit -> Editing (assigning an editor is what moves it here) -> In Review -> Revisions (if changes are asked for, back to editing) -> Approved (never sits here, routes on instantly) -> Awaiting Variants (only if the script had more than one hook) -> Final Review -> Ready to Post -> Posted.
+Pipeline, in order a video moves through it: Ideation -> Scripting (copywriter writes, client approves it on) -> Ready to Film -> Editor Brief -> Ready to Edit -> Editing (assigning an editor is what moves it here) -> In Review -> Revisions (if changes are asked for, back to editing) -> Approved (never sits here, routes on instantly) -> Awaiting Variants (only if the script had more than one hook) -> Final Review -> With the VA (approving a cut, or Final Review, hands it straight to the VA; there is no Ready to Post step) -> Posted. Carousels go Ideation -> Scripting -> Needs Creatives -> Creatives to Review -> With the VA -> Posted.
 
 Ideation through Ready to Film are private to the owner/admin (and the copywriter seat, which lives only in those stages) — editors never see them. Everything from Ready to Edit onward is what editors work in.
 
-Roles beyond owner/admin/editor: a Copywriter works Ideation -> Scripting -> Script Review (their own nav: Ideation, Scripting, Script Review, Footage) and can connect their own AI via Connect AI; a VA sees only the Posting desk, where trial reels are posted by hand (Instagram's API can't post or read trials) and their numbers get typed back in from the app's insights.
+Roles beyond owner/admin/editor: a Copywriter works Ideation -> Scripting on the shared Board (there is no Script Review stage; they tap "Script done" and the client approves it on) and can connect their own AI via Connect AI; a VA sees only the Posting desk, where trial reels are posted (through Publer when it is connected, otherwise by hand) and their numbers get typed back in from the app's insights.
 
 Hook trials: on a video's Post tab, "Queue all variants" turns each hook-variant cut into a trial for the VA to post. Numbers come back by hand; star the winner; "Promote to feed" publishes that exact cut through the normal pipeline. The Analytics page has a Hook trials leaderboard.
 
@@ -143,12 +143,12 @@ Footage index (Library -> Footage index): every analysed shot from the client's 
 Pages:
 - Overview (home): Andreas's opener with the pipeline stages that most need attention, "what's new" since you were last here, performance and runway panels, the pipeline strip, and the team snapshot.
 - Ideation: the private idea shelf. Add ideas manually, capture one by voice, or use "Suggest ideas" (AI, grounded either in your best-performing past videos or a prompt you give it) to generate options you can add straight in. Each idea has a brief, references (paste any link), and pillar/format/platform tags. "Script it" moves it to Scripting.
-- Scripting: where the brief becomes a script — hooks, body, CTA. "Draft with AI" opens a prompt box first. Select text to Rephrase it. "Suggest 10 hooks" generates hook options. More than one hook in the script means it'll route through Awaiting Variants later. "Send to editors" moves it to Ready to Film.
+- Scripting (a stage on the Board): where the brief becomes a script — hooks, body, CTA. "Draft with AI" opens a prompt box first. Select text to Rephrase it. "Suggest 10 hooks" generates hook options. More than one hook in the script means it'll route through Awaiting Variants later. "Send to editors" moves it to Ready to Film.
 - Ready to Film / Editor Brief: gives the script, a teleprompter view, priority, and a place to tag music from the library and add screen-recording references for the editor.
 - Ready to Edit (the board editors see): brief, raw footage link, music, priority — nothing else, on purpose.
 - Review: the client's approval queue — cuts, hook variants, comments (pinned to a timestamp, with voice notes and drawings), Approve or send back to Revisions.
 - Revisions: sent back with open notes; "Summarize" turns scattered comments into a short punch list for the editor.
-- Awaiting Variants / Final Review / Ready to Post / Posted: last steps before and after a video goes out; Ready to Post is where scheduling/publishing happens.
+- Awaiting Variants / Final Review / With the VA / Posted: last steps before and after a video goes out; With the VA is where posting and scheduling happen.
 - Board: the full pipeline in one kanban view.
 - Calendar: everything by post date.
 - Team: who's assigned what, workload, editor rates/payments.
@@ -495,11 +495,11 @@ export async function assistantQueryAction(
     if ("reply" in found) return found.reply;
     const v = found.video;
     let toStatus = parsed.toStatus as VideoStatus;
-    // "Revisions" on a carousel means its creative revisions — the editing
+    // "Revisions" on a carousel means sending its creatives back — the editing
     // stage of that name doesn't exist for one.
     if (toStatus === "revisions") {
       const { data: fmt } = await supabase.from("videos").select("formats").eq("id", v.id).maybeSingle();
-      if (isCarouselFormat((fmt?.formats as string[] | null) ?? [])) toStatus = "creative_revisions";
+      if (isCarouselFormat((fmt?.formats as string[] | null) ?? [])) toStatus = "needs_creatives";
     }
     if (v.status === toStatus) {
       return { ok: true, text: `"${v.title}" is already in ${STATUS_LABELS[toStatus]}.` };
@@ -761,11 +761,11 @@ export async function assistantQueryAction(
   };
 }
 
-export type StageTaskKey = "ideation" | "scripting" | "ready_to_film" | "in_review" | "ready_to_post";
+export type StageTaskKey = "ideation" | "scripting" | "ready_to_film" | "in_review" | "with_va";
 
 // Order when the model has nothing useful to say (no key, or every count is
 // zero) — client-blocking stages first, then the stages only the client can move.
-const FALLBACK_ORDER: StageTaskKey[] = ["in_review", "ready_to_post", "ready_to_film", "scripting", "ideation"];
+const FALLBACK_ORDER: StageTaskKey[] = ["in_review", "with_va", "ready_to_film", "scripting", "ideation"];
 
 /**
  * Which of the five pipeline stages to tackle first — ranked by which
@@ -791,7 +791,7 @@ export async function rankStagesAction(input: {
     `You rank pipeline stages in a video content-ops dashboard by which most needs attention right now — a ` +
       `bottleneck, not just the biggest number (a big idea shelf is healthy; two reviews stuck for days is not). ` +
       `Stage keys, in order: ideation (idea shelf) -> scripting (ideas being written) -> ready_to_film -> ` +
-      `in_review (client waiting to review a cut) -> ready_to_post (approved, needs scheduling). Only ever use ` +
+      `in_review (client waiting to review a cut) -> with_va (approved, on the VA's desk to post). Only ever use ` +
       `the exact stage keys given, each exactly once — never invent one, never drop one.`,
     `Stages with a count > 0:\n${countLines}\n` +
       `${input.poolRunningDry ? "The editors' pool is about to run dry — more needs to be filmed.\n" : ""}` +

@@ -7,7 +7,7 @@ import { STATUS_COLOR, STATUS_LABELS } from "@/lib/types";
 
 /**
  * Everything waiting on the client, in the order it should be dealt with:
- * new cuts first, then variant checks, then things cleared to go out.
+ * new cuts first, then variant checks. Approving either sends it to the VA.
  */
 export default async function ReviewPage() {
   await requireRole("owner", "admin");
@@ -25,15 +25,8 @@ export default async function ReviewPage() {
       id: "final",
       status: "final_review" as const,
       videos: actions.toFinalReview,
-      blurb: "Hook variants are in. Last look before these are cleared to post.",
+      blurb: "Hook variants are in. Approve them and they go straight to the VA.",
       empty: "No variants waiting on a final check.",
-    },
-    {
-      id: "post",
-      status: "ready_to_post" as const,
-      videos: actions.readyToPost,
-      blurb: "Approved and done. Schedule or post them from inside the video.",
-      empty: "Nothing sitting ready to post.",
     },
   ];
 

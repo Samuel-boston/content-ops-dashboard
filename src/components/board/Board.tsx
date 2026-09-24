@@ -21,7 +21,7 @@ import { TaskCard, TaskCardBody } from "@/components/board/TaskCard";
 import { useToast } from "@/components/ui/Toast";
 import { IconChevronRight, IconPlus, IconX } from "@/components/ui/icons";
 import { moveVideoAction } from "@/app/board-actions";
-import { SendToVaDialog } from "@/components/board/SendToVaDialog";
+import { approveAction, approveCarouselCreativeAction } from "@/app/pipeline-actions";
 import { bulkAssignAction, bulkSetStatusAction } from "@/app/calendar-actions";
 import { displayName } from "@/lib/format";
 import {
@@ -164,8 +164,6 @@ export function Board({
   // Local copy so a drag lands instantly; the server revalidate reconciles it.
   const [items, setItems] = useState(cards);
   const [dragId, setDragId] = useState<string | null>(null);
-  // Dragging Ready to Post -> With the VA opens the hand-off instead of just moving the card.
-  const [vaHandoff, setVaHandoff] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<VideoStatus>>(new Set());
 
@@ -257,9 +255,22 @@ export function Board({
     const toStatus = (overCard?.status ?? (overId as VideoStatus)) as VideoStatus;
     if (!columns.includes(toStatus)) return;
 
+    // With the VA is where an approval lands, so dropping a card there from a
+    // review stage IS the approval; from anywhere else it isn't a move.
     if (toStatus === "with_va" && card.status !== "with_va") {
-      if (card.status === "ready_to_post") setVaHandoff(card.id);
-      else toast.error("Approve it into Ready to Post first — then drag it to With the VA.");
+      const approve =
+        card.status === "creative_review"
+          ? approveCarouselCreativeAction(card.id)
+          : card.status === "in_review" || card.status === "final_review"
+            ? approveAction(card.id)
+            : null;
+      if (!approve) toast.error("Approve it in review first — approving sends it to the VA.");
+      else
+        startTransition(async () => {
+          const res = await approve;
+          if (res && "error" in res && res.error) toast.error(res.error);
+          else toast.success("Approved — it's on the VA's desk.");
+        });
       return;
     }
 
@@ -328,7 +339,6 @@ export function Board({
         ))}
       </div>
 
-      {vaHandoff ? <SendToVaDialog videoId={vaHandoff} onClose={() => setVaHandoff(null)} /> : null}
 
       {/* Bulk bar — only appears once something is ticked. */}
       {selected.size > 0 ? (

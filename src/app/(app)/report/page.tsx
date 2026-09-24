@@ -81,7 +81,7 @@ export default async function ReportPage() {
         </h2>
         <div className="rounded-xl border border-line bg-card px-4 py-3 text-sm text-ink-2">
           {actions.toReview.length} to review · {actions.toFinalReview.length} final checks ·{" "}
-          {actions.readyToPost.length} ready to post · {actions.toFilm.length} to film
+          {actions.toFilm.length} to film
           {actions.poolRunningDry ? (
             <span className="text-warn"> · the editors will run dry, time to film</span>
           ) : null}

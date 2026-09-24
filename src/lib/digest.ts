@@ -67,9 +67,6 @@ export async function buildDigest(db: SupabaseClient): Promise<DigestData> {
       .filter((v) => v.status === "final_review")
       .map((v) => ({ title: v.title, why: "hook variants are in — last look" })),
     ...rows
-      .filter((v) => v.status === "ready_to_post")
-      .map((v) => ({ title: v.title, why: "approved, needs a date" })),
-    ...rows
       .filter((v) => v.status === "ready_to_film")
       .map((v) => ({ title: v.title, why: "scripted, waiting to be shot" })),
   ];

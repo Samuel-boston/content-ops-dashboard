@@ -18,7 +18,7 @@ export default async function CalendarPage({ searchParams }: PageProps<"/calenda
   if (viewer.role === "editor") redirect("/my-work");
   // The copywriter's world is the planning board; the posting calendar is the
   // client's (and, view-only, the VA's).
-  if (viewer.role === "copywriter") redirect("/scripting");
+  if (viewer.role === "copywriter") redirect("/board");
   const sp = await searchParams;
   const now = new Date();
   const year = Number(first(sp.y) ?? now.getFullYear());

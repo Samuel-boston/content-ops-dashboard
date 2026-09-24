@@ -46,12 +46,12 @@ type Tab = "comments" | "brief" | "files" | "chat" | "post";
 /**
  * Post only belongs on screen once there's something to post — everywhere
  * else it was a tab that did nothing, competing with tabs that mattered.
- * Pinned first at Ready to Post / Posted since it's the reason you're there.
+ * Pinned first once it's with the VA / Posted since it's the reason you're there.
  */
 function visibleTabs(status: Video["status"], editor = false): Tab[] {
   // Editors don't post, so they never get the Post tab.
   if (editor) return ["comments", "brief", "files", "chat"];
-  if (status === "ready_to_post" || status === "with_va" || status === "posted") {
+  if (status === "with_va" || status === "posted") {
     return ["post", "comments", "brief", "files", "chat"];
   }
   // Once variants are being handed over, the list of them (and what to do with
@@ -125,13 +125,12 @@ export function VideoWorkspace({
   const [versionId, setVersionId] = useState(versions[0]?.id ?? "");
   const version = versions.find((v) => v.id === versionId) ?? versions[0] ?? null;
 
-  // Ready to Post is a finished video, not one under review — the review's
+  // With the VA is a finished video, not one under review — the review's
   // over, so it opens straight onto the caption/schedule tab instead of the
   // comments thread everyone else lands on.
   const [tab, setTab] = useState<Tab>(
     viewer.role !== "editor" &&
-      (video.status === "ready_to_post" ||
-        video.status === "with_va" ||
+      (video.status === "with_va" ||
         video.status === "posted" ||
         video.status === "final_review")
       ? "post"

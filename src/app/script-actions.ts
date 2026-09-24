@@ -31,7 +31,7 @@ export async function saveScriptAction(
 
   revalidatePath(`/videos/${videoId}`);
   revalidatePath(`/videos/${videoId}/script`);
-  revalidatePath("/scripting");
+  revalidatePath("/board");
   revalidatePath("/");
   return { ok: true };
 }
@@ -143,7 +143,7 @@ export async function saveHookSnippetAction(input: {
     created_by: me.id,
   });
   if (error) return { error: error.message };
-  revalidatePath("/scripting");
+  revalidatePath("/board");
   return { ok: true };
 }
 
@@ -172,6 +172,6 @@ export async function deleteHookSnippetAction(id: string) {
   const supabase = await supabaseServer();
   const { error } = await supabase.from("hook_snippets").delete().eq("id", id);
   if (error) return { error: error.message };
-  revalidatePath("/scripting");
+  revalidatePath("/board");
   return { ok: true };
 }

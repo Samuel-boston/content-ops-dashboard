@@ -5,7 +5,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth";
 import { runPublishJob } from "@/lib/publish-runner";
 import { isCarouselFormat } from "@/lib/taxonomy";
-import { releaseFromVa } from "@/lib/va-handoff";
+import { ensureVariantRows, releaseFromVa, stageAfterVa } from "@/lib/va-handoff";
 import type { TrialPost } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -33,27 +33,8 @@ type Db = Awaited<ReturnType<typeof supabaseServer>>;
  * "Send to VA": nothing here reaches the VA by existing. A carousel has no
  * cuts, so it gets the one row.
  */
-async function ensureVariantRows(supabase: Db, createdBy: string, videoId: string) {
-  const [{ data: video }, { data: cuts }, { data: existing }] = await Promise.all([
-    supabase.from("videos").select("formats").eq("id", videoId).maybeSingle(),
-    supabase.from("video_cuts").select("id, label, kind").eq("video_id", videoId).order("position"),
-    supabase.from("trial_posts").select("cut_id, status").eq("video_id", videoId),
-  ]);
-  const live = (existing ?? []).filter((t) => t.status !== "archived");
-  const rows: Record<string, unknown>[] = [];
-  if (video && isCarouselFormat(video.formats as string[])) {
-    if (!live.some((t) => t.cut_id === null)) {
-      rows.push({ video_id: videoId, cut_id: null, label: "Carousel", status: "planned", post_as: "main", created_by: createdBy });
-    }
-  } else {
-    const have = new Set(live.map((t) => t.cut_id as string | null));
-    for (const c of cuts ?? []) {
-      if (!have.has(c.id)) {
-        rows.push({ video_id: videoId, cut_id: c.id, label: c.label, status: "planned", post_as: "trial", created_by: createdBy });
-      }
-    }
-  }
-  if (rows.length) await supabase.from("trial_posts").insert(rows);
+async function ensureRows(_supabase: Db, createdBy: string, videoId: string) {
+  await ensureVariantRows(videoId, createdBy);
 }
 
 /** Everything the workspace Trials panel needs in one load. */
@@ -63,7 +44,7 @@ export async function listVideoTrials(videoId: string): Promise<{
 }> {
   const me = await requireRole("owner", "admin");
   const supabase = await supabaseServer();
-  await ensureVariantRows(supabase, me.id, videoId);
+  await ensureRows(supabase, me.id, videoId);
   const [{ data: trials }, { data: cuts }] = await Promise.all([
     supabase.from("trial_posts").select("*").eq("video_id", videoId).order("created_at"),
     supabase
@@ -102,10 +83,10 @@ export async function sendToVaAction(input: {
     .eq("id", input.videoId)
     .single();
   if (!video) return { error: "Video not found." };
-  if (video.status !== "ready_to_post" && video.status !== "with_va") {
-    return { error: "Only a video in Ready to Post can be sent to the VA." };
+  if (video.status !== "with_va") {
+    return { error: "This video isn't with the VA. Approving it hands it over." };
   }
-  await ensureVariantRows(supabase, me.id, input.videoId);
+  await ensureRows(supabase, me.id, input.videoId);
 
   const { data: rows } = await supabase.from("trial_posts").select("*").eq("video_id", input.videoId);
   const live = ((rows as TrialPost[]) ?? []).filter((t) => t.status === "planned");
@@ -167,7 +148,7 @@ export async function saveVaCoverAction(videoId: string, coverPath: string) {
 export async function getVaHandoffInfoAction(videoId: string) {
   const me = await requireRole("owner", "admin");
   const supabase = await supabaseServer();
-  await ensureVariantRows(supabase, me.id, videoId);
+  await ensureRows(supabase, me.id, videoId);
   const [{ data: v }, { data: trials }, { data: cuts }] = await Promise.all([
     supabase.from("videos").select("title, status, va_notes, cover_path, post_caption").eq("id", videoId).maybeSingle(),
     supabase.from("trial_posts").select("*").eq("video_id", videoId).order("created_at"),
@@ -416,7 +397,7 @@ export async function savePostCaptionAction(videoId: string, caption: string) {
 }
 
 /**
- * Take the video back from the VA: it returns to Ready to Post, everything
+ * Take the video back from the VA: it returns to review, everything
  * unposted leaves their desk (captions and destinations are kept) and anything
  * scheduled comes off the schedule.
  */
@@ -424,7 +405,7 @@ export async function takeBackFromVaAction(videoId: string) {
   await requireRole("owner", "admin");
   const supabase = await supabaseServer();
   await releaseFromVa(videoId);
-  const { error } = await supabase.from("videos").update({ status: "ready_to_post" }).eq("id", videoId).eq("status", "with_va");
+  const { error } = await supabase.from("videos").update({ status: await stageAfterVa(videoId) }).eq("id", videoId).eq("status", "with_va");
   if (error) return { error: error.message };
   revalidateTrials(videoId);
   revalidatePath("/board");

@@ -13,7 +13,7 @@ import { linkMainFeedAnalytics } from "@/lib/analytics-link";
 import { effectiveCaption } from "@/lib/caption";
 import { isOnMainFeed, variantState, type VariantState } from "@/lib/variant-state";
 import { notify } from "@/lib/notify";
-import { releaseFromVa } from "@/lib/va-handoff";
+import { ensureVariantRows, releaseFromVa, stageAfterVa } from "@/lib/va-handoff";
 import type { PublishStatus, TrialPost, TrialStatus } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -236,6 +236,8 @@ export async function listPostingWork(): Promise<{
     db.from("videos").select("id").eq("status", "with_va"),
   ]);
   const ids = (withVa ?? []).map((v) => v.id as string);
+  // A video can reach the desk without variant rows (approval moves it by trigger): make them.
+  await Promise.all(ids.map((id) => ensureVariantRows(id, null)));
   const [{ data: rows }, jobs] = await Promise.all([
     ids.length
       ? db.from("trial_posts").select(TRIAL_SELECT).in("video_id", ids).neq("status", "archived").order("created_at")
@@ -667,9 +669,9 @@ export async function vaSendBackAction(videoId: string, reason: string) {
   if (!video) return { error: "Video not found." };
   if (video.status !== "with_va") return { error: "It isn't with the VA any more." };
 
-  // Off the VA's desk, off the schedule, back in Ready to Post.
+  // Off the VA's desk, off the schedule, back in review.
   await releaseFromVa(videoId);
-  const { error } = await db.from("videos").update({ status: "ready_to_post" }).eq("id", videoId);
+  const { error } = await db.from("videos").update({ status: await stageAfterVa(videoId) }).eq("id", videoId);
   if (error) return { error: error.message };
 
   const who = (me as { full_name?: string | null; email?: string }).full_name || (me as { email?: string }).email || "The VA";
@@ -683,7 +685,7 @@ export async function vaSendBackAction(videoId: string, reason: string) {
     video_id: videoId,
     actor_id: me.id,
     kind: "status",
-    summary: `Sent back from the VA → Ready to Post: ${note}`,
+    summary: `Sent back from the VA: ${note}`,
   });
   const { data: managers } = await db.from("profiles").select("id").in("role", ["owner", "admin"]).eq("active", true);
   await notify({

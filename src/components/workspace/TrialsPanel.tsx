@@ -51,7 +51,7 @@ export function TrialsPanel({
   /** Variants already loaded by the parent (saves a round trip when opened from the board). */
   initial?: { trials: TrialPost[]; cuts: { id: string; label: string; kind: string }[] };
   vaNotes?: string | null;
-  /** The video's stage: Ready to Post shows the hand-off, With the VA shows the take-back. */
+  /** The video's stage: With the VA shows the live variants and the take-back. */
   status: VideoStatus;
   /** Called once the video has been sent to (or taken back from) the VA. */
   onSent?: () => void;
@@ -78,7 +78,6 @@ export function TrialsPanel({
   // Watching a variant right here, when the surrounding page has no player of its own (the board's hand-off dialog).
   const [watching, setWatching] = useState<{ cutId: string; label: string } | null>(null);
   const withVa = status === "with_va";
-  const readyToSend = status === "ready_to_post";
 
   async function uploadCover(file: File) {
     if (file.size > 20 * 1024 * 1024) {
@@ -157,8 +156,8 @@ export function TrialsPanel({
   return (
     <section className="mb-4 rounded-xl border border-line bg-card p-3">
       {watching ? <WatchDialog cutId={watching.cutId} label={watching.label} onClose={() => setWatching(null)} /> : null}
-      {/* The hand-off. Ready to Post: this is where it's sent. With the VA: it can be edited live or taken back. */}
-      {readyToSend || withVa ? (
+      {/* With the VA: variants can be edited live or taken back. */}
+      {withVa ? (
         <div className="mb-3 space-y-2 rounded-lg border border-accent/30 bg-accent-ghost p-2.5">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-sm font-semibold">{withVa ? "With the VA" : "Send to the VA"}</h3>
@@ -210,7 +209,7 @@ export function TrialsPanel({
                   run(
                     () => takeBackFromVaAction(videoId),
                     () => {
-                      toast.success("Taken back — it's in Ready to Post again.");
+                      toast.success("Taken back — it's back in review.");
                       onSent?.();
                     }
                   )

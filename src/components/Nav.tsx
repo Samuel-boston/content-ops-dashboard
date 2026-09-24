@@ -62,7 +62,7 @@ const EDITOR_LINKS = [
  * good scripts get written against footage that actually exists.
  */
 const COPYWRITER_LINKS = [
-  { href: "/scripting", label: "Board" },
+  { href: "/board", label: "Board" },
   { href: "/library/visuals", label: "Library" },
   { href: "/time-off", label: "Time off" },
 ];

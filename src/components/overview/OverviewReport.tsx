@@ -30,7 +30,7 @@ const STAGE: Record<
   },
   scripting: {
     title: "Script videos",
-    href: "/scripting",
+    href: "/board",
     describe: (n) => `${n} ${plural(n, "idea")} ready to script.`,
     icon: <IconFile size={16} />,
     tone: "var(--color-stage-review)",
@@ -49,18 +49,18 @@ const STAGE: Record<
     icon: <IconLayers size={16} />,
     tone: "var(--color-stage-review)",
   },
-  ready_to_post: {
-    title: "Schedule videos",
-    href: "/review#post",
-    describe: (n) => `${n} ${plural(n, "video")} ready to schedule.`,
+  with_va: {
+    title: "With the VA",
+    href: "/posting",
+    describe: (n) => `${n} ${plural(n, "video")} on the VA's desk to post.`,
     icon: <IconCheck size={16} />,
-    tone: "var(--color-stage-ready-post)",
+    tone: "var(--color-stage-with-va)",
   },
 };
 
 // Order shown the instant counts are available, before the AI ranking (which
 // only ever reorders this same list) has had a chance to come back.
-const FALLBACK_ORDER: StageTaskKey[] = ["in_review", "ready_to_post", "ready_to_film", "scripting", "ideation"];
+const FALLBACK_ORDER: StageTaskKey[] = ["in_review", "with_va", "ready_to_film", "scripting", "ideation"];
 
 /**
  * The pipeline stages worth tackling first — ranked, not just listed — each

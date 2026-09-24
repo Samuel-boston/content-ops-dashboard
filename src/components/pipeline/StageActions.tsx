@@ -202,7 +202,7 @@ export function StageActions({
                         <span className="block text-[11px] text-ink-3">
                           {video.needs_variants
                             ? "Goes to Awaiting Variants — the script has more than one hook."
-                            : "Goes straight to Ready to Post."}
+                            : "Goes straight to the VA's desk."}
                         </span>
                       </button>
                       <button
@@ -228,7 +228,7 @@ export function StageActions({
                       >
                         <span className="block font-medium">Approve — no variants needed</span>
                         <span className="block text-[11px] text-ink-3">
-                          Skip straight to Ready to Post.
+                          Skip straight to the VA.
                         </span>
                       </button>
                     </div>
@@ -238,7 +238,7 @@ export function StageActions({
             </>
           ) : null}
 
-          {video.status === "ready_to_post" || video.status === "with_va" ? (
+          {video.status === "with_va" ? (
             <Primary tone="ok" onClick={() => setConfirmPosted(true)}>
               <IconCheck size={13} />
               Mark as posted

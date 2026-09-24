@@ -42,9 +42,9 @@ import { STATUS_COLOR, STATUS_LABELS, type VideoStatus } from "@/lib/types";
  * Columns on an editor's board, in the order work moves through them.
  *
  * `ready_to_edit` is here because a video can be dropped back into the bay,
- * and `ready_to_post` / `posted` because an editor needs to see where their
+ * and `with_va` / `posted` because an editor needs to see where their
  * finished work went — even though the guard trigger won't let them move
- * anything into those two.
+ * anything into those.
  */
 const COLUMNS: VideoStatus[] = [
   "ready_to_edit",
@@ -52,7 +52,6 @@ const COLUMNS: VideoStatus[] = [
   "revisions",
   "awaiting_variants",
   "in_review",
-  "ready_to_post",
   "with_va",
   "posted",
 ];

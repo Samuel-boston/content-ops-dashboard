@@ -5,7 +5,7 @@ import { listSeriesOptions } from "@/app/series-actions";
 import { BoardPageClient } from "@/components/board/BoardPageClient";
 
 export default async function BoardPage() {
-  const viewer = await requireRole("owner", "admin");
+  const viewer = await requireRole("owner", "admin", "copywriter");
   const [cards, editors, customs, seriesOptions] = await Promise.all([
     listBoardCards(),
     listEditors(),
@@ -23,10 +23,16 @@ export default async function BoardPage() {
     <div className="h-[calc(100dvh-7rem)]">
       <BoardPageClient
         cards={cards}
-        editors={editors.map((e) => ({ id: e.id, full_name: e.full_name, email: e.email }))}
+        // Assigning editors is the client's call — an empty list hides that control.
+        editors={
+          viewer.role === "copywriter"
+            ? []
+            : editors.map((e) => ({ id: e.id, full_name: e.full_name, email: e.email }))
+        }
         customs={customsBy}
         seriesOptions={seriesOptions}
         viewerId={viewer.id}
+        scopes={viewer.role === "copywriter" ? ["planning"] : undefined}
       />
     </div>
   );

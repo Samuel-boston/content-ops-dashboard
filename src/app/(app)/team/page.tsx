@@ -36,7 +36,7 @@ export default async function TeamPage() {
     .from("videos")
     .select("status")
     .is("parked_at", null)
-    .in("status", ["ideation", "scripting", "script_review", "script_revisions", "with_va"]);
+    .in("status", ["ideation", "scripting", "ready_to_film", "with_va"]);
   const stageCount = (st: VideoStatus) => (stageRows ?? []).filter((r) => r.status === st).length;
   const openTasks = vaTasks.filter((t) => t.status === "todo").length;
 
@@ -158,7 +158,7 @@ export default async function TeamPage() {
                   </span>
                 </div>
                 <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  {(["ideation", "scripting", "script_review", "script_revisions"] as VideoStatus[]).map((st) => (
+                  {(["ideation", "scripting", "ready_to_film"] as VideoStatus[]).map((st) => (
                     <div key={st} className="rounded-lg bg-panel px-2.5 py-2">
                       <p className="truncate text-[10px] uppercase tracking-wider text-ink-3">{STATUS_LABELS[st]}</p>
                       <p className="mt-0.5 text-base font-semibold tabular-nums">{stageCount(st)}</p>

@@ -120,7 +120,7 @@ export function VideoWorkDialog({
 
         {sendingBack ? (
           <div className="rounded-xl border border-warn/40 bg-warn/5 p-3">
-            <p className="text-xs font-medium text-ink">Send this back to {clientName}&rsquo;s side — it goes back to Ready to Post.</p>
+            <p className="text-xs font-medium text-ink">Send this back to {clientName}&rsquo;s side — it goes back to review.</p>
             <p className="mt-0.5 text-[11px] text-ink-3">
               It leaves this board (captions are kept) and anything scheduled is taken off the schedule. Say what&rsquo;s not right — it goes
               in the video&rsquo;s chat and they&rsquo;re notified.
@@ -142,7 +142,7 @@ export function VideoWorkDialog({
                     const res = await vaSendBackAction(videoId, reason);
                     if (res?.error) toast.error(res.error);
                     else {
-                      toast.success("Sent back — it's in Ready to Post on their board.");
+                      toast.success("Sent back — it's back in review on their board.");
                       onClose();
                       router.refresh();
                     }

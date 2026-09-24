@@ -22,7 +22,7 @@ export default async function OverviewPage() {
   if (viewer.role === "editor") redirect("/my-work");
   // Each specialist seat opens on its own desk — the Overview is the
   // client's cockpit and its loaders are manager-gated (they'd bounce).
-  if (viewer.role === "copywriter") redirect("/scripting");
+  if (viewer.role === "copywriter") redirect("/board");
   if (viewer.role === "va") redirect("/posting");
 
   const [counts, team, editors, customs, settings, perf, runway, news] =
@@ -77,7 +77,7 @@ export default async function OverviewPage() {
           scripting: counts.scripting ?? 0,
           ready_to_film: counts.ready_to_film ?? 0,
           in_review: counts.in_review ?? 0,
-          ready_to_post: counts.ready_to_post ?? 0,
+          with_va: counts.with_va ?? 0,
         }}
         poolRunningDry={poolRunningDry}
         news={news}
