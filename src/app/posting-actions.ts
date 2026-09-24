@@ -10,7 +10,7 @@ import { mintPhoneToken } from "@/lib/phone-link";
 import { ORIGINAL_COLUMNS, hasOriginal } from "@/lib/cut-files";
 import { runPublishJob } from "@/lib/publish-runner";
 import { linkMainFeedAnalytics } from "@/lib/analytics-link";
-import { isOnMainFeed, type VariantChoice } from "@/lib/variant-state";
+import { isOnMainFeed, variantState, type VariantState } from "@/lib/variant-state";
 import { notify } from "@/lib/notify";
 import { releaseFromVa } from "@/lib/va-handoff";
 import type { PublishStatus, TrialPost, TrialStatus } from "@/lib/types";
@@ -32,19 +32,19 @@ export interface PostingTrialItem {
   id: string;
   videoId: string;
   videoTitle: string;
+  /** The video's own stage on the client's board. */
+  videoStatus: string;
   label: string;
   caption: string | null;
+  /** The one status every screen shows: to post as trial … posted on feed. */
+  state: VariantState;
   /** Instagram trial reel, or straight to the main feed. */
   postAs: "trial" | "main";
-  /** Live on the main feed (posted there, or promoted from a trial). */
-  onMainFeed: boolean;
-  /** Set once the variant has been handed to Instagram's scheduler. */
-  scheduled: boolean;
   /** Instructions for the whole video. */
   notes: string | null;
   /** Instructions for this variant in particular. */
   variantNotes: string | null;
-  /** Signed link to the cover image, when one was uploaded. */
+  /** Signed link to the variant's cover (else the video's), when one was uploaded. */
   coverUrl: string | null;
   /** A carousel has no video file — these are its slide images, in order. */
   images: string[] | null;
@@ -61,10 +61,14 @@ export interface PostingTrialItem {
   comments: number | null;
   shares: number | null;
   saves: number | null;
+  /** The publish job this variant is waiting on, when it's scheduled for the feed. */
+  jobId: string | null;
+  jobAt: string | null;
 }
 
 export interface PostingJobItem {
   id: string;
+  videoId: string;
   videoTitle: string;
   caption: string | null;
   scheduled_for: string | null;
@@ -73,116 +77,154 @@ export interface PostingJobItem {
   error: string | null;
 }
 
+/** Instagram's own numbers for a video's main-feed post (linked automatically). */
+export interface PostingFeedMetrics {
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  saves: number | null;
+  reach: number | null;
+  permalink: string | null;
+}
+
 /**
- * Everything on the posting desk: trials to post by hand (planned), live
- * trials awaiting their numbers (posted), and — for context — the automatic
- * publish queue, so the VA never double-posts something the API will handle.
+ * Everything on the posting board: every variant of each video that is with the
+ * VA, plus recent variants that have gone out (the record), the automatic
+ * publish queue (for failures and cancelling), and Instagram's numbers for
+ * anything posted to the feed.
  */
 export async function listPostingWork(): Promise<{
   trials: PostingTrialItem[];
   jobs: PostingJobItem[];
+  feedMetrics: Record<string, PostingFeedMetrics>;
   instagramConnected: boolean;
 }> {
   await requireRole("va", "owner", "admin");
   const db = supabaseAdmin();
 
   const settings = await getWorkspaceSettings();
-  // The VA's desk is defined by the video's stage: everything on a video that is
-  // "With the VA", plus variants already posted from earlier hand-offs (the record).
   const { data: withVa } = await db.from("videos").select("id").eq("status", "with_va");
   const withVaIds = (withVa ?? []).map((v) => v.id as string);
-  const select = "*, video:videos (title, va_notes, cover_path, post_caption)";
+  const select = "*, video:videos (title, status, va_notes, cover_path, post_caption)";
+  const recent = new Date(Date.now() - 60 * 864e5).toISOString();
   const [{ data: current }, { data: history }, { data: jobs }] = await Promise.all([
     withVaIds.length
       ? db.from("trial_posts").select(select).in("video_id", withVaIds).neq("status", "archived")
       : Promise.resolve({ data: [] as never[] }),
-    db.from("trial_posts").select(select).in("status", ["posted", "promoted"]).not("sent_to_va_at", "is", null),
+    db
+      .from("trial_posts")
+      .select(select)
+      .in("status", ["posted", "promoted"])
+      .not("sent_to_va_at", "is", null)
+      .gte("posted_at", recent),
     db
       .from("publish_jobs")
-      .select("id, caption, scheduled_for, status, channels, error, video:videos (title)")
+      .select("id, video_id, caption, scheduled_for, status, channels, error, video:videos (title)")
       .in("status", ["scheduled", "publishing", "failed"])
       .order("scheduled_for", { ascending: true, nullsFirst: false })
-      .limit(30),
+      .limit(50),
   ]);
   const seen = new Set<string>();
-  const trials = [...(current ?? []), ...(history ?? [])]
-    .filter((t) => (seen.has(t.id as string) ? false : (seen.add(t.id as string), true)))
-    .sort((x, y) => String(x.scheduled_for ?? "9999").localeCompare(String(y.scheduled_for ?? "9999")));
+  const rows = [...(current ?? []), ...(history ?? [])].filter((t) =>
+    seen.has(t.id as string) ? false : (seen.add(t.id as string), true)
+  );
+  const jobById = new Map(((jobs ?? []) as { id: string; scheduled_for: string | null }[]).map((j) => [j.id, j]));
+
+  const videoIds = [...new Set(rows.map((t) => t.video_id as string))];
+  const { data: metricRows } = videoIds.length
+    ? await db
+        .from("video_metrics")
+        .select("video_id, views, likes, comments, shares, saves, reach, permalink")
+        .in("video_id", videoIds)
+    : { data: [] as never[] };
+  const feedMetrics: Record<string, PostingFeedMetrics> = {};
+  for (const m of (metricRows ?? []) as (PostingFeedMetrics & { video_id: string })[]) {
+    feedMetrics[m.video_id] = {
+      views: m.views, likes: m.likes, comments: m.comments, shares: m.shares, saves: m.saves, reach: m.reach, permalink: m.permalink,
+    };
+  }
 
   return {
     instagramConnected: integrationStatus(settings).instagram,
-    trials: await Promise.all(((trials as (TrialPost & {
-      video: { title: string; va_notes: string | null; cover_path: string | null; post_caption: string | null } | null;
-    })[]) ?? []).map(async (t) => {
-      let images: string[] | null = null;
-      if (t.cut_id === null) {
-        const { data: slides } = await db
-          .from("carousel_images")
-          .select("storage_path")
-          .eq("video_id", t.video_id)
-          .not("storage_path", "is", null)
-          .order("position");
-        images = (
-          await Promise.all(
-            (slides ?? []).map(async (sl) => {
-              const { data: u } = await db.storage
-                .from("carousels")
-                .createSignedUrl(sl.storage_path as string, 3600, { download: true });
-              return u?.signedUrl ?? null;
-            })
-          )
-        ).filter((u): u is string => Boolean(u));
-      }
-      let durationSeconds: number | null = null;
-      if (t.cut_id) {
-        const { data: ver } = await db
-          .from("cut_versions")
-          .select("duration_seconds")
-          .eq("cut_id", t.cut_id)
-          .order("version", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        durationSeconds = (ver?.duration_seconds as number | null) ?? null;
-      }
-      let coverUrl: string | null = null;
-      const coverPath = t.cover_path ?? t.video?.cover_path ?? null;
-      if (coverPath) {
-        const { data: signed } = await db.storage.from("footage").createSignedUrl(coverPath, 3600);
-        coverUrl = signed?.signedUrl ?? null;
-      }
-      return {
-      id: t.id,
-      videoId: t.video_id,
-      videoTitle: t.video?.title ?? "Untitled",
-      label: t.label,
-      // The variant's own caption, else the video's shared one from the Post tab.
-      caption: t.caption?.trim() ? t.caption : (t.video?.post_caption?.trim() ? t.video.post_caption : null),
-      // Everything is posted as a trial unless someone chose the main feed.
-      postAs: t.post_as === "main" ? "main" : "trial",
-      onMainFeed: isOnMainFeed(t),
-      scheduled: t.status === "promoted" && !t.posted_at,
-      // Video-wide instructions, and this variant's own — both live, so edits reach the desk at once.
-      notes: t.video?.va_notes ?? null,
-      variantNotes: t.notes ?? null,
-      coverUrl,
-      images,
-      durationSeconds,
-      status: t.status,
-      scheduled_for: t.scheduled_for,
-      posted_at: t.posted_at,
-      permalink: t.permalink,
-      winner: t.winner,
-      hasMetrics: t.views !== null || t.likes !== null,
-      views: t.views,
-      likes: t.likes,
-      comments: t.comments,
-      shares: t.shares,
-      saves: t.saves,
-      };
-    })),
+    feedMetrics,
+    trials: await Promise.all(
+      (rows as unknown as (TrialPost & {
+        video: { title: string; status: string; va_notes: string | null; cover_path: string | null; post_caption: string | null } | null;
+      })[]).map(async (t) => {
+        let images: string[] | null = null;
+        if (t.cut_id === null) {
+          const { data: slides } = await db
+            .from("carousel_images")
+            .select("storage_path")
+            .eq("video_id", t.video_id)
+            .not("storage_path", "is", null)
+            .order("position");
+          images = (
+            await Promise.all(
+              (slides ?? []).map(async (sl) => {
+                const { data: u } = await db.storage
+                  .from("carousels")
+                  .createSignedUrl(sl.storage_path as string, 3600, { download: true });
+                return u?.signedUrl ?? null;
+              })
+            )
+          ).filter((u): u is string => Boolean(u));
+        }
+        let durationSeconds: number | null = null;
+        if (t.cut_id) {
+          const { data: ver } = await db
+            .from("cut_versions")
+            .select("duration_seconds")
+            .eq("cut_id", t.cut_id)
+            .order("version", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          durationSeconds = (ver?.duration_seconds as number | null) ?? null;
+        }
+        let coverUrl: string | null = null;
+        const coverPath = t.cover_path ?? t.video?.cover_path ?? null;
+        if (coverPath) {
+          const { data: signed } = await db.storage.from("footage").createSignedUrl(coverPath, 3600);
+          coverUrl = signed?.signedUrl ?? null;
+        }
+        const job = t.promoted_job_id ? jobById.get(t.promoted_job_id) : undefined;
+        return {
+          id: t.id,
+          videoId: t.video_id,
+          videoTitle: t.video?.title ?? "Untitled",
+          videoStatus: t.video?.status ?? "",
+          label: t.label,
+          // The variant's own caption, else the video's shared one from the Post tab.
+          caption: t.caption?.trim() ? t.caption : t.video?.post_caption?.trim() ? t.video.post_caption : null,
+          state: variantState(t),
+          // Everything is posted as a trial unless someone chose the feed.
+          postAs: t.post_as === "main" ? ("main" as const) : ("trial" as const),
+          notes: t.video?.va_notes ?? null,
+          variantNotes: t.notes ?? null,
+          coverUrl,
+          images,
+          durationSeconds,
+          status: t.status,
+          scheduled_for: t.scheduled_for,
+          posted_at: t.posted_at,
+          permalink: t.permalink,
+          winner: t.winner,
+          hasMetrics: t.views !== null || t.likes !== null,
+          views: t.views,
+          likes: t.likes,
+          comments: t.comments,
+          shares: t.shares,
+          saves: t.saves,
+          jobId: t.promoted_job_id ?? null,
+          jobAt: job?.scheduled_for ?? null,
+        };
+      })
+    ),
     jobs: (
       (jobs as unknown as {
         id: string;
+        video_id: string;
         caption: string | null;
         scheduled_for: string | null;
         status: PublishStatus;
@@ -192,6 +234,7 @@ export async function listPostingWork(): Promise<{
       }[]) ?? []
     ).map((j) => ({
       id: j.id,
+      videoId: j.video_id,
       videoTitle: j.video?.title ?? "Untitled",
       caption: j.caption,
       scheduled_for: j.scheduled_for,
@@ -327,8 +370,12 @@ export async function vaPublishAction(
     return { error: "Instagram isn't connected yet. Connect it in Settings → Integrations, or post by hand and mark it posted." };
   }
   const { data: t } = await db.from("trial_posts").select("*").eq("id", trialId).maybeSingle();
-  if (!t || t.status !== "planned") return { error: "That one isn't waiting to be posted." };
-  if (t.post_as !== "main") return { error: "Trial reels can't be posted through Instagram's API — post it from the app." };
+  const st = t ? variantState(t) : null;
+  // Waiting to be posted, or a live trial that did well and is being posted to the feed.
+  if (!t || (st !== "to_trial" && st !== "to_feed" && st !== "trial_posted")) {
+    return { error: "That one isn't waiting to be posted." };
+  }
+  if (!t.cut_id && !t.post_as) return { error: "Nothing to post." };
 
   const caption = opts.caption !== undefined ? opts.caption?.trim() || null : (t.caption as string | null);
   if (opts.caption !== undefined) await db.from("trial_posts").update({ caption }).eq("id", trialId);
@@ -354,10 +401,11 @@ export async function vaPublishAction(
     .single();
   if (error) return { error: error.message };
 
-  const stamp = { promoted_job_id: job.id, posted_by: me.id };
+  const stamp = { promoted_job_id: job.id, posted_by: me.id, post_as: "main" };
   if (scheduled) {
     // Goes out by itself at that time; until then it's on the calendar for that day.
-    await db.from("trial_posts").update({ ...stamp, status: "promoted" }).eq("id", trialId);
+    // (posted_at is cleared so "scheduled" reads as scheduled; the runner sets it when it goes live.)
+    await db.from("trial_posts").update({ ...stamp, status: "promoted", posted_at: null }).eq("id", trialId);
     await db.from("videos").update({ post_date: when!.toISOString().slice(0, 10) }).eq("id", t.video_id);
     revalidatePath("/posting");
     revalidatePath("/calendar");
@@ -368,7 +416,7 @@ export async function vaPublishAction(
   if (!res.ok) return { error: `Instagram didn't take it: ${res.error}` };
   await db
     .from("trial_posts")
-    .update({ ...stamp, status: "posted", posted_at: new Date().toISOString() })
+    .update({ ...stamp, status: "posted", posted_at: new Date().toISOString(), ...(st === "trial_posted" ? { winner: true } : {}) })
     .eq("id", trialId);
   await finishVideoIfDone(t.video_id as string);
   revalidatePath("/posting");
@@ -439,19 +487,18 @@ export async function vaSetPostAsAction(trialId: string, postAs: "trial" | "main
 }
 
 /**
- * Change where a variant is in its life — the dropdown on every variant, on
- * the posting desk, in the posted list and in the client's own Post tab.
+ * Set a variant's status — the one control that does it everywhere (the VA's
+ * board, the client's Post tab). See lib/variant-state.ts for what each means.
+ * Any state can move to any other, so a mistake is never stuck: marking
+ * something "posted" that wasn't is undone by picking "To post" again.
  *
- *   trial        it's (to be) posted as a trial reel
- *   main         it's to be posted to the main feed
- *   posted_main  it has been posted to the main feed — the trial that won, or
- *                one that went straight there. Marks it live and, when there's
- *                a link, connects the post to its analytics.
- *   to_post      undo: back to waiting to be posted
+ * Posting to the feed records the link and connects it to Instagram's numbers;
+ * a variant that goes from live trial to the feed is the winner by definition
+ * (its trial numbers are kept).
  */
 export async function vaSetVariantStateAction(
   trialId: string,
-  choice: VariantChoice | "to_post",
+  state: Exclude<VariantState, "scheduled_feed">,
   permalink?: string | null
 ) {
   const me = await requireRole("va", "owner", "admin");
@@ -460,42 +507,74 @@ export async function vaSetVariantStateAction(
   if (!t) return { error: "Variant not found." };
   const now = new Date().toISOString();
   const link = permalink === undefined ? (t.permalink as string | null) : permalink?.trim() || null;
+  const before = variantState(t);
   let patch: Record<string, unknown>;
 
-  if (choice === "trial") {
-    patch = { post_as: "trial", ...(t.status === "promoted" ? { status: "posted", posted_at: t.posted_at ?? now } : {}) };
-  } else if (choice === "main") {
-    if (t.status !== "planned") return { error: "It's already posted — pick “Posted to main feed” to record where it went." };
-    patch = { post_as: "main" };
-  } else if (choice === "posted_main") {
-    const wasTrial = t.status === "posted" && t.post_as !== "main";
-    patch = {
-      post_as: "main",
-      status: t.status === "promoted" ? "promoted" : "posted",
-      posted_at: t.posted_at ?? now,
-      posted_by: t.posted_by ?? me.id,
-      permalink: link,
-      // The trial that got promoted is the winner by definition.
-      ...(wasTrial || t.status === "promoted" ? { winner: true } : {}),
-    };
-  } else if (choice === "to_post") {
-    patch = { status: "planned", posted_at: null, promoted_job_id: null };
-  } else {
-    return { error: "Unknown option." };
+  switch (state) {
+    case "to_trial":
+      patch = { status: "planned", post_as: "trial", posted_at: null, promoted_job_id: null };
+      break;
+    case "to_feed":
+      patch = { status: "planned", post_as: "main", posted_at: null, promoted_job_id: null };
+      break;
+    case "trial_posted":
+      patch = { status: "posted", post_as: "trial", posted_at: t.posted_at ?? now, posted_by: t.posted_by ?? me.id, promoted_job_id: null };
+      break;
+    case "feed_posted":
+      patch = {
+        status: "posted",
+        post_as: "main",
+        posted_at: t.posted_at ?? now,
+        posted_by: t.posted_by ?? me.id,
+        permalink: link,
+        ...(before === "trial_posted" ? { winner: true } : {}),
+      };
+      break;
+    default:
+      return { error: "Unknown status." };
   }
 
+  // Leaving "scheduled" by hand takes the post off Instagram's schedule.
+  if (before === "scheduled_feed" && t.promoted_job_id) {
+    await db.from("publish_jobs").update({ status: "cancelled" }).eq("id", t.promoted_job_id).eq("status", "scheduled");
+  }
   const { error } = await db.from("trial_posts").update(patch).eq("id", trialId);
   if (error) return { error: error.message };
 
   let linked = false;
-  if (choice === "posted_main") {
-    linked = await linkMainFeedAnalytics(t.video_id as string, link);
-    if (t.status === "planned") await finishVideoIfDone(t.video_id as string);
-  }
+  if (state === "feed_posted") linked = await linkMainFeedAnalytics(t.video_id as string, link);
+  if (state === "trial_posted" || state === "feed_posted") await finishVideoIfDone(t.video_id as string);
   revalidatePath("/posting");
   revalidatePath("/archive");
   revalidatePath(`/videos/${t.video_id}`);
   return { ok: true as const, linked };
+}
+
+/**
+ * Dragging a video across the VA's board. The one move that means the same
+ * thing for the whole video is "Trials live": every trial variant still waiting
+ * is now posted as a trial reel. Everything else depends on which variant, so
+ * it's done inside the video, not by dragging.
+ */
+export async function vaMarkTrialsPostedAction(videoId: string) {
+  const me = await requireRole("va", "owner", "admin");
+  const db = supabaseAdmin();
+  const { data: waiting } = await db
+    .from("trial_posts")
+    .select("id")
+    .eq("video_id", videoId)
+    .eq("status", "planned")
+    .neq("post_as", "main");
+  if (!waiting?.length) return { error: "No trial reels are waiting to be posted on that video." };
+  const now = new Date().toISOString();
+  const { error } = await db
+    .from("trial_posts")
+    .update({ status: "posted", post_as: "trial", posted_at: now, posted_by: me.id })
+    .in("id", waiting.map((w) => w.id as string));
+  if (error) return { error: error.message };
+  const finished = await finishVideoIfDone(videoId);
+  revalidatePath("/posting");
+  return { ok: true as const, marked: waiting.length, finished };
 }
 
 /** Save (or correct) the link to a posted variant — and, on the main feed, connect it to its analytics. */

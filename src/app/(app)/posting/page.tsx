@@ -1,6 +1,6 @@
 import { requireRole } from "@/lib/auth";
 import { listPostingWork } from "@/app/posting-actions";
-import { PostingQueue } from "@/components/posting/PostingQueue";
+import { PostingBoard } from "@/components/posting/PostingBoard";
 import { listVaTasks } from "@/app/task-actions";
 import { getClientName } from "@/lib/workspace";
 import { VaTaskBoard } from "@/components/tasks/VaTaskBoard";
@@ -15,7 +15,7 @@ import { VaTaskBoard } from "@/components/tasks/VaTaskBoard";
  */
 export default async function PostingPage() {
   const viewer = await requireRole("va", "owner", "admin");
-  const [{ trials, jobs, instagramConnected }, tasks, clientName] = await Promise.all([
+  const [{ trials, jobs, feedMetrics, instagramConnected }, tasks, clientName] = await Promise.all([
     listPostingWork(),
     listVaTasks(),
     getClientName(),
@@ -26,14 +26,14 @@ export default async function PostingPage() {
       <div>
         <h1 className="text-xl font-semibold">Posting</h1>
         <p className="text-sm text-ink-2">
-          {trials.filter((t) => t.status === "planned").length} to post ·{" "}
-          {trials.filter((t) => t.status === "posted" && !t.onMainFeed && !t.hasMetrics).length} trial numbers to bring back
+          {trials.filter((t) => t.state === "to_trial" || t.state === "to_feed").length} to post ·{" "}
+          {trials.filter((t) => t.state === "trial_posted" && !t.hasMetrics).length} trial numbers to bring back
         </p>
       </div>
-      <PostingQueue
+      <PostingBoard
         trials={trials}
         jobs={jobs}
-        viewerRole={viewer.role}
+        feedMetrics={feedMetrics}
         instagramConnected={instagramConnected}
         clientName={clientName}
       />

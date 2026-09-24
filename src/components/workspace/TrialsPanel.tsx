@@ -21,8 +21,8 @@ import {
 import { createFootageUploadUrlAction } from "@/app/asset-actions";
 import { StreamPlayer } from "@/components/engine/StreamPlayer";
 import { IconTrash } from "@/components/ui/icons";
-import { TRIAL_STATUS_LABELS, type TrialPost, type VideoStatus } from "@/lib/types";
-import { CHOICE_LABELS, variantChoice, variantStateLabel, type VariantChoice } from "@/lib/variant-state";
+import type { TrialPost, VideoStatus } from "@/lib/types";
+import { SETTABLE_STATES, STATE_LABELS, STATE_TONE, variantState, type VariantState } from "@/lib/variant-state";
 import { vaSetVariantStateAction } from "@/app/posting-actions";
 
 /**
@@ -144,6 +144,9 @@ export function TrialsPanel({
   const cutKind = (t: TrialPost) => cuts.find((c) => c.id === t.cut_id)?.kind ?? "main";
   const waiting = trials.filter((t) => t.status === "planned");
   const activeId = openId ?? (waiting[0] ?? trials[0])?.id ?? "";
+  const best = trials
+    .filter((t) => variantState(t) === "trial_posted" && t.views !== null)
+    .sort((a, b) => (b.views ?? 0) - (a.views ?? 0))[0];
 
   return (
     <section className="mb-4 rounded-xl border border-line bg-card p-3">
@@ -242,6 +245,13 @@ export function TrialsPanel({
         once Instagram is connected.
       </p>
 
+      {best ? (
+        <p className="mb-2 rounded-lg border border-line bg-raised px-3 py-1.5 text-xs text-ink-2">
+          🏆 Best trial so far: <b className="text-ink">{best.label}</b> — {best.views?.toLocaleString()} views
+          {best.likes !== null ? ` · ${best.likes.toLocaleString()} likes` : ""}
+        </p>
+      ) : null}
+
       {trials.length === 0 ? (
         <div className="rounded-lg border border-dashed border-line px-3 py-6 text-center text-xs text-ink-3">
           No cut on this video yet — variants appear here as soon as there&rsquo;s something to post.
@@ -322,15 +332,6 @@ function TrialRow({
     setUploadingCover(false);
   }
 
-  const chip =
-    t.status === "planned"
-      ? "bg-amber-500/15 text-amber-400"
-      : t.status === "posted"
-        ? "bg-emerald-500/15 text-emerald-400"
-        : t.status === "promoted"
-          ? "bg-sky-500/15 text-sky-400"
-          : "bg-raised text-ink-3";
-
   const num = (s: string) => (s.trim() === "" ? null : Number(s));
 
   return (
@@ -353,13 +354,8 @@ function TrialRow({
         >
           <span className="block truncate">{isMain ? t.label : `Variant ${index + 1} — ${t.label}`}</span>
         </button>
-        {!open ? (
-          <span className="shrink-0 rounded-md bg-raised px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-3">
-            {t.post_as === "main" ? "Main feed" : "Trial"}
-          </span>
-        ) : null}
-        <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${chip}`}>
-          {t.status === "planned" ? TRIAL_STATUS_LABELS[t.status] : variantStateLabel(t)}
+        <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATE_TONE[variantState(t)]}`}>
+          {STATE_LABELS[variantState(t)]}
         </span>
         <button
           title="Archive this trial"
@@ -382,37 +378,27 @@ function TrialRow({
               Watch
             </button>
           ) : null}
-          {t.status === "planned" ? (
-            <select
-              value={t.post_as === "main" ? "main" : "trial"}
-              disabled={pending}
-              onChange={(e) =>
-                run(() => updateVariantAction(t.id, videoId, { postAs: e.target.value as "trial" | "main" | "none" }))
-              }
-              aria-label="Post as"
-              className={`${field} min-w-0 flex-1`}
-            >
-              <option value="trial">Trial reel</option>
-              <option value="main">Post to main feed</option>
-            </select>
-          ) : t.status === "posted" || t.status === "promoted" ? (
-            // Posted: record where it went. The owner can correct this the same way the VA does.
-            <select
-              value={variantChoice(t)}
-              disabled={pending}
-              onChange={(e) =>
-                run(() => vaSetVariantStateAction(t.id, e.target.value as VariantChoice, permalink || undefined))
-              }
-              aria-label="Where it was posted"
-              className={`${field} min-w-0 flex-1`}
-            >
-              <option value="trial">{CHOICE_LABELS.trial}</option>
-              <option value="posted_main">{CHOICE_LABELS.posted_main}</option>
-            </select>
-          ) : (
-            <span className="rounded-md bg-raised px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-3">
-              {t.post_as === "main" ? "Main feed" : t.post_as === "trial" ? "Trial" : "—"}
+          {variantState(t) === "scheduled_feed" ? (
+            <span className="rounded-md bg-sky-500/15 px-2 py-1 text-[11px] text-sky-300">
+              Scheduled for the feed — the VA can cancel or reschedule it.
             </span>
+          ) : (
+            // One status control, the same one the VA has. Any status can be changed to any other.
+            <select
+              value={variantState(t)}
+              disabled={pending}
+              onChange={(e) =>
+                run(() => vaSetVariantStateAction(t.id, e.target.value as Exclude<VariantState, "scheduled_feed">, permalink || undefined))
+              }
+              aria-label="Status"
+              className={`${field} min-w-0 flex-1`}
+            >
+              {SETTABLE_STATES.map((st) => (
+                <option key={st} value={st}>
+                  {STATE_LABELS[st]}
+                </option>
+              ))}
+            </select>
           )}
         </div>
       ) : t.status === "planned" ? (

@@ -57,18 +57,18 @@ export default async function ArchivePage({ searchParams }: PageProps<"/archive"
   const { data: variantRows } = rows.length
     ? await supabase
         .from("trial_posts")
-        .select("video_id, status, post_as")
+        .select("video_id, status, post_as, posted_at")
         .in(
           "video_id",
           rows.map((r) => r.id)
         )
         .neq("status", "archived")
-    : { data: [] as { video_id: string; status: TrialStatus; post_as: "trial" | "main" | "none" }[] };
+    : { data: [] as { video_id: string; status: TrialStatus; post_as: "trial" | "main" | "none"; posted_at: string | null }[] };
   const variantsByVideo = new Map<string, { trial: number; main: number; waiting: number }>();
   for (const t of variantRows ?? []) {
     const c = variantsByVideo.get(t.video_id) ?? { trial: 0, main: 0, waiting: 0 };
     if (t.status === "planned") c.waiting += 1;
-    else if (isOnMainFeed(t as { status: TrialStatus; post_as: "trial" | "main" | "none" })) c.main += 1;
+    else if (isOnMainFeed(t as { status: TrialStatus; post_as: "trial" | "main" | "none"; posted_at: string | null })) c.main += 1;
     else c.trial += 1;
     variantsByVideo.set(t.video_id, c);
   }
