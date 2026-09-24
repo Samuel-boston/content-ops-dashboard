@@ -3,7 +3,6 @@ import { notify, notifyTelegram } from "@/lib/notify";
 import { buildDigest, digestHtml, digestTelegram, digestText } from "@/lib/digest";
 import { sendEmail } from "@/lib/integrations/email";
 import { runDuePublishJobs } from "@/lib/publish-runner";
-import { runBackupJob } from "@/lib/backup";
 import { cronAuthorised } from "@/lib/cron-auth";
 import { STALLED_AFTER_DAYS, STATUS_LABELS, type VideoStatus } from "@/lib/types";
 
@@ -16,7 +15,6 @@ import { STALLED_AFTER_DAYS, STATUS_LABELS, type VideoStatus } from "@/lib/types
  *   - flag videos stalled in one stage too long (deduped per video)
  *   - auto-archive unattached references after ~30 days of no activity
  *   - run any due scheduled publish jobs
- *   - once a day: back up every content table to Drive, independent of Supabase
  *   - Mondays: push a weekly stage + priority report to Telegram and inboxes
  */
 // Publishing a Reel and backing up every table can each take a while.
@@ -107,11 +105,6 @@ export async function GET(req: Request) {
 
   // --- due publish jobs (also run on their own, more often, by /api/cron/publish) ---
   out.publish = await runDuePublishJobs();
-
-  // --- daily backup to Drive (03:00 UTC, or ?backup=1 to force) ---
-  if (new Date().getUTCHours() === 3 || url.searchParams.get("backup") === "1") {
-    out.backup = await runBackupJob();
-  }
 
   // --- weekly report (Mondays, or ?report=1 to force) ---
   if (new Date().getUTCDay() === 1 || url.searchParams.get("report") === "1") {

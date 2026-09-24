@@ -1,7 +1,7 @@
 import { requireRole } from "@/lib/auth";
-import { lastBackup, storageUsage } from "@/app/settings-extra-actions";
+import { storageUsage } from "@/app/settings-extra-actions";
 import { StorageUsage } from "@/components/StorageUsage";
-import { BackupStatus } from "@/components/BackupStatus";
+import { SetupGuide } from "@/components/SetupGuide";
 import {
   brandingFor,
   getWorkspaceSettings,
@@ -13,11 +13,10 @@ import { BrandingForm } from "@/components/BrandingForm";
 
 export default async function SettingsPage() {
   await requireRole("owner");
-  const [settings, usage, branding, backup] = await Promise.all([
+  const [settings, usage, branding] = await Promise.all([
     getWorkspaceSettings(),
     storageUsage(),
     brandingFor(),
-    lastBackup(),
   ]);
   return (
     <div className="max-w-2xl space-y-4">
@@ -28,6 +27,7 @@ export default async function SettingsPage() {
           accounts later is an edit here — not a redeploy.
         </p>
       </div>
+      <SetupGuide />
       <BrandingForm
         brandName={settings.brand_name}
         clientName={settings.client_name}
@@ -38,7 +38,16 @@ export default async function SettingsPage() {
         status={integrationStatus(settings)}
       />
       <StorageUsage usage={usage} />
-      <BackupStatus last={backup} driveConfigured={integrationStatus(settings).drive} />
+      <section className="space-y-2">
+        <h2 className="text-sm font-semibold">Backups</h2>
+        <div className="rounded-xl border border-line bg-card p-4 text-xs leading-relaxed text-ink-2">
+          Backups are handled by Supabase, not by this dashboard. On the Pro plan every database is backed up daily and
+          kept for 7 days, and a backup is restored in a few clicks from Supabase → Database → Backups. Point-in-time
+          recovery is an optional Supabase add-on. Uploaded files (music, references, comment attachments, carousel
+          images) live in Supabase Storage and are not part of those database backups; finished videos and raw footage
+          are archived to Google Drive.
+        </div>
+      </section>
     </div>
   );
 }

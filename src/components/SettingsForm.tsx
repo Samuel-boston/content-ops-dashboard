@@ -162,7 +162,7 @@ export function SettingsForm({
           name="groq_api_key"
           label="Groq API key"
           defaultValue={s.groq_api_key}
-          hint="Free tier, no card required — console.groq.com."
+          hint="Free tier, no card needed — console.groq.com. It has daily limits that comfortably cover a small team; see console.groq.com/settings/limits."
         />
         <Field
           name="anthropic_api_key"
@@ -195,7 +195,7 @@ export function SettingsForm({
         />
         <Field
           name="openai_api_key"
-          label="OpenAI API key (Whisper transcription — spoken briefs only)"
+          label="OpenAI API key (optional — only for AI slide images; transcription uses Groq when it is set)"
           defaultValue={s.openai_api_key}
         />
         <p className="text-[11px] text-ink-3">

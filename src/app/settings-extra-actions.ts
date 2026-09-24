@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireRole, requireUser } from "@/lib/auth";
-import { runBackupJob, type BackupResult } from "@/lib/backup";
 
 /** Everyone chooses how much they want to hear from the dashboard. */
 export async function setNotifyModeAction(mode: "realtime" | "digest" | "off") {
@@ -77,34 +76,3 @@ export async function storageUsage(): Promise<BucketUsage[]> {
   );
 }
 
-export interface LastBackup {
-  at: string;
-  ok: boolean;
-  rows?: number;
-  link?: string;
-  error?: string;
-}
-
-/** What the daily cron backup last did — read straight off its own log row. */
-export async function lastBackup(): Promise<LastBackup | null> {
-  await requireRole("owner", "admin");
-  const db = supabaseAdmin();
-  const { data } = await db
-    .from("automation_events")
-    .select("created_at, detail")
-    .eq("kind", "backup")
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!data) return null;
-  const d = (data.detail ?? {}) as { rows?: number; link?: string; error?: string };
-  return { at: data.created_at as string, ok: !d.error, rows: d.rows, link: d.link, error: d.error };
-}
-
-/** A manual "back up now" — same job the daily cron runs, for peace of mind without waiting for 3am. */
-export async function backupNowAction(): Promise<BackupResult> {
-  await requireRole("owner", "admin");
-  const res = await runBackupJob();
-  revalidatePath("/settings");
-  return res;
-}

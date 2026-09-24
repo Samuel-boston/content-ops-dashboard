@@ -222,60 +222,6 @@ export async function uploadFromUrl(sourceUrl: string, name: string, parentId?: 
   return res.webViewLink ?? `https://drive.google.com/file/d/${res.id}/view`;
 }
 
-/** Finds (or creates) a "Backups" subfolder inside the configured Drive folder — kept separate from footage/posted videos so it doesn't clutter what the team browses day to day. */
-async function ensureBackupsFolder(token: string, parentId: string): Promise<string> {
-  const q = encodeURIComponent(
-    `name='Backups' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`
-  );
-  const list = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives`, {
-    headers: { Authorization: `Bearer ${token}` },
-  }).then((r) => r.json());
-  if (list.files?.[0]?.id) return list.files[0].id as string;
-
-  const created = await fetch("https://www.googleapis.com/drive/v3/files?fields=id&supportsAllDrives=true", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: "Backups",
-      mimeType: "application/vnd.google-apps.folder",
-      parents: [parentId],
-    }),
-  }).then((r) => r.json());
-  if (!created.id) throw new Error(`Could not create Backups folder: ${JSON.stringify(created)}`);
-  return created.id as string;
-}
-
-/**
- * Drops a JSON backup into a "Backups" subfolder of the configured Drive
- * folder, then trims anything older than `keepDays` — a daily export is
- * cheap, but nobody wants it growing forever unattended.
- */
-export async function uploadBackupJson(name: string, json: string, keepDays = 30): Promise<string> {
-  const s = await getWorkspaceSettings();
-  if (!s.drive_folder_id || !s.drive_service_account) throw new NotConfiguredError("Google Drive");
-  const sa = s.drive_service_account as DriveCredentials;
-  const token = await getAccessToken(sa);
-  const folderId = await ensureBackupsFolder(token, s.drive_folder_id);
-
-  const res = await uploadBytes(token, Buffer.from(json, "utf8"), name, "application/json", folderId);
-
-  const cutoff = new Date(Date.now() - keepDays * 864e5).toISOString();
-  const q = encodeURIComponent(
-    `'${folderId}' in parents and mimeType='application/json' and trashed=false and createdTime < '${cutoff}'`
-  );
-  const old = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives`, {
-    headers: { Authorization: `Bearer ${token}` },
-  }).then((r) => r.json());
-  for (const f of old.files ?? []) {
-    await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?supportsAllDrives=true`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => {});
-  }
-
-  return res.webViewLink ?? `https://drive.google.com/file/d/${res.id}/view`;
-}
-
 /**
  * A round trip that proves the saved Drive login works: sign in, write a tiny
  * file into the configured folder, read back its link, delete it. Throws a
