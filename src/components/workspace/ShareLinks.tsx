@@ -22,10 +22,13 @@ export function ShareLinks({
   videoId,
   links,
   canManage,
+  uploadOnly = false,
 }: {
   videoId: string;
   links: GuestLink[];
   canManage: boolean;
+  /** Filming only needs "upload from phone" — no review or assets links. */
+  uploadOnly?: boolean;
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -35,7 +38,7 @@ export function ShareLinks({
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   const urlFor = (t: string) => `${origin}/g/${t}`;
 
-  const active = links.filter((l) => !l.revoked);
+  const active = links.filter((l) => !l.revoked && (!uploadOnly || l.purpose === "upload"));
   const uploadLink = active.find((l) => l.purpose === "upload");
   const assetsLink = active.find((l) => l.purpose === "assets");
 
@@ -61,6 +64,7 @@ export function ShareLinks({
       <h3 className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">Share</h3>
 
       <div className="flex flex-wrap gap-1.5">
+        {uploadOnly ? null : (
         <button
           type="button"
           onClick={() => create("review")}
@@ -69,6 +73,7 @@ export function ShareLinks({
           <IconLink size={12} />
           Review link
         </button>
+        )}
         <button
           type="button"
           onClick={() =>
@@ -81,6 +86,7 @@ export function ShareLinks({
           <IconCamera size={12} />
           Upload from phone
         </button>
+        {uploadOnly ? null : (
         <button
           type="button"
           onClick={() =>
@@ -93,13 +99,13 @@ export function ShareLinks({
           <IconFolder size={12} />
           Send assets to phone
         </button>
+        )}
       </div>
 
       <p className="text-[11px] leading-snug text-ink-3">
-        A review link lets someone watch and comment without an account. An upload link is a QR
-        code that sends footage straight in from the phone that filmed it. An assets link is the
-        reverse — a QR code that hands a phone the brief, footage and references, for a trial
-        editor with no login.
+        {uploadOnly
+          ? "A QR code that sends footage straight in from the phone that filmed it."
+          : "A review link lets someone watch and comment without an account. An upload link is a QR code that sends footage straight in from the phone that filmed it. An assets link is the reverse — a QR code that hands a phone the brief, footage and references, for a trial editor with no login."}
       </p>
 
       {active.length ? (

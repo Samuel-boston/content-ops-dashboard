@@ -6,12 +6,12 @@ import { useTrackedTransition } from "@/components/ui/Pending";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
 import { TaxonomyMultiSelect } from "@/components/TaxonomyMultiSelect";
-import { VoicePlayer, VoiceRecorder, type VoiceCapture } from "@/components/workspace/Voice";
 import { StageMove } from "@/components/pipeline/StageMove";
 import { StageBack } from "@/components/pipeline/StageBack";
 import { PlanningStageBar } from "@/components/pipeline/PlanningStageBar";
 import { Teleprompter } from "@/components/script/Teleprompter";
-import { HookLibrary } from "@/components/script/HookLibrary";
+import { VideoReferences } from "@/components/VideoReferences";
+import { ScriptComments } from "@/components/script/ScriptComments";
 import { CarouselSlides } from "@/components/script/CarouselSlides";
 import { isCarouselFormat } from "@/lib/taxonomy";
 import {
@@ -19,18 +19,15 @@ import {
   IconChart,
   IconChevronRight,
   IconGrip,
-  IconMic,
   IconPlus,
   IconSparkles,
-  IconTrash,
   IconX,
 } from "@/components/ui/icons";
-import { saveBriefVoiceAction, saveScriptAction } from "@/app/script-actions";
+import { saveScriptAction } from "@/app/script-actions";
 import { approveCarouselScriptAction, requestScriptRevisionsAction } from "@/app/pipeline-actions";
 import { updateVideoAction } from "@/app/actions";
-import { uploadCommentMedia } from "@/lib/upload-client";
 import { readTime } from "@/lib/format";
-import { PLANNING_STAGES, type CarouselImage, type HookSnippet, type Profile, type Video } from "@/lib/types";
+import { PLANNING_STAGES, type CarouselImage, type Profile, type ReferenceItem, type ScriptComment, type Video } from "@/lib/types";
 
 /**
  * The client's writing room. Deliberately one job per pane: the script on the
@@ -45,16 +42,18 @@ export function ScriptWorkspace({
   video,
   viewer,
   customs,
-  briefVoiceUrl,
-  snippets,
   carouselSlides,
+  references,
+  comments,
+  chat,
 }: {
   video: Video;
   viewer: Profile;
   customs: { content_pillar: string[]; format: string[]; platform: string[] };
-  briefVoiceUrl: string | null;
-  snippets: HookSnippet[];
   carouselSlides: CarouselImage[];
+  references: ReferenceItem[];
+  comments: ScriptComment[];
+  chat?: React.ReactNode;
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -68,14 +67,11 @@ export function ScriptWorkspace({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const [recording, setRecording] = useState(false);
-  const [voiceUrl, setVoiceUrl] = useState(briefVoiceUrl);
-  const [voiceMeta, setVoiceMeta] = useState<{ duration: number | null; peaks: number[] | null }>({
-    duration: video.brief_voice_duration_seconds,
-    peaks: video.brief_voice_peaks,
-  });
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [prompting, setPrompting] = useState(false);
+  // Words selected in the body, so a note can be pinned to exactly them.
+  const [bodyQuote, setBodyQuote] = useState<string | null>(null);
+  const openNotes = comments.filter((c) => !c.resolved).length;
 
   const bodyTime = readTime(body);
   const fullTime = readTime([hooks[0] ?? "", body, cta].filter(Boolean).join(" "));
@@ -125,33 +121,11 @@ export function ScriptWorkspace({
     save({ hooks: next });
   }
 
-  const onVoiceDone = useCallback(
-    async (capture: VoiceCapture) => {
-      setRecording(false);
-      try {
-        const up = await uploadCommentMedia(capture.blob, "brief.webm", viewer.id);
-        const res = await saveBriefVoiceAction(video.id, {
-          path: up.path,
-          duration: capture.duration,
-          peaks: capture.peaks,
-        });
-        if (res?.error) {
-          toast.error(res.error);
-          return;
-        }
-        setVoiceUrl(URL.createObjectURL(capture.blob));
-        setVoiceMeta({ duration: capture.duration, peaks: capture.peaks });
-        toast.success("Brief recorded.");
-        router.refresh();
-      } catch (e) {
-        toast.error((e as Error).message);
-      }
-    },
-    [video.id, viewer.id, toast, router]
-  );
-
   const variantsExpected = hooks.length > 1;
-  const canEditStage = viewer.role === "owner" || viewer.role === "admin";
+  const isClient = viewer.role === "owner" || viewer.role === "admin";
+  // The stepper is usable by the copywriter too — the database refuses the one
+  // move that's the client's call (approving for filming), which the bar also greys out.
+  const canEditStage = isClient;
   const canSubmitForReview = viewer.role === "copywriter";
   const carousel = isCarouselFormat(video.formats);
   // Come back to the list you most likely arrived from.
@@ -190,13 +164,116 @@ export function ScriptWorkspace({
           <PlanningStageBar
             videoId={video.id}
             current={video.status}
-            canEdit={canEditStage}
+            canEdit={isClient || viewer.role === "copywriter"}
             carousel={carousel}
+            lockedStages={viewer.role === "copywriter" ? ["ready_to_film"] : []}
           />
+          {video.status !== "ideation" ? (
+            <div className="flex min-h-[2.75rem] flex-wrap items-center gap-2 rounded-xl border border-line bg-card px-3 py-2">
+              <span className="text-[11px] text-ink-3">Next step</span>
+              {openNotes > 0 ? (
+                <span className="rounded-md bg-warn/15 px-1.5 py-0.5 text-[10px] font-medium text-warn">
+                  {openNotes} open note{openNotes === 1 ? "" : "s"} on the script
+                </span>
+              ) : null}
+          {video.status === "scripting" && (canEditStage || canSubmitForReview) ? (
+                <div className="ml-auto flex items-center gap-1">
+                  <StageBack videoId={video.id} status={video.status} />
+                  <StageMove
+                    videoId={video.id}
+                    to="script_review"
+                    label={canSubmitForReview ? "Send for review" : "Script done — send to review"}
+                  />
+                </div>
+              ) : video.status === "script_review" && canEditStage ? (
+                <div className="ml-auto flex items-center gap-1">
+                  <StageBack videoId={video.id} status={video.status} />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      startTransition(async () => {
+                        const res = await requestScriptRevisionsAction(video.id);
+                        if (res?.error) toast.error(res.error);
+                        else router.refresh();
+                      })
+                    }
+                    className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] text-ink-3 transition hover:bg-hover hover:text-ink disabled:opacity-50"
+                  >
+                    Send back — needs changes
+                  </button>
+                  {carousel ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        startTransition(async () => {
+                          const res = await approveCarouselScriptAction(video.id);
+                          if (res?.error) toast.error(res.error);
+                          else router.push(`/videos/${video.id}`);
+                        })
+                      }
+                      className="flex shrink-0 items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-[11px] text-ink-2 transition hover:border-accent hover:text-ink disabled:opacity-50"
+                    >
+                      Approve — needs creatives
+                      <IconChevronRight size={11} />
+                    </button>
+                  ) : (
+                    <StageMove
+                      videoId={video.id}
+                      to="ready_to_film"
+                      label="Approve — ready to film"
+                      goTo={`/videos/${video.id}/film`}
+                    />
+                  )}
+                </div>
+              ) : video.status === "script_review" && canSubmitForReview ? (
+                <span className="ml-auto flex items-center gap-1.5 text-xs text-ink-2">
+                  <IconSparkles size={13} />
+                  Sent for review — waiting on approval
+                </span>
+              ) : video.status === "script_revisions" && (canEditStage || canSubmitForReview) ? (
+                <div className="ml-auto flex items-center gap-1">
+                  <StageBack videoId={video.id} status={video.status} />
+                  <StageMove
+                    videoId={video.id}
+                    to="script_review"
+                    label="Resubmit for review"
+                  />
+                </div>
+              ) : video.status === "ready_to_film" && canEditStage ? (
+                <div className="ml-auto flex items-center gap-1">
+                  <StageBack videoId={video.id} status={video.status} />
+                  <StageMove
+                    videoId={video.id}
+                    to="editor_brief"
+                    label="Filmed — build the brief"
+                    goTo={`/videos/${video.id}/editor-brief`}
+                  />
+                </div>
+              ) : video.status === "editor_brief" ? (
+                <span className="ml-auto flex items-center gap-1.5 text-xs text-ink-2">
+                  <IconSparkles size={13} />
+                  <Link href={`/videos/${video.id}/editor-brief`} className="hover:text-accent-hi">
+                    Building the editor brief
+                  </Link>
+                </span>
+              ) : video.status === "ready_to_edit" ? (
+                <span className="ml-auto flex items-center gap-1.5 text-xs text-ok">
+                  <IconCheck size={13} />
+                  With the editors
+                </span>
+              ) : null}
+                </div>
+          ) : null}
         </div>
 
         {isCarouselFormat(video.formats) ? (
-          <CarouselSlides videoId={video.id} slides={carouselSlides} carouselStyle={video.carousel_style} />
+          <CarouselSlides
+            videoId={video.id}
+            slides={carouselSlides}
+            carouselStyle={video.carousel_style}
+            comments={comments}
+            viewer={viewer}
+          />
         ) : (
           <>
         {/* Hooks */}
@@ -220,8 +297,8 @@ export function ScriptWorkspace({
           </p>
           <div className="space-y-1.5">
             {hooks.map((h, i) => (
+              <div key={`${i}-${h.slice(0, 12)}`}>
               <div
-                key={`${i}-${h.slice(0, 12)}`}
                 draggable
                 onDragStart={() => setDragIndex(i)}
                 onDragOver={(e) => e.preventDefault()}
@@ -263,6 +340,15 @@ export function ScriptWorkspace({
                 >
                   <IconX size={13} />
                 </button>
+              </div>
+              <ScriptComments
+                videoId={video.id}
+                target={`hook:${i}`}
+                comments={comments}
+                viewer={viewer}
+                compact
+                label={`Comment on hook ${i + 1}`}
+              />
               </div>
             ))}
 
@@ -311,9 +397,27 @@ export function ScriptWorkspace({
             onChange={(e) => {
               setBody(e.target.value);
               setDirty(true);
+              setBodyQuote(null);
+            }}
+            onSelect={(e) => {
+              const el = e.currentTarget;
+              setBodyQuote(
+                el.selectionEnd > el.selectionStart
+                  ? body.slice(el.selectionStart, el.selectionEnd).trim() || null
+                  : null
+              );
             }}
             onBlur={() => dirty && save()}
             className="w-full resize-y bg-transparent text-sm leading-relaxed placeholder:text-ink-3 focus:outline-none"
+          />
+          <ScriptComments
+            videoId={video.id}
+            target="body"
+            comments={comments}
+            viewer={viewer}
+            quote={bodyQuote}
+            onQuoteUsed={() => setBodyQuote(null)}
+            label="Comment on the body"
           />
         </section>
 
@@ -332,6 +436,13 @@ export function ScriptWorkspace({
             }}
             onBlur={() => dirty && save()}
             className="w-full resize-y bg-transparent text-sm leading-relaxed placeholder:text-ink-3 focus:outline-none"
+          />
+          <ScriptComments
+            videoId={video.id}
+            target="cta"
+            comments={comments}
+            viewer={viewer}
+            label="Comment on the call to action"
           />
         </section>
           </>
@@ -357,141 +468,12 @@ export function ScriptWorkspace({
               </button>
             </>
           ) : null}
-          {video.status === "scripting" && (canEditStage || canSubmitForReview) ? (
-            <div className="ml-auto flex items-center gap-1">
-              <StageBack videoId={video.id} status={video.status} />
-              <StageMove
-                videoId={video.id}
-                to="script_review"
-                label={canSubmitForReview ? "Send for review" : "Script done — send to review"}
-              />
-            </div>
-          ) : video.status === "script_review" && canEditStage ? (
-            <div className="ml-auto flex items-center gap-1">
-              <StageBack videoId={video.id} status={video.status} />
-              <button
-                type="button"
-                onClick={() =>
-                  startTransition(async () => {
-                    const res = await requestScriptRevisionsAction(video.id);
-                    if (res?.error) toast.error(res.error);
-                    else router.refresh();
-                  })
-                }
-                className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] text-ink-3 transition hover:bg-hover hover:text-ink disabled:opacity-50"
-              >
-                Send back — needs changes
-              </button>
-              {carousel ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    startTransition(async () => {
-                      const res = await approveCarouselScriptAction(video.id);
-                      if (res?.error) toast.error(res.error);
-                      else router.push(`/videos/${video.id}`);
-                    })
-                  }
-                  className="flex shrink-0 items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-[11px] text-ink-2 transition hover:border-accent hover:text-ink disabled:opacity-50"
-                >
-                  Approve — review creatives
-                  <IconChevronRight size={11} />
-                </button>
-              ) : (
-                <StageMove
-                  videoId={video.id}
-                  to="ready_to_film"
-                  label="Approve — ready to film"
-                  goTo={`/videos/${video.id}/film`}
-                />
-              )}
-            </div>
-          ) : video.status === "script_review" && canSubmitForReview ? (
-            <span className="ml-auto flex items-center gap-1.5 text-xs text-ink-2">
-              <IconSparkles size={13} />
-              Sent for review — waiting on approval
-            </span>
-          ) : video.status === "script_revisions" && (canEditStage || canSubmitForReview) ? (
-            <div className="ml-auto flex items-center gap-1">
-              <StageBack videoId={video.id} status={video.status} />
-              <StageMove
-                videoId={video.id}
-                to="script_review"
-                label="Resubmit for review"
-              />
-            </div>
-          ) : video.status === "ready_to_film" && canEditStage ? (
-            <div className="ml-auto flex items-center gap-1">
-              <StageBack videoId={video.id} status={video.status} />
-              <StageMove
-                videoId={video.id}
-                to="editor_brief"
-                label="Filmed — build the brief"
-                goTo={`/videos/${video.id}/editor-brief`}
-              />
-            </div>
-          ) : video.status === "editor_brief" ? (
-            <span className="ml-auto flex items-center gap-1.5 text-xs text-ink-2">
-              <IconSparkles size={13} />
-              <Link href={`/videos/${video.id}/editor-brief`} className="hover:text-accent-hi">
-                Building the editor brief
-              </Link>
-            </span>
-          ) : video.status === "ready_to_edit" ? (
-            <span className="ml-auto flex items-center gap-1.5 text-xs text-ok">
-              <IconCheck size={13} />
-              With the editors
-            </span>
-          ) : null}
         </div>
 
       </div>
 
       {/* ---- Everything about the video ---- */}
       <aside className="min-w-0 space-y-4">
-        <section className="rounded-2xl border border-line bg-card p-4">
-          <h2 className="mb-2 text-sm font-semibold">Spoken brief</h2>
-          <p className="mb-2.5 text-xs leading-relaxed text-ink-3">
-            Faster than typing. Record the idea and it goes to the editor as a voice note.
-          </p>
-
-          {recording ? (
-            <VoiceRecorder onDone={onVoiceDone} onCancel={() => setRecording(false)} />
-          ) : voiceUrl ? (
-            <div className="space-y-2">
-              <VoicePlayer src={voiceUrl} duration={voiceMeta.duration} peaks={voiceMeta.peaks} />
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  onClick={() =>
-                    startTransition(async () => {
-                      const res = await saveBriefVoiceAction(video.id, null);
-                      if (res?.error) toast.error(res.error);
-                      else {
-                        setVoiceUrl(null);
-                        router.refresh();
-                      }
-                    })
-                  }
-                  className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-[11px] text-ink-2 hover:text-danger"
-                >
-                  <IconTrash size={12} />
-                  Delete
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setRecording(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line-strong py-3 text-xs text-ink-2 hover:border-accent hover:text-ink"
-            >
-              <IconMic size={14} />
-              Record a brief
-            </button>
-          )}
-        </section>
-
         {video.idea_notes ? (
           <details className="rounded-2xl border border-line bg-card p-4">
             <summary className="cursor-pointer text-sm font-semibold">
@@ -504,19 +486,6 @@ export function ScriptWorkspace({
               {video.idea_notes}
             </p>
           </details>
-        ) : null}
-
-        {!isCarouselFormat(video.formats) ? (
-          <HookLibrary
-            snippets={snippets}
-            currentHooks={hooks}
-            videoId={video.id}
-            onInsert={(text) => {
-              const next = [...hooks, text];
-              setHooks(next);
-              save({ hooks: next });
-            }}
-          />
         ) : null}
 
         <section className="rounded-2xl border border-line bg-card p-4">
@@ -536,6 +505,12 @@ export function ScriptWorkspace({
             }}
             className="w-full resize-y rounded-lg bg-panel px-2.5 py-2 text-sm leading-relaxed placeholder:text-ink-3 focus:outline-none"
           />
+        </section>
+
+        {/* References added back in Ideation follow the video into every stage. */}
+        <section className="rounded-2xl border border-line bg-card p-4">
+          <h2 className="mb-2 text-sm font-semibold">References</h2>
+          <VideoReferences videoId={video.id} items={references} />
         </section>
 
         <section className="space-y-3 rounded-2xl border border-line bg-card p-4">
@@ -574,13 +549,14 @@ export function ScriptWorkspace({
             }
           />
         </section>
+
+        {chat}
       </aside>
 
       {prompting ? (
         <Teleprompter
-          hook={hooks[0] ?? null}
+          hooks={hooks}
           body={body}
-          cta={cta}
           onClose={() => setPrompting(false)}
         />
       ) : null}

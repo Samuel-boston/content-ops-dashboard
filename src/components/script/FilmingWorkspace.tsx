@@ -33,12 +33,14 @@ export function FilmingWorkspace({
   driveConfigured,
   briefVoiceUrl,
   guestLinks,
+  chat,
 }: {
   video: Video;
   assets: VideoAsset[];
   driveConfigured: boolean;
   briefVoiceUrl: string | null;
   guestLinks: GuestLink[];
+  chat?: React.ReactNode;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -183,7 +185,7 @@ export function FilmingWorkspace({
               <VideoFootage videoId={video.id} assets={assets} driveConfigured={driveConfigured} />
             </div>
             <div className="border-t border-line pt-3">
-              <ShareLinks videoId={video.id} links={guestLinks} canManage />
+              <ShareLinks videoId={video.id} links={guestLinks} canManage uploadOnly />
             </div>
           </section>
         </div>
@@ -248,14 +250,15 @@ export function FilmingWorkspace({
               className="mt-3 w-full resize-y rounded-lg bg-panel px-2.5 py-2 text-sm leading-relaxed placeholder:text-ink-3 focus:outline-none"
             />
           </section>
+
+          {chat}
         </aside>
       </div>
 
       {prompting ? (
         <Teleprompter
-          hook={video.script_hooks?.[0] ?? null}
+          hooks={video.script_hooks ?? []}
           body={video.script_body ?? ""}
-          cta={video.script_cta ?? ""}
           onClose={() => setPrompting(false)}
         />
       ) : null}

@@ -7,13 +7,11 @@ import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
 import { TaxonomyMultiSelect } from "@/components/TaxonomyMultiSelect";
 import { VideoReferences } from "@/components/VideoReferences";
-import { VoicePlayer, VoiceRecorder, type VoiceCapture } from "@/components/workspace/Voice";
 import { PlanningStageBar } from "@/components/pipeline/PlanningStageBar";
 import { CarouselSlides } from "@/components/script/CarouselSlides";
-import { IconMic, IconSparkles, IconTrash } from "@/components/ui/icons";
-import { saveBriefVoiceAction, saveIdeaNotesAction, transcribeBriefAction } from "@/app/script-actions";
+import { StageMove } from "@/components/pipeline/StageMove";
+import { saveIdeaNotesAction } from "@/app/script-actions";
 import { updateVideoAction } from "@/app/actions";
-import { uploadCommentMedia } from "@/lib/upload-client";
 import { isCarouselFormat } from "@/lib/taxonomy";
 import type { CarouselImage, Profile, ReferenceItem, Video } from "@/lib/types";
 
@@ -31,16 +29,16 @@ export function IdeaWorkspace({
   video,
   viewer,
   customs,
-  briefVoiceUrl,
   references,
   carouselSlides,
+  chat,
 }: {
   video: Video;
   viewer: Profile;
   customs: { content_pillar: string[]; format: string[]; platform: string[] };
-  briefVoiceUrl: string | null;
   references: ReferenceItem[];
   carouselSlides: CarouselImage[];
+  chat?: React.ReactNode;
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -50,13 +48,6 @@ export function IdeaWorkspace({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const [recording, setRecording] = useState(false);
-  const [transcribing, setTranscribing] = useState(false);
-  const [voiceUrl, setVoiceUrl] = useState(briefVoiceUrl);
-  const [voiceMeta, setVoiceMeta] = useState<{ duration: number | null; peaks: number[] | null }>({
-    duration: video.brief_voice_duration_seconds,
-    peaks: video.brief_voice_peaks,
-  });
   const canEdit = viewer.role === "owner" || viewer.role === "admin";
 
   const save = useCallback(
@@ -70,31 +61,6 @@ export function IdeaWorkspace({
       });
     },
     [video.id, toast, startTransition]
-  );
-
-  const onVoiceDone = useCallback(
-    async (capture: VoiceCapture) => {
-      setRecording(false);
-      try {
-        const up = await uploadCommentMedia(capture.blob, "brief.webm", viewer.id);
-        const res = await saveBriefVoiceAction(video.id, {
-          path: up.path,
-          duration: capture.duration,
-          peaks: capture.peaks,
-        });
-        if (res?.error) {
-          toast.error(res.error);
-          return;
-        }
-        setVoiceUrl(URL.createObjectURL(capture.blob));
-        setVoiceMeta({ duration: capture.duration, peaks: capture.peaks });
-        toast.success("Idea recorded.");
-        router.refresh();
-      } catch (e) {
-        toast.error((e as Error).message);
-      }
-    },
-    [video.id, viewer.id, toast, router]
   );
 
   return (
@@ -111,9 +77,22 @@ export function IdeaWorkspace({
           <PlanningStageBar
             videoId={video.id}
             current={video.status}
-            canEdit={canEdit}
+            canEdit
             carousel={isCarouselFormat(video.formats)}
+            lockedStages={canEdit ? [] : ["ready_to_film"]}
           />
+          {/* The obvious next move, right under the stepper rather than only up in it. */}
+          <div className="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2">
+            <span className="text-[11px] text-ink-3">Next step</span>
+            <span className="ml-auto">
+              <StageMove
+                videoId={video.id}
+                to="scripting"
+                label="Start scripting"
+                goTo={`/videos/${video.id}/script`}
+              />
+            </span>
+          </div>
         </div>
 
         {isCarouselFormat(video.formats) ? (
@@ -150,71 +129,6 @@ export function IdeaWorkspace({
       </div>
 
       <aside className="space-y-4">
-        <section className="rounded-2xl border border-line bg-card p-4">
-          <h2 className="mb-2 text-sm font-semibold">Talk it out</h2>
-          <p className="mb-2.5 text-xs leading-relaxed text-ink-3">
-            Quicker than typing when the idea is still forming. Turn it into text whenever.
-          </p>
-
-          {recording ? (
-            <VoiceRecorder onDone={onVoiceDone} onCancel={() => setRecording(false)} />
-          ) : voiceUrl ? (
-            <div className="space-y-2">
-              <VoicePlayer src={voiceUrl} duration={voiceMeta.duration} peaks={voiceMeta.peaks} />
-              <div className="flex flex-wrap gap-1.5">
-                <button
-                  type="button"
-                  disabled={transcribing}
-                  onClick={() => {
-                    setTranscribing(true);
-                    startTransition(async () => {
-                      const res = await transcribeBriefAction(video.id);
-                      setTranscribing(false);
-                      if (res?.error) toast.error(res.error);
-                      else if (res?.text) {
-                        const next = notes ? `${notes}\n\n${res.text}` : res.text;
-                        setNotes(next);
-                        save(next);
-                        toast.success("Added to your notes.");
-                      }
-                    });
-                  }}
-                  className="flex items-center gap-1.5 rounded-lg bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white hover:bg-accent-hi disabled:opacity-50"
-                >
-                  <IconSparkles size={12} />
-                  {transcribing ? "Transcribing…" : "Turn into text"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    startTransition(async () => {
-                      const res = await saveBriefVoiceAction(video.id, null);
-                      if (res?.error) toast.error(res.error);
-                      else {
-                        setVoiceUrl(null);
-                        router.refresh();
-                      }
-                    })
-                  }
-                  className="flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-[11px] text-ink-2 hover:text-danger"
-                >
-                  <IconTrash size={12} />
-                  Delete
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setRecording(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line-strong py-3 text-xs text-ink-2 hover:border-accent hover:text-ink"
-            >
-              <IconMic size={14} />
-              Record the idea
-            </button>
-          )}
-        </section>
-
         <section className="rounded-2xl border border-line bg-card p-4">
           <h2 className="mb-2 text-sm font-semibold">References</h2>
           <p className="mb-2.5 text-xs leading-relaxed text-ink-3">
@@ -262,6 +176,8 @@ export function IdeaWorkspace({
             }
           />
         </section>
+
+        {chat}
       </aside>
     </div>
   );

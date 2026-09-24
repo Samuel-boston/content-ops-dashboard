@@ -42,12 +42,15 @@ export function PlanningStageBar({
   current,
   canEdit,
   carousel = false,
+  lockedStages = [],
 }: {
   videoId: string;
   current: VideoStatus;
   canEdit: boolean;
   /** Carousels don't get filmed — Ready to Film never applies to them. */
   carousel?: boolean;
+  /** Stages this viewer may not move a video into — shown but greyed out. */
+  lockedStages?: PlanningStage[];
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -117,13 +120,15 @@ export function PlanningStageBar({
               ) : null}
               <button
                 type="button"
-                disabled={!canEdit || pending || isCurrent}
+                disabled={!canEdit || pending || isCurrent || lockedStages.includes(stage)}
                 onClick={() => move(stage)}
                 aria-current={isCurrent ? "step" : undefined}
                 title={
                   isCurrent
                     ? `Currently in ${STATUS_LABELS[stage]}`
-                    : canEdit
+                    : lockedStages.includes(stage)
+                      ? `Only the client can move a script to ${STATUS_LABELS[stage]}`
+                      : canEdit
                       ? `Move to ${STATUS_LABELS[stage]}`
                       : STATUS_LABELS[stage]
                 }

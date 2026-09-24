@@ -10,6 +10,7 @@ import {
   publishContainer,
 } from "@/lib/integrations/instagram";
 import { getDownloadUrl } from "@/lib/integrations/stream";
+import { markVideoPosted } from "@/lib/archive";
 import type { PublishJob } from "@/lib/types";
 
 export async function listPublishJobs(): Promise<PublishJob[]> {
@@ -155,7 +156,8 @@ export async function runPublishJob(jobId: string): Promise<{ ok: boolean; error
       { video_id: job.video_id, source: "instagram", external_media_id: mediaId },
       { onConflict: "video_id,source" }
     );
-    await db.from("videos").update({ status: "posted" }).eq("id", job.video_id);
+    // Published: do everything "Mark as posted" does (stamp, calendar date, archive).
+    await markVideoPosted(job.video_id);
     return { ok: true };
   } catch (e) {
     await db

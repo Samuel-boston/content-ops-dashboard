@@ -13,6 +13,7 @@ import { markOverviewSeenAction, whatsNew } from "@/app/overview-actions";
 import { IconLayers } from "@/components/ui/icons";
 import { money } from "@/lib/format";
 import { timeGreeting } from "@/lib/greeting";
+import { getClientName } from "@/lib/workspace";
 
 /**
  * The editor's home.
@@ -29,7 +30,12 @@ export default async function MyWorkPage() {
   const viewer = await requireUser();
   if (viewer.role !== "editor") redirect("/");
 
-  const [board, { pool }, news] = await Promise.all([editorBoard(), listMyQueue(), whatsNew()]);
+  const [board, { pool }, news, clientName] = await Promise.all([
+    editorBoard(),
+    listMyQueue(),
+    whatsNew(),
+    getClientName(),
+  ]);
 
   // Same watermark the client's Overview uses, moved after the read so this
   // render still shows what it found. `video_activity` is RLS-scoped per video,
@@ -96,7 +102,7 @@ export default async function MyWorkPage() {
         <h2 className="mb-2.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
           Your board
         </h2>
-        <TaskBoard groups={taskGroups} />
+        <TaskBoard groups={taskGroups} clientName={clientName} />
       </section>
 
       {/* 2 — what moved while they were away */}
@@ -104,8 +110,8 @@ export default async function MyWorkPage() {
 
       {!board.hasRates ? (
         <p className="rounded-xl bg-warn/10 px-4 py-3 text-xs leading-snug text-warn">
-          No rates have been set for you yet, so nothing below can be priced. Worth a nudge to the
-          client.
+          No rates have been set for you yet, so nothing below can be priced. Worth a nudge to
+          {clientName}.
         </p>
       ) : null}
 

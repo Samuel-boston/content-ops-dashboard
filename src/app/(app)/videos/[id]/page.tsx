@@ -19,6 +19,7 @@ import { VideoWorkspace } from "@/components/workspace/VideoWorkspace";
 import { EditorVideoView } from "@/components/editor/EditorVideoView";
 import { ReadyToEditRecap } from "@/components/pipeline/ReadyToEditRecap";
 import { EditingStatusCard } from "@/components/pipeline/EditingStatusCard";
+import { StageChat } from "@/components/pipeline/StageChat";
 import { CarouselPostView } from "@/components/script/CarouselPostView";
 import type { CutComment } from "@/lib/types";
 
@@ -202,13 +203,14 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
   // Post. This is the only room past Scripting it ever has — the generic
   // review workspace below assumes a cut exists, which a carousel never has.
   const CAROUSEL_POST_STATUSES: VideoStatus[] = [
+    "needs_creatives",
     "creative_review",
     "creative_revisions",
     "ready_to_post",
     "posted",
   ];
   if (isCarouselFormat(video.formats) && CAROUSEL_POST_STATUSES.includes(video.status)) {
-    return <CarouselPostView video={video} carouselSlides={carouselImages} />;
+    return <CarouselPostView video={video} carouselSlides={carouselImages} chat={<StageChat videoId={id} />} />;
   }
 
   const customsBy = {

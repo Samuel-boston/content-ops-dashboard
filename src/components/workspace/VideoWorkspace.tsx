@@ -52,6 +52,11 @@ function visibleTabs(status: Video["status"]): Tab[] {
   if (status === "ready_to_post" || status === "posted") {
     return ["post", "comments", "brief", "files", "chat"];
   }
+  // Once variants are being handed over, the list of them (and what to do with
+  // each) is the main thing to see — even before there's more than one.
+  if (status === "awaiting_variants" || status === "final_review") {
+    return ["post", "comments", "brief", "files", "chat"];
+  }
   return ["comments", "brief", "files", "chat"];
 }
 
@@ -117,7 +122,11 @@ export function VideoWorkspace({
   // over, so it opens straight onto the caption/schedule tab instead of the
   // comments thread everyone else lands on.
   const [tab, setTab] = useState<Tab>(
-    video.status === "ready_to_post" || video.status === "posted" ? "post" : "comments"
+    video.status === "ready_to_post" ||
+      video.status === "posted" ||
+      video.status === "final_review"
+      ? "post"
+      : "comments"
   );
   const [current, setCurrent] = useState(0);
   const [duration, setDuration] = useState(version?.duration_seconds ?? 0);
@@ -210,7 +219,9 @@ export function VideoWorkspace({
               tab === t ? "text-ink" : "text-ink-3 hover:text-ink-2"
             }`}
           >
-            {TAB_LABELS[t]}
+            {t === "post" && (video.status === "awaiting_variants" || video.status === "final_review")
+              ? "Variants"
+              : TAB_LABELS[t]}
             {t === "comments" && cutComments.filter((c) => !c.parent_comment_id).length ? (
               <span className="ml-1.5 text-ink-3">
                 {cutComments.filter((c) => !c.parent_comment_id).length}
@@ -302,6 +313,13 @@ export function VideoWorkspace({
             canManage={viewer.role !== "editor"}
             instagramConfigured={integrations.instagram}
             durationSeconds={version?.duration_seconds ?? null}
+            variantsOnly={video.status === "awaiting_variants" || video.status === "final_review"}
+            onWatch={(cutId) => {
+              setActiveCutId(cutId);
+              const next = cuts.find((c) => c.id === cutId)?.versions[0];
+              setVersionId(next?.id ?? "");
+              setMobilePane("player");
+            }}
           />
         ) : null}
       </div>

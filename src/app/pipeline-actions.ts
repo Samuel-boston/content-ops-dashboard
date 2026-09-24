@@ -337,7 +337,7 @@ async function requireCarousel(videoId: string) {
 }
 
 /**
- * Approve a carousel's SCRIPT — the caption text — into Creative Review.
+ * Approve a carousel's SCRIPT — the caption text — into Needs Creatives.
  *
  * A carousel never gets filmed or briefed: the script and the creative
  * (the actual slide images) are reviewed as two separate things, same as a
@@ -345,6 +345,20 @@ async function requireCarousel(videoId: string) {
  * the two approvals.
  */
 export async function approveCarouselScriptAction(videoId: string) {
+  await requireRole("owner", "admin");
+  if (!(await requireCarousel(videoId))) return { error: "Not a carousel." };
+  const supabase = await supabaseServer();
+  const { error } = await supabase
+    .from("videos")
+    .update({ status: "needs_creatives" })
+    .eq("id", videoId);
+  if (error) return { error: error.message };
+  revalidateAll(videoId);
+  return { ok: true };
+}
+
+/** The images are made — Needs Creatives -> Creatives to Review. */
+export async function submitCarouselCreativesAction(videoId: string) {
   await requireRole("owner", "admin");
   if (!(await requireCarousel(videoId))) return { error: "Not a carousel." };
   const supabase = await supabaseServer();

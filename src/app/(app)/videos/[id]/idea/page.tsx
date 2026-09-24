@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
+import { StageChat } from "@/components/pipeline/StageChat";
 import { requireRole } from "@/lib/auth";
 import { getVideo, listTaxonomyCustoms } from "@/app/actions";
-import { briefVoiceUrl } from "@/app/script-actions";
 import { listReferences } from "@/app/library-actions";
 import { listCarouselImages } from "@/app/carousel-actions";
 import { IdeaWorkspace } from "@/components/script/IdeaWorkspace";
@@ -23,10 +23,9 @@ export default async function IdeaPage({ params }: PageProps<"/videos/[id]/idea"
   // rather than showing a stale brainstorm keeps the two surfaces honest.
   if (video.status !== "ideation") redirect(`/videos/${id}/script`);
 
-  const voiceUrl = await briefVoiceUrl(video.brief_voice_path);
-
   return (
     <IdeaWorkspace
+      chat={<StageChat videoId={id} />}
       video={video}
       viewer={viewer}
       customs={{
@@ -34,7 +33,6 @@ export default async function IdeaPage({ params }: PageProps<"/videos/[id]/idea"
         format: customs.filter((c) => c.kind === "format").map((c) => c.value),
         platform: customs.filter((c) => c.kind === "platform").map((c) => c.value),
       }}
-      briefVoiceUrl={voiceUrl}
       references={references}
       carouselSlides={carouselSlides}
     />

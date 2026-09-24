@@ -2,6 +2,7 @@ import { requireRole } from "@/lib/auth";
 import { listPostingWork } from "@/app/posting-actions";
 import { PostingQueue } from "@/components/posting/PostingQueue";
 import { listVaTasks } from "@/app/task-actions";
+import { getClientName } from "@/lib/workspace";
 import { VaTaskBoard } from "@/components/tasks/VaTaskBoard";
 
 /**
@@ -14,7 +15,11 @@ import { VaTaskBoard } from "@/components/tasks/VaTaskBoard";
  */
 export default async function PostingPage() {
   const viewer = await requireRole("va", "owner", "admin");
-  const [{ trials, jobs }, tasks] = await Promise.all([listPostingWork(), listVaTasks()]);
+  const [{ trials, jobs, instagramConnected }, tasks, clientName] = await Promise.all([
+    listPostingWork(),
+    listVaTasks(),
+    getClientName(),
+  ]);
 
   return (
     <div className="space-y-5">
@@ -25,7 +30,13 @@ export default async function PostingPage() {
           {trials.filter((t) => t.status === "posted" && !t.hasMetrics).length} awaiting numbers
         </p>
       </div>
-      <PostingQueue trials={trials} jobs={jobs} viewerRole={viewer.role} />
+      <PostingQueue
+        trials={trials}
+        jobs={jobs}
+        viewerRole={viewer.role}
+        instagramConnected={instagramConnected}
+        clientName={clientName}
+      />
 
       {/* Everything that isn't posting — right under it, so it can't be missed. */}
       <section className="space-y-3 border-t border-line pt-5">

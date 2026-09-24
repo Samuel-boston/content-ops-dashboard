@@ -12,14 +12,13 @@ import { readTime } from "@/lib/format";
  * a natural piece-to-camera delivery.
  */
 export function Teleprompter({
-  hook,
+  hooks,
   body,
-  cta,
   onClose,
 }: {
-  hook: string | null;
+  /** Every hook, in order — each is read in turn, labelled, so nobody has to go hunting for the other takes. */
+  hooks: string[];
   body: string;
-  cta: string;
   onClose: () => void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -29,7 +28,9 @@ export function Teleprompter({
   const [size, setSize] = useState(40);
   const [mirror, setMirror] = useState(false);
 
-  const text = [hook, body, cta].filter(Boolean).join("\n\n");
+  const cleanHooks = hooks.map((h) => h.trim()).filter(Boolean);
+  // No call to action: mid-flow, a reader would just say "call to action" out loud.
+  const text = [...cleanHooks, body].filter(Boolean).join("\n\n");
   const total = readTime(text);
   const seconds = total.words ? Math.round((total.words / wpm) * 60) : 0;
 
@@ -190,24 +191,34 @@ export function Teleprompter({
           pixel width so it stays four-ish words at any font size.
         */}
         <div ref={script} className="mx-auto" style={{ maxWidth: "48ch" }}>
-          {hook ? (
-            <p
-              className="mb-10 font-semibold leading-tight text-accent-hi"
-              style={{ fontSize: size * 1.15 }}
-            >
-              {hook}
-            </p>
-          ) : null}
-          <p className="whitespace-pre-wrap leading-snug text-white" style={{ fontSize: size }}>
-            {body}
-          </p>
-          {cta ? (
-            <p
-              className="mt-10 whitespace-pre-wrap leading-snug text-white/70"
-              style={{ fontSize: size * 0.9 }}
-            >
-              {cta}
-            </p>
+          {cleanHooks.map((h, i) => (
+            <div key={i} className="mb-10">
+              <p
+                className="mb-1 font-semibold uppercase tracking-wider text-white/40"
+                style={{ fontSize: size * 0.4 }}
+              >
+                Hook {i + 1}
+              </p>
+              <p
+                className="whitespace-pre-wrap font-semibold leading-tight text-accent-hi"
+                style={{ fontSize: size * 1.05 }}
+              >
+                {h}
+              </p>
+            </div>
+          ))}
+          {body.trim() ? (
+            <div>
+              <p
+                className="mb-1 font-semibold uppercase tracking-wider text-white/40"
+                style={{ fontSize: size * 0.4 }}
+              >
+                Body
+              </p>
+              <p className="whitespace-pre-wrap leading-snug text-white" style={{ fontSize: size }}>
+                {body}
+              </p>
+            </div>
           ) : null}
         </div>
         <p className="mt-[40vh] text-center text-white/30" style={{ fontSize: size * 0.4 }}>

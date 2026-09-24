@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth";
 import { runPublishJob } from "@/app/publishing-actions";
+import { isCarouselFormat } from "@/lib/taxonomy";
 import type { TrialPost } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -23,13 +24,45 @@ function revalidateTrials(videoId?: string) {
   if (videoId) revalidatePath(`/videos/${videoId}`);
 }
 
+type Db = Awaited<ReturnType<typeof supabaseServer>>;
+
+/**
+ * Every cut of a video gets a row to hang its choices on — trial or main feed,
+ * its caption, whether it's been sent to the VA. The rows are drafts until
+ * "Send to VA": nothing here reaches the VA by existing. A carousel has no
+ * cuts, so it gets the one row.
+ */
+async function ensureVariantRows(supabase: Db, createdBy: string, videoId: string) {
+  const [{ data: video }, { data: cuts }, { data: existing }] = await Promise.all([
+    supabase.from("videos").select("formats").eq("id", videoId).maybeSingle(),
+    supabase.from("video_cuts").select("id, label, kind").eq("video_id", videoId).order("position"),
+    supabase.from("trial_posts").select("cut_id, status").eq("video_id", videoId),
+  ]);
+  const live = (existing ?? []).filter((t) => t.status !== "archived");
+  const rows: Record<string, unknown>[] = [];
+  if (video && isCarouselFormat(video.formats as string[])) {
+    if (!live.some((t) => t.cut_id === null)) {
+      rows.push({ video_id: videoId, cut_id: null, label: "Carousel", status: "planned", post_as: "none", created_by: createdBy });
+    }
+  } else {
+    const have = new Set(live.map((t) => t.cut_id as string | null));
+    for (const c of cuts ?? []) {
+      if (!have.has(c.id)) {
+        rows.push({ video_id: videoId, cut_id: c.id, label: c.label, status: "planned", post_as: "none", created_by: createdBy });
+      }
+    }
+  }
+  if (rows.length) await supabase.from("trial_posts").insert(rows);
+}
+
 /** Everything the workspace Trials panel needs in one load. */
 export async function listVideoTrials(videoId: string): Promise<{
   trials: TrialPost[];
   cuts: { id: string; label: string; kind: string; notes: string | null }[];
 }> {
-  await requireRole("owner", "admin");
+  const me = await requireRole("owner", "admin");
   const supabase = await supabaseServer();
+  await ensureVariantRows(supabase, me.id, videoId);
   const [{ data: trials }, { data: cuts }] = await Promise.all([
     supabase.from("trial_posts").select("*").eq("video_id", videoId).order("created_at"),
     supabase
@@ -46,76 +79,112 @@ export async function listVideoTrials(videoId: string): Promise<{
 
 /**
  * "Send this to the VA to post" — the one deliberate hand-off. Saves the
- * instructions and cover on the video, then puts every variant (the main cut
- * and each hook variant) on the VA's posting desk. Variants that are already
- * queued are left alone, so sending again after adding a new hook only adds
- * the new one. The main cut defaults to the main feed and hook variants to
- * trials; either can be flipped per variant afterwards.
+ * instructions and cover on the video, then hands over every variant that's
+ * been given a destination (trial reel or main feed). A variant left on
+ * "Not selected" stays behind — except the main cut, which defaults to the
+ * main feed so a plain single-cut video needs no fiddling. Variants already
+ * sent are left alone, so sending again after choosing another one only adds
+ * that one. `fallbackCaption` fills any variant whose own caption is empty.
  */
 export async function sendToVaAction(input: {
   videoId: string;
   notes?: string | null;
   coverPath?: string | null;
+  fallbackCaption?: string | null;
 }) {
   const me = await requireRole("owner", "admin");
   const supabase = await supabaseServer();
+  await ensureVariantRows(supabase, me.id, input.videoId);
 
-  const [{ data: video }, { data: cuts }, { data: existing }] = await Promise.all([
-    supabase.from("videos").select("script_body, script_cta, cover_path").eq("id", input.videoId).single(),
-    supabase
-      .from("video_cuts")
-      .select("id, label, kind")
-      .eq("video_id", input.videoId)
-      .order("position"),
-    supabase.from("trial_posts").select("cut_id, status").eq("video_id", input.videoId),
+  const [{ data: video }, { data: rows }, { data: cuts }] = await Promise.all([
+    supabase.from("videos").select("cover_path").eq("id", input.videoId).single(),
+    supabase.from("trial_posts").select("*").eq("video_id", input.videoId),
+    supabase.from("video_cuts").select("id, kind").eq("video_id", input.videoId),
   ]);
   if (!video) return { error: "Video not found." };
-  if (!cuts?.length) return { error: "There's no cut on this video to send yet." };
+  const kindOf = new Map((cuts ?? []).map((c) => [c.id as string, c.kind as string]));
 
-  const busy = new Set(
-    (existing ?? []).filter((t) => t.status !== "archived").map((t) => t.cut_id as string)
-  );
-  const todo = cuts.filter((c) => !busy.has(c.id));
+  const live = ((rows as TrialPost[]) ?? []).filter((t) => t.status === "planned" && !t.sent_to_va_at);
+  if (!live.length && !(rows ?? []).length) return { error: "There's no cut on this video to send yet." };
+
   const notes = input.notes?.trim() || null;
-  const caption = [video.script_body, video.script_cta].filter(Boolean).join("\n\n").trim() || null;
+  const fallback = input.fallbackCaption?.trim() || null;
+  const now = new Date().toISOString();
+  let sent = 0;
+  for (const t of live) {
+    let postAs = t.post_as;
+    if (postAs === "none" && (t.cut_id === null || kindOf.get(t.cut_id) === "main")) postAs = "main";
+    if (postAs === "none") continue;
+    const { error } = await supabase
+      .from("trial_posts")
+      .update({
+        post_as: postAs,
+        caption: t.caption?.trim() || fallback,
+        notes,
+        sent_to_va_at: now,
+      })
+      .eq("id", t.id);
+    if (error) return { error: error.message };
+    sent += 1;
+  }
 
   const { error: vErr } = await supabase
     .from("videos")
     .update({
       va_notes: notes,
       cover_path: input.coverPath ?? video.cover_path ?? null,
-      va_sent_at: new Date().toISOString(),
+      va_sent_at: now,
     })
     .eq("id", input.videoId);
   if (vErr) return { error: vErr.message };
 
-  if (todo.length) {
-    const { error } = await supabase.from("trial_posts").insert(
-      todo.map((c) => ({
-        video_id: input.videoId,
-        cut_id: c.id,
-        label: c.label,
-        caption,
-        notes,
-        status: "planned",
-        post_as: c.kind === "main" ? "main" : "trial",
-        created_by: me.id,
-      }))
-    );
-    if (error) return { error: error.message };
+  if (sent === 0) {
+    return { error: "Choose Trial reel or Main feed on at least one variant first." };
   }
   revalidateTrials(input.videoId);
-  return { ok: true as const, queued: todo.length };
+  return { ok: true as const, queued: sent };
 }
 
-/** Trial reel or straight to the main feed — settable per variant. */
-export async function setPostAsAction(id: string, videoId: string, postAs: "trial" | "main") {
+/** Change a variant's destination ("Not selected", trial reel, main feed) or its caption. */
+export async function updateVariantAction(
+  id: string,
+  videoId: string,
+  patch: { postAs?: "trial" | "main" | "none"; caption?: string | null }
+) {
   await requireRole("owner", "admin");
   const supabase = await supabaseServer();
-  const { error } = await supabase.from("trial_posts").update({ post_as: postAs }).eq("id", id);
+  const clean: Record<string, unknown> = {};
+  if (patch.postAs) clean.post_as = patch.postAs;
+  if ("caption" in patch) clean.caption = patch.caption?.trim() || null;
+  if (Object.keys(clean).length === 0) return { ok: true as const };
+  const { error } = await supabase.from("trial_posts").update(clean).eq("id", id);
   if (error) return { error: error.message };
   revalidateTrials(videoId);
-  return { ok: true };
+  return { ok: true as const };
+}
+
+/** Send just this variant to the VA — needs a destination chosen first. */
+export async function sendVariantToVaAction(id: string, videoId: string, fallbackCaption?: string | null) {
+  await requireRole("owner", "admin");
+  const supabase = await supabaseServer();
+  const [{ data: t }, { data: v }] = await Promise.all([
+    supabase.from("trial_posts").select("*").eq("id", id).single(),
+    supabase.from("videos").select("va_notes").eq("id", videoId).single(),
+  ]);
+  if (!t) return { error: "Variant not found." };
+  if (t.post_as === "none") return { error: "Choose Trial reel or Main feed for it first." };
+  const { error } = await supabase
+    .from("trial_posts")
+    .update({
+      sent_to_va_at: new Date().toISOString(),
+      caption: (t.caption as string | null)?.trim() || fallbackCaption?.trim() || null,
+      notes: t.notes ?? v?.va_notes ?? null,
+    })
+    .eq("id", id);
+  if (error) return { error: error.message };
+  await supabase.from("videos").update({ va_sent_at: new Date().toISOString() }).eq("id", videoId);
+  revalidateTrials(videoId);
+  return { ok: true as const };
 }
 
 export async function queueTrialAction(input: {

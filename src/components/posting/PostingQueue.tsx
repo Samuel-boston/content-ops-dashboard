@@ -7,6 +7,7 @@ import { useToast } from "@/components/ui/Toast";
 import {
   trialPostingKitAction,
   vaMarkTrialPostedAction,
+  vaPublishAction,
   vaSaveTrialMetricsAction,
   vaSetPostAsAction,
   type PostingJobItem,
@@ -21,11 +22,20 @@ import type { Role } from "@/lib/types";
  * permalink back. Once live, the card flips to a numbers form — the trial's
  * insights only exist inside the IG app, so someone has to carry them over.
  */
-function TrialCard({ trial }: { trial: PostingTrialItem }) {
+function TrialCard({
+  trial,
+  instagramConnected,
+  clientName,
+}: {
+  trial: PostingTrialItem;
+  instagramConnected: boolean;
+  clientName: string;
+}) {
   const toast = useToast();
   const router = useRouter();
   const [pending, startTransition] = useTrackedTransition();
   const [permalink, setPermalink] = useState("");
+  const [when, setWhen] = useState("");
   const [m, setM] = useState({
     views: trial.views?.toString() ?? "",
     likes: trial.likes?.toString() ?? "",
@@ -43,6 +53,11 @@ function TrialCard({ trial }: { trial: PostingTrialItem }) {
     trial.status === "planned";
 
   function getKit() {
+    if (trial.images?.length) {
+      // A carousel: no video file, just its slide images — one download each.
+      trial.images.forEach((u, i) => setTimeout(() => window.open(u, "_blank", "noopener"), i * 250));
+      return;
+    }
     startTransition(async () => {
       const res = await trialPostingKitAction(trial.id);
       if ("error" in res) return toast.error(res.error);
@@ -50,6 +65,18 @@ function TrialCard({ trial }: { trial: PostingTrialItem }) {
         window.open(res.downloadUrl, "_blank", "noopener");
       } else {
         toast.error("No downloadable file for this cut yet — ask the team.");
+      }
+    });
+  }
+
+  function publish(schedule: boolean) {
+    if (schedule && !when) return toast.error("Pick when it should go out.");
+    startTransition(async () => {
+      const res = await vaPublishAction(trial.id, schedule ? when : null);
+      if (res?.error) toast.error(res.error);
+      else {
+        toast.success(res.scheduled ? "Scheduled — it'll go out by itself." : "Posted to Instagram ✓");
+        router.refresh();
       }
     });
   }
@@ -75,7 +102,11 @@ function TrialCard({ trial }: { trial: PostingTrialItem }) {
       const res = await vaMarkTrialPostedAction(trial.id, permalink);
       if (res?.error) toast.error(res.error);
       else {
-        toast.success("Marked live. Come back for the numbers once IG shows them.");
+        toast.success(
+          res.finished
+            ? "Posted ✓ — it's on the calendar and moving to the archive."
+            : "Posted ✓ — come back for the numbers once Instagram shows them."
+        );
         router.refresh();
       }
     });
@@ -114,7 +145,7 @@ function TrialCard({ trial }: { trial: PostingTrialItem }) {
               : "bg-emerald-500/15 text-emerald-400"
           }`}
         >
-          {trial.status === "planned" ? (due ? "Overdue" : "To post") : "Live trial"}
+          {trial.status === "planned" ? (due ? "Overdue" : "To post") : "✓ Posted"}
         </span>
         <p className="min-w-0 flex-1 truncate text-sm font-medium">{trial.videoTitle}</p>
         {trial.winner ? <span title="Winning hook">🏆</span> : null}
@@ -183,7 +214,7 @@ function TrialCard({ trial }: { trial: PostingTrialItem }) {
               disabled={pending}
               className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hi disabled:opacity-50"
             >
-              Get the file
+              {trial.images?.length ? `Get the images (${trial.images.length})` : "Get the file"}
             </button>
             <button
               onClick={copyCaption}
@@ -193,32 +224,76 @@ function TrialCard({ trial }: { trial: PostingTrialItem }) {
               Copy caption
             </button>
           </div>
-          <p className="text-[11px] leading-relaxed text-ink-3">
-            {trial.postAs === "main" ? (
-              <>Post it to the <b>main feed</b>, then paste the link here.</>
+          {trial.postAs === "main" && !trial.images?.length ? (
+            instagramConnected ? (
+              <div className="space-y-1.5 rounded-lg border border-accent/30 bg-accent-ghost p-2.5">
+                <p className="text-[11px] text-ink-2">
+                  Post it straight to Instagram — the caption above goes in as the caption.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => publish(false)}
+                    disabled={pending}
+                    className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hi disabled:opacity-50"
+                  >
+                    {pending ? "Posting…" : "Post to Instagram now"}
+                  </button>
+                  <span className="text-[11px] text-ink-3">or</span>
+                  <input
+                    type="datetime-local"
+                    value={when}
+                    onChange={(e) => setWhen(e.target.value)}
+                    className="rounded-md border border-line bg-raised px-2 py-1 text-xs [color-scheme:dark] focus:border-accent focus:outline-none"
+                  />
+                  <button
+                    onClick={() => publish(true)}
+                    disabled={pending || !when}
+                    className="rounded-lg border border-line px-3 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
+                  >
+                    Schedule
+                  </button>
+                </div>
+              </div>
             ) : (
-              <>
-                Post it from the Instagram app as a <b>trial reel</b> (Share to: Trial), then paste
-                the link here.
-              </>
-            )}
-          </p>
-          <div className="flex gap-2">
-            <input
-              value={permalink}
-              onChange={(e) => setPermalink(e.target.value)}
-              placeholder="https://www.instagram.com/reel/…"
-              className={field}
-            />
-            <button
-              onClick={markPosted}
-              disabled={pending || !permalink.trim()}
-              className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
-            >
-              <span className="flex items-center gap-1">
-                <IconCheck size={12} /> Posted
-              </span>
-            </button>
+              <p className="rounded-lg bg-raised px-2.5 py-2 text-[11px] leading-relaxed text-ink-3">
+                Instagram isn&rsquo;t connected yet, so this can&rsquo;t post itself. Ask {clientName}{" "}
+                to connect it once in Settings → Integrations — after that you can post and schedule
+                from here. Until then, post it from the app and mark it posted below.
+              </p>
+            )
+          ) : (
+            <p className="text-[11px] leading-relaxed text-ink-3">
+              {trial.images?.length ? (
+                <>Post the images as a <b>carousel</b> from the Instagram app, using the caption above.</>
+              ) : (
+                <>
+                  Post it from the Instagram app as a <b>trial reel</b> (Share to: Trial), using the
+                  caption above.
+                </>
+              )}
+            </p>
+          )}
+          <div className="rounded-lg border border-line p-2.5">
+            <p className="mb-1.5 text-[11px] text-ink-3">
+              Posted it by hand? Add the link if you have it, then mark it posted.
+            </p>
+            <div className="flex gap-2">
+              <input
+                value={permalink}
+                onChange={(e) => setPermalink(e.target.value)}
+                placeholder="Link (optional) — https://www.instagram.com/…"
+                className={field}
+              />
+              <button
+                onClick={markPosted}
+                disabled={pending}
+                className="shrink-0 rounded-lg bg-ok px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+              >
+                <span className="flex items-center gap-1">
+                  <IconCheck size={12} /> Mark as posted
+                </span>
+              </button>
+            </div>
           </div>
         </div>
       ) : (
@@ -268,10 +343,14 @@ export function PostingQueue({
   trials,
   jobs,
   viewerRole,
+  instagramConnected,
+  clientName,
 }: {
   trials: PostingTrialItem[];
   jobs: PostingJobItem[];
   viewerRole: Role;
+  instagramConnected: boolean;
+  clientName: string;
 }) {
   const toPost = trials.filter((t) => t.status === "planned");
   const live = trials.filter((t) => t.status === "posted");
@@ -287,14 +366,14 @@ export function PostingQueue({
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {toPost.map((t) => (
-              <TrialCard key={t.id} trial={t} />
+              <TrialCard key={t.id} trial={t} instagramConnected={instagramConnected} clientName={clientName} />
             ))}
           </div>
         )}
       </section>
 
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-ink-2">Live — bring the numbers back</h2>
+        <h2 className="text-sm font-semibold text-ink-2">Posted — bring the numbers back when you have them</h2>
         {live.length === 0 ? (
           <p className="rounded-xl border border-line bg-card px-4 py-8 text-center text-sm text-ink-3">
             Nothing live right now.
@@ -302,7 +381,7 @@ export function PostingQueue({
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {live.map((t) => (
-              <TrialCard key={t.id} trial={t} />
+              <TrialCard key={t.id} trial={t} instagramConnected={instagramConnected} clientName={clientName} />
             ))}
           </div>
         )}

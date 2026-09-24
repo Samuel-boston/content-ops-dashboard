@@ -105,3 +105,26 @@ export const brandingFor = unstable_cache(
   // Sixty seconds is short enough that changing the logo feels immediate.
   { revalidate: 60, tags: ["branding"] }
 );
+
+/**
+ * The client's first name, for copy aimed at editors ("Adam is reviewing").
+ * Read with the service role — an editor can't see the owner's row through
+ * RLS on every path — and cached, since it changes roughly never. Falls back
+ * to "the client" until the owner has set a name.
+ */
+export const getClientName = unstable_cache(
+  async (): Promise<string> => {
+    const { data } = await supabaseAdmin()
+      .from("profiles")
+      .select("full_name")
+      .eq("role", "owner")
+      .eq("active", true)
+      .order("created_at")
+      .limit(1)
+      .maybeSingle();
+    const first = (data?.full_name as string | null)?.trim().split(/\s+/)[0];
+    return first || "the client";
+  },
+  ["client-first-name"],
+  { revalidate: 300 }
+);

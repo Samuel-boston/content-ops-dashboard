@@ -20,7 +20,7 @@ import { agingTone, type TaskGroups, type TaskItem } from "@/lib/tasks";
  * need revisions, which are owed hook variants. A last column shows what's
  * already with the client, so nothing on the plate is invisible.
  */
-export function TaskBoard({ groups }: { groups: TaskGroups }) {
+export function TaskBoard({ groups, clientName = "the client" }: { groups: TaskGroups; clientName?: string }) {
   const columns: {
     key: string;
     title: string;
@@ -33,7 +33,7 @@ export function TaskBoard({ groups }: { groups: TaskGroups }) {
     {
       key: "revisions",
       title: "Needs revisions",
-      hint: "The client asked for changes",
+      hint: `${clientName} asked for changes`,
       icon: <IconRevisions size={13} />,
       tone: "var(--color-stage-revisions)",
       items: groups.revisions,
@@ -81,8 +81,8 @@ export function TaskBoard({ groups }: { groups: TaskGroups }) {
       : []),
     {
       key: "waiting",
-      title: "With the client",
-      hint: "Submitted — waiting on their review",
+      title: `${clientName} is reviewing`,
+      hint: "Submitted — waiting on the review",
       icon: <IconCheck size={13} />,
       tone: "var(--color-stage-review)",
       items: groups.waiting,

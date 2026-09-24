@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { StageChat } from "@/components/pipeline/StageChat";
 import { requireRole } from "@/lib/auth";
 import { getVideo } from "@/app/actions";
 import { listAssets } from "@/app/asset-actions";
@@ -31,6 +32,7 @@ export default async function FilmPage({ params }: PageProps<"/videos/[id]/film"
 
   return (
     <FilmingWorkspace
+      chat={<StageChat videoId={id} />}
       video={video}
       assets={assets}
       driveConfigured={integrationStatus(settings).drive}

@@ -10,6 +10,7 @@ import { Chip, PriorityPill } from "@/components/badges";
 import { CreateVideoButton } from "@/components/CreateVideoButton";
 import { IconCheck, IconFile, IconLayers } from "@/components/ui/icons";
 import { dayMonth } from "@/lib/format";
+import { getClientName } from "@/lib/workspace";
 
 function first(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
@@ -25,6 +26,7 @@ function first(v: string | string[] | undefined): string | undefined {
  */
 export default async function EditingBayPage({ searchParams }: PageProps<"/editing-bay">) {
   const sp = await searchParams;
+  const clientName = await getClientName();
   const viewer = await requireUser();
   const isManager = viewer.role === "owner" || viewer.role === "admin";
 
@@ -64,7 +66,7 @@ export default async function EditingBayPage({ searchParams }: PageProps<"/editi
       {!isManager ? (
         <p className="rounded-lg border border-line bg-card px-3 py-2 text-xs text-ink-3">
           Taking one asks for a delivery day — by the end of that day. It doesn&rsquo;t have to be
-          exact; it&rsquo;s so the client can plan around you, and you can change it later.
+          exact; it&rsquo;s so {clientName} can plan around you, and you can change it later.
         </p>
       ) : null}
 
@@ -82,7 +84,7 @@ export default async function EditingBayPage({ searchParams }: PageProps<"/editi
             </span>
             <p className="mt-2 text-sm text-ink-2">Nothing in the bay.</p>
             <p className="mt-1 text-xs text-ink-3">
-              {isManager ? "More needs filming." : "The client needs to film more — nothing to pick up."}
+              {isManager ? "More needs filming." : `${clientName} needs to film more — nothing to pick up.`}
             </p>
           </div>
         ) : (

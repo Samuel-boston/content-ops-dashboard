@@ -1,5 +1,6 @@
 "use client";
 
+import { useClientName } from "@/components/ClientName";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -92,6 +93,7 @@ export function EditorVideoView({
   streamConfigured: boolean;
   briefVoiceUrl: string | null;
 }) {
+  const clientName = useClientName();
   const router = useRouter();
   const toast = useToast();
   const [, startTransition] = useTrackedTransition();
@@ -202,13 +204,13 @@ export function EditorVideoView({
               </p>
             ) : !briefVoiceUrl ? (
               <p className="text-xs text-ink-3">
-                No brief written for this one — check the script, or ask the client below.
+                No brief written for this one — check the script, or ask {clientName} below.
               </p>
             ) : null}
             {briefVoiceUrl ? (
               <div className={video.brief ? "mt-2" : ""}>
                 <span className="mb-1 block text-[10px] uppercase tracking-wider text-ink-3">
-                  Spoken brief — the client&rsquo;s own recording, not a summary
+                  Spoken brief — {clientName}&rsquo;s own recording, not a summary
                 </span>
                 <audio src={briefVoiceUrl} controls className="h-9 w-full" />
               </div>
@@ -248,7 +250,7 @@ export function EditorVideoView({
                 <CarouselDeliver videoId={video.id} images={carouselImages} />
               ) : cuts.length === 0 ? (
                 <p className="rounded-lg bg-card px-3 py-2.5 text-[11px] text-ink-3">
-                  No cut has been set up for this video yet — ask the client to create one.
+                  No cut has been set up for this video yet — ask {clientName} to create one.
                 </p>
               ) : (
                 <div className="space-y-2.5">
@@ -285,7 +287,7 @@ export function EditorVideoView({
                           <UploadDropzone cutId={cut.id} compact />
                         ) : (
                           <p className="rounded-lg border border-dashed border-line-strong px-3 py-2.5 text-center text-[11px] text-ink-3">
-                            Cloudflare Stream isn&rsquo;t connected yet — ask the client to add it
+                            Cloudflare Stream isn&rsquo;t connected yet — ask {clientName} to add it
                             in Settings → Integrations before you can upload.
                           </p>
                         )}
@@ -327,8 +329,9 @@ export function EditorVideoView({
                             key={i}
                             type="button"
                             onClick={() => {
+                              // Just the name — the hook's own text isn't what
+                              // "what's different" is asking for.
                               setHookLabel(`Hook ${String.fromCharCode(65 + i)}`);
-                              setHookNotes(h);
                             }}
                             title={h}
                             className="max-w-full truncate rounded-md border border-line px-2 py-1 text-[10px] text-ink-3 hover:border-accent hover:text-ink"
@@ -386,7 +389,7 @@ export function EditorVideoView({
             <section className="rounded-xl border border-stage-revisions/40 bg-stage-revisions/5 p-4">
               <h2 className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
                 <IconComment size={12} />
-                Open notes from the client
+                Open notes from {clientName}
                 <span className="text-ink-3">{openNotes.length}</span>
               </h2>
 
@@ -399,7 +402,7 @@ export function EditorVideoView({
                   >
                     <span className="flex items-center gap-1.5 text-[10px] text-ink-3">
                       {c.author ? <Avatar person={c.author} size="xs" /> : null}
-                      {c.author ? displayName(c.author) : "Client"}
+                      {c.author ? displayName(c.author) : clientName}
                       {c.t_start_seconds != null ? (
                         <span className="font-mono">{timecode(c.t_start_seconds)}</span>
                       ) : null}
@@ -528,7 +531,7 @@ export function EditorVideoView({
           {/* Talk to the client */}
           <section className="rounded-xl border border-line bg-card p-4">
             <h2 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
-              Questions for the client
+              Questions for {clientName}
             </h2>
             <VideoChat videoId={video.id} viewer={viewer} messages={messages} roster={roster} />
           </section>

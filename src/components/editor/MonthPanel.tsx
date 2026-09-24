@@ -1,5 +1,6 @@
 "use client";
 
+import { useClientName } from "@/components/ClientName";
 import Link from "next/link";
 import { useState } from "react";
 import { useTrackedTransition } from "@/components/ui/Pending";
@@ -210,6 +211,7 @@ function MonthBilling({
   /** Once the month is settled, changing where it should have been paid is noise. */
   locked: boolean;
 }) {
+  const clientName = useClientName();
   const toast = useToast();
   const router = useRouter();
   const [, startTransition] = useTrackedTransition();
@@ -276,7 +278,7 @@ function MonthBilling({
           setDirty(true);
         }}
         onBlur={() => dirty && save()}
-        placeholder="Invoice reference or a note for the client (optional)"
+        placeholder={`Invoice reference or a note for ${clientName} (optional)`}
         className="mt-1.5 w-full rounded-lg border border-line bg-raised px-2.5 py-1.5 text-xs placeholder:text-ink-3 focus:border-accent focus:outline-none"
       />
     </div>
@@ -294,6 +296,7 @@ function ListView({
   currency: string;
   overdueIds: Set<string>;
 }) {
+  const clientName = useClientName();
   // Grouped by stage so the list answers "where is everything" at a glance.
   const byStage = COLUMNS.map((s) => ({ status: s, rows: videos.filter((v) => v.status === s) }))
     .filter((g) => g.rows.length > 0);
@@ -329,7 +332,7 @@ function ListView({
               {v.unrated ? (
                 <span
                   className="w-16 shrink-0 text-right text-[10px] text-warn"
-                  title={`No rate set for ${(v.formats ?? []).join(", ") || "this format"} — ask the client`}
+                  title={`No rate set for ${(v.formats ?? []).join(", ") || "this format"} — ask ${clientName}`}
                 >
                   no rate
                 </span>
@@ -366,6 +369,7 @@ function BoardView({
   videos: PricedVideo[];
   overdueIds: Set<string>;
 }) {
+  const clientName = useClientName();
   const toast = useToast();
   const router = useRouter();
   const [, startTransition] = useTrackedTransition();
@@ -391,7 +395,7 @@ function BoardView({
     if (!video || video.status === to) return;
 
     if (!DROPPABLE.includes(to)) {
-      toast.error(`Only the client can move something to ${STATUS_LABELS[to]}.`);
+      toast.error(`Only ${clientName} can move something to ${STATUS_LABELS[to]}.`);
       return;
     }
 
@@ -448,6 +452,7 @@ function Column({
   videos: PricedVideo[];
   overdueIds: Set<string>;
 }) {
+  const clientName = useClientName();
   const droppable = DROPPABLE.includes(status);
   const { setNodeRef, isOver } = useDroppable({ id: status, disabled: !droppable });
 
@@ -465,7 +470,7 @@ function Column({
         </span>
         <span className="ml-auto text-[11px] tabular-nums text-ink-3">{videos.length}</span>
         {!droppable ? (
-          <span className="text-ink-3" title="The client moves videos into this column">
+          <span className="text-ink-3" title={`${clientName} moves videos into this column`}>
             <IconCheck size={9} />
           </span>
         ) : null}

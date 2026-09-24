@@ -21,14 +21,14 @@ export function ApproveCarouselButton({ videoId }: { videoId: string }) {
           const res = await approveCarouselScriptAction(videoId);
           if (res?.error) toast.error(res.error);
           else {
-            toast.success("Approved — creatives to review.");
+            toast.success("Approved — it now needs creatives.");
             router.refresh();
           }
         })
       }
       className="flex shrink-0 items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-[11px] text-ink-2 transition hover:border-accent hover:text-ink disabled:opacity-50"
     >
-      Approve — review creatives
+      Approve — needs creatives
       <IconChevronRight size={11} />
     </button>
   );

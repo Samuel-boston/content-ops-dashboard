@@ -31,6 +31,7 @@ export type VideoStatus =
   | "scripting"
   | "script_review"
   | "script_revisions"
+  | "needs_creatives"
   | "creative_review"
   | "creative_revisions"
   | "ready_to_film"
@@ -50,6 +51,7 @@ export const STATUS_LABELS: Record<VideoStatus, string> = {
   scripting: "Scripting",
   script_review: "Script Review",
   script_revisions: "Script Revisions",
+  needs_creatives: "Needs Creatives",
   creative_review: "Creatives to Review",
   creative_revisions: "Creative Revisions",
   ready_to_film: "Ready to Film",
@@ -71,6 +73,7 @@ export const STATUS_OWNER: Record<VideoStatus, "client" | "editor" | "done"> = {
   scripting: "client",
   script_review: "client",
   script_revisions: "editor",
+  needs_creatives: "client",
   creative_review: "client",
   creative_revisions: "editor",
   ready_to_film: "client",
@@ -92,6 +95,7 @@ export const ACTIVE_STATUSES: VideoStatus[] = [
   "scripting",
   "script_review",
   "script_revisions",
+  "needs_creatives",
   "creative_review",
   "creative_revisions",
   "ready_to_film",
@@ -182,7 +186,8 @@ export function previousStage(status: VideoStatus, carousel = false): VideoStatu
   // Checked first: a plain video's "ready_to_post -> in_review" rule below
   // would otherwise win and send a carousel somewhere it never was.
   if (carousel) {
-    if (status === "creative_review") return "script_review";
+    if (status === "needs_creatives") return "script_review";
+    if (status === "creative_review") return "needs_creatives";
     if (status === "creative_revisions") return "creative_review";
     if (status === "ready_to_post") return "creative_review";
     if (status === "editor_brief") return "script_review"; // legacy safety net
@@ -205,6 +210,7 @@ export const STATUS_COLOR: Record<VideoStatus, string> = {
   scripting: "var(--color-stage-scripting)",
   script_review: "var(--color-stage-script-review)",
   script_revisions: "var(--color-stage-script-revisions)",
+  needs_creatives: "var(--color-stage-needs-creatives)",
   creative_review: "var(--color-stage-creative-review)",
   creative_revisions: "var(--color-stage-creative-revisions)",
   ready_to_film: "var(--color-stage-film)",
@@ -419,6 +425,7 @@ export const STALLED_AFTER_DAYS: Partial<Record<VideoStatus, number>> = {
   scripting: 10,
   script_review: 3,
   script_revisions: 3,
+  needs_creatives: 5,
   creative_review: 3,
   creative_revisions: 3,
   ready_to_film: 7,
@@ -867,7 +874,9 @@ export interface TrialPost {
   promoted_job_id: string | null;
   notes: string | null;
   /** Where this variant goes: an Instagram trial reel, or straight to the main feed. */
-  post_as: "trial" | "main";
+  post_as: "trial" | "main" | "none";
+  /** When it was handed to the VA — null while it's still a draft. */
+  sent_to_va_at: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -907,4 +916,23 @@ export interface LibraryShot {
   synced_at: string;
   /** Minted server-side at read time; never stored. */
   thumb_url?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Script comments — notes on a specific part of a script (migration 035)
+// ---------------------------------------------------------------------------
+
+export interface ScriptComment {
+  id: string;
+  video_id: string;
+  /** 'hook:0', 'hook:1', 'body', 'cta', 'slide:<slide id>' or 'general'. */
+  target: string;
+  /** The words it was made on, kept so the note still reads if the script moves. */
+  quote: string | null;
+  body: string;
+  author_id: string | null;
+  resolved: boolean;
+  resolved_by: string | null;
+  created_at: string;
+  author?: Pick<Profile, "id" | "full_name" | "email" | "role"> | null;
 }

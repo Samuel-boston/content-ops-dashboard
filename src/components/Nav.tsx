@@ -54,6 +54,7 @@ const EDITOR_LINKS = [
   { href: "/my-work", label: "My Work" },
   { href: "/editing-bay", label: "Editing Bay" },
   { href: "/library/visuals", label: "Library" },
+  { href: "/time-off", label: "Time off" },
 ];
 
 /**
@@ -64,6 +65,7 @@ const EDITOR_LINKS = [
 const COPYWRITER_LINKS = [
   { href: "/scripting", label: "Board" },
   { href: "/library/visuals", label: "Library" },
+  { href: "/time-off", label: "Time off" },
 ];
 
 /**
@@ -75,6 +77,7 @@ const VA_LINKS = [
   { href: "/posting", label: "Posting" },
   { href: "/calendar", label: "Calendar" },
   { href: "/library/visuals", label: "Library" },
+  { href: "/time-off", label: "Time off" },
 ];
 
 /**

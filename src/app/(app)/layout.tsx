@@ -7,7 +7,8 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { PendingProvider } from "@/components/ui/Pending";
 import { listMyNotifications, unreadCount, unreadMentionCount } from "@/app/notification-actions";
 import { listStalledOverdue, listMyStalledOverdue } from "@/app/overview-actions";
-import { brandingFor } from "@/lib/workspace";
+import { brandingFor, getClientName } from "@/lib/workspace";
+import { ClientNameProvider } from "@/components/ClientName";
 
 // Every authed route reads the session cookie, so it's dynamic regardless —
 // this just makes it explicit and guarantees nothing here is ever cached.
@@ -31,15 +32,17 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const profile = await requireUser();
   const isManager = profile.role === "owner" || profile.role === "admin";
-  const [notifications, unread, unreadMentions, branding, stalled] = await Promise.all([
+  const [notifications, unread, unreadMentions, branding, stalled, clientName] = await Promise.all([
     listMyNotifications(15),
     unreadCount(),
     unreadMentionCount(),
     brandingFor(),
     isManager ? listStalledOverdue() : profile.role === "editor" ? listMyStalledOverdue() : Promise.resolve([]),
+    getClientName(),
   ]);
   return (
     <ToastProvider>
+      <ClientNameProvider name={clientName}>
       <PendingProvider>
       <AndreasProvider>
       <div className="flex min-h-screen flex-col">
@@ -56,6 +59,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </div>
       </AndreasProvider>
       </PendingProvider>
+      </ClientNameProvider>
     </ToastProvider>
   );
 }

@@ -1,7 +1,9 @@
 import { notFound, redirect } from "next/navigation";
+import { StageChat } from "@/components/pipeline/StageChat";
 import { requireRole } from "@/lib/auth";
 import { getVideo, listTaxonomyCustoms } from "@/app/actions";
-import { briefVoiceUrl, listHookSnippets } from "@/app/script-actions";
+import { listReferences } from "@/app/library-actions";
+import { listScriptComments } from "@/app/script-comment-actions";
 import { listCarouselImages } from "@/app/carousel-actions";
 import { ScriptWorkspace } from "@/components/script/ScriptWorkspace";
 
@@ -11,21 +13,21 @@ export default async function ScriptPage({ params }: PageProps<"/videos/[id]/scr
   // get the writing room.
   const viewer = await requireRole("owner", "admin", "copywriter");
 
-  const [video, customs, snippets, carouselSlides] = await Promise.all([
+  const [video, customs, references, carouselSlides, comments] = await Promise.all([
     getVideo(id),
     listTaxonomyCustoms(),
-    listHookSnippets(),
+    listReferences(id),
     listCarouselImages(id),
+    listScriptComments(id),
   ]);
   if (!video) notFound();
 
   // Still just an idea — hooks and a CTA are the wrong questions to ask yet.
   if (video.status === "ideation") redirect(`/videos/${id}/idea`);
 
-  const voiceUrl = await briefVoiceUrl(video.brief_voice_path);
-
   return (
     <ScriptWorkspace
+      chat={<StageChat videoId={id} />}
       video={video}
       viewer={viewer}
       customs={{
@@ -33,8 +35,8 @@ export default async function ScriptPage({ params }: PageProps<"/videos/[id]/scr
         format: customs.filter((c) => c.kind === "format").map((c) => c.value),
         platform: customs.filter((c) => c.kind === "platform").map((c) => c.value),
       }}
-      briefVoiceUrl={voiceUrl}
-      snippets={snippets}
+      references={references}
+      comments={comments}
       carouselSlides={carouselSlides}
     />
   );

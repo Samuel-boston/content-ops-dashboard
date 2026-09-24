@@ -5,9 +5,7 @@ import { useRef, useState } from "react";
 import { StreamPlayer, type PlayerHandle } from "@/components/engine/StreamPlayer";
 import { DrawLayer, DrawingView } from "@/components/workspace/DrawLayer";
 import { Timeline, type Selection } from "@/components/workspace/Timeline";
-import { useToast } from "@/components/ui/Toast";
 import {
-  IconCamera,
   IconChevronDown,
   IconComment,
   IconDraw,
@@ -101,7 +99,6 @@ export function PlayerPane({
   playerRef: React.RefObject<PlayerHandle | null>;
   backHref: string;
 }) {
-  const toast = useToast();
   const [muted, setMuted] = useState(false);
   const [rate, setRate] = useState(1);
   const [menu, setMenu] = useState<"version" | "cut" | null>(null);
@@ -127,42 +124,6 @@ export function PlayerPane({
     activeComment?.drawing &&
     activeComment.t_start_seconds != null &&
     Math.abs(current - activeComment.t_start_seconds) < 1.5;
-
-  /**
-   * Pull the current frame out as a PNG. Cloudflare Stream serves with CORS
-   * headers so the canvas stays untainted; if a future source doesn't, the
-   * export throws a SecurityError and we say so rather than failing silently.
-   */
-  function grabFrame() {
-    const el = playerRef.current?.element();
-    if (!el || !el.videoWidth) {
-      toast.error("Nothing to capture yet — let the video load first.");
-      return;
-    }
-    try {
-      const canvas = document.createElement("canvas");
-      canvas.width = el.videoWidth;
-      canvas.height = el.videoHeight;
-      canvas.getContext("2d")?.drawImage(el, 0, 0);
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          toast.error("Couldn't read that frame.");
-          return;
-        }
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${video.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${timecode(
-          current
-        ).replace(":", "m")}s.png`;
-        a.click();
-        URL.revokeObjectURL(url);
-        toast.success("Frame saved.");
-      }, "image/png");
-    } catch {
-      toast.error("This video's host won't allow frame capture.");
-    }
-  }
 
   function toggleFullscreen() {
     const el = frameRef.current;
@@ -440,15 +401,6 @@ export function PlayerPane({
             className="ml-auto rounded-md px-2 py-1 font-mono text-xs text-ink-2 hover:bg-hover hover:text-ink"
           >
             {rate}x
-          </button>
-          <button
-            type="button"
-            onClick={grabFrame}
-            aria-label="Save this frame"
-            title="Save this frame as an image"
-            className="rounded-md p-1.5 text-ink-2 hover:bg-hover hover:text-ink"
-          >
-            <IconCamera size={16} />
           </button>
           <button
             type="button"

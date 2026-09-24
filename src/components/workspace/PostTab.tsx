@@ -61,6 +61,8 @@ export function PostTab({
   canManage,
   instagramConfigured,
   durationSeconds,
+  variantsOnly = false,
+  onWatch,
 }: {
   video: Video;
   cutId: string | null;
@@ -69,6 +71,10 @@ export function PostTab({
   instagramConfigured: boolean;
   /** The active cut's duration, so the cover-frame picker can be bounded to it. */
   durationSeconds?: number | null;
+  /** Final Review: just the variants and the hand-off — no scheduling. */
+  variantsOnly?: boolean;
+  /** Open a variant's cut in the player. */
+  onWatch?: (cutId: string) => void;
 }) {
   const toast = useToast();
   const [pending, startTransition] = useTrackedTransition();
@@ -104,8 +110,19 @@ export function PostTab({
         vaNotes={video.va_notes}
         vaSentAt={video.va_sent_at}
         hasCover={Boolean(video.cover_path)}
+        fallbackCaption={caption}
+        onWatch={onWatch}
       />
 
+      {variantsOnly ? (
+        <p className="text-[11px] leading-relaxed text-ink-3">
+          Watch each variant, pick where it goes and write its caption. When you approve the
+          variants they move to Ready to Post, where scheduling opens up.
+        </p>
+      ) : null}
+
+      {variantsOnly ? null : (
+      <>
       {/* Caption */}
       <div className="rounded-xl border border-line bg-card">
         <textarea
@@ -284,6 +301,8 @@ export function PostTab({
       >
         {pending ? "Scheduling…" : "Schedule post"}
       </button>
+      </>
+      )}
     </div>
   );
 }

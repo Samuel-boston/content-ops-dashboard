@@ -54,6 +54,7 @@ export function EditorBriefWorkspace({
   musicLibrary,
   briefVoiceUrl,
   carouselSlides,
+  chat,
 }: {
   video: Video;
   assets: VideoAsset[];
@@ -62,6 +63,7 @@ export function EditorBriefWorkspace({
   musicLibrary: MusicTrack[];
   briefVoiceUrl: string | null;
   carouselSlides: CarouselImage[];
+  chat?: React.ReactNode;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -387,6 +389,8 @@ export function EditorBriefWorkspace({
           </section>
 
           <MusicPicker videoId={video.id} attached={music} library={musicLibrary} canEdit />
+
+          {chat}
         </aside>
       </div>
     </div>

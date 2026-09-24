@@ -4,6 +4,9 @@ import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
 import { getDownloadUrl } from "@/lib/integrations/stream";
+import { getWorkspaceSettings, integrationStatus } from "@/lib/workspace";
+import { markVideoPosted } from "@/lib/archive";
+import { runPublishJob } from "@/app/publishing-actions";
 import type { PublishStatus, TrialPost, TrialStatus } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -31,6 +34,8 @@ export interface PostingTrialItem {
   notes: string | null;
   /** Signed link to the cover image, when one was uploaded. */
   coverUrl: string | null;
+  /** A carousel has no video file — these are its slide images, in order. */
+  images: string[] | null;
   status: TrialStatus;
   scheduled_for: string | null;
   posted_at: string | null;
@@ -62,15 +67,18 @@ export interface PostingJobItem {
 export async function listPostingWork(): Promise<{
   trials: PostingTrialItem[];
   jobs: PostingJobItem[];
+  instagramConnected: boolean;
 }> {
   await requireRole("va", "owner", "admin");
   const db = supabaseAdmin();
 
+  const settings = await getWorkspaceSettings();
   const [{ data: trials }, { data: jobs }] = await Promise.all([
     db
       .from("trial_posts")
       .select("*, video:videos (title, va_notes, cover_path)")
       .in("status", ["planned", "posted"])
+      .not("sent_to_va_at", "is", null)
       .order("scheduled_for", { ascending: true, nullsFirst: false }),
     db
       .from("publish_jobs")
@@ -81,9 +89,29 @@ export async function listPostingWork(): Promise<{
   ]);
 
   return {
+    instagramConnected: integrationStatus(settings).instagram,
     trials: await Promise.all(((trials as (TrialPost & {
       video: { title: string; va_notes: string | null; cover_path: string | null } | null;
     })[]) ?? []).map(async (t) => {
+      let images: string[] | null = null;
+      if (t.cut_id === null) {
+        const { data: slides } = await db
+          .from("carousel_images")
+          .select("storage_path")
+          .eq("video_id", t.video_id)
+          .not("storage_path", "is", null)
+          .order("position");
+        images = (
+          await Promise.all(
+            (slides ?? []).map(async (sl) => {
+              const { data: u } = await db.storage
+                .from("carousels")
+                .createSignedUrl(sl.storage_path as string, 3600, { download: true });
+              return u?.signedUrl ?? null;
+            })
+          )
+        ).filter((u): u is string => Boolean(u));
+      }
       let coverUrl: string | null = null;
       if (t.video?.cover_path) {
         const { data: signed } = await db.storage.from("footage").createSignedUrl(t.video.cover_path, 3600);
@@ -95,9 +123,10 @@ export async function listPostingWork(): Promise<{
       videoTitle: t.video?.title ?? "Untitled",
       label: t.label,
       caption: t.caption,
-      postAs: t.post_as ?? "trial",
+      postAs: t.post_as === "trial" ? "trial" : "main",
       notes: t.notes ?? t.video?.va_notes ?? null,
       coverUrl,
+      images,
       status: t.status,
       scheduled_for: t.scheduled_for,
       posted_at: t.posted_at,
@@ -174,23 +203,112 @@ export async function trialPostingKitAction(trialId: string): Promise<
   return { ok: true, downloadUrl, caption: trial.caption, label: trial.label };
 }
 
-/** The VA closes the loop: it's live, here's the link. */
-export async function vaMarkTrialPostedAction(trialId: string, permalink: string) {
+/**
+ * When every variant that was sent to the VA is posted (or scheduled), the
+ * video itself is posted: stamped, dated so it shows on the calendar, and
+ * queued for the Drive archive — exactly what the client's own "Mark as
+ * posted" does.
+ */
+async function finishVideoIfDone(videoId: string) {
+  const db = supabaseAdmin();
+  const { data: open } = await db
+    .from("trial_posts")
+    .select("id")
+    .eq("video_id", videoId)
+    .eq("status", "planned")
+    .not("sent_to_va_at", "is", null)
+    .limit(1);
+  if (open?.length) return false;
+  await markVideoPosted(videoId);
+  revalidatePath("/calendar");
+  revalidatePath("/archive");
+  revalidatePath("/board");
+  revalidatePath(`/videos/${videoId}`);
+  return true;
+}
+
+/** The VA closes the loop: it's live. The link is optional but welcome. */
+export async function vaMarkTrialPostedAction(trialId: string, permalink?: string) {
   const me = await requireRole("va", "owner", "admin");
   const db = supabaseAdmin();
-  const { error } = await db
+  const { data: t, error } = await db
     .from("trial_posts")
     .update({
       status: "posted",
       posted_at: new Date().toISOString(),
       posted_by: me.id,
-      permalink: permalink.trim() || null,
+      permalink: permalink?.trim() || null,
     })
     .eq("id", trialId)
-    .eq("status", "planned");
+    .eq("status", "planned")
+    .select("video_id")
+    .maybeSingle();
   if (error) return { error: error.message };
+  if (!t) return { error: "That one was already marked as posted." };
+  const finished = await finishVideoIfDone(t.video_id as string);
   revalidatePath("/posting");
-  return { ok: true };
+  return { ok: true as const, finished };
+}
+
+/**
+ * Post straight to Instagram from the posting desk — now, or scheduled. Only
+ * for a main-feed video (Meta's API can't post a trial reel or a carousel), and
+ * only once Instagram has been connected in Settings → Integrations, which is
+ * a one-off for the whole workspace rather than something each person does.
+ * The caption on the variant goes in as the caption.
+ */
+export async function vaPublishAction(trialId: string, whenISO?: string | null) {
+  const me = await requireRole("va", "owner", "admin");
+  const db = supabaseAdmin();
+  const settings = await getWorkspaceSettings();
+  if (!integrationStatus(settings).instagram) {
+    return { error: "Instagram isn't connected yet. Connect it in Settings → Integrations, or post by hand and mark it posted." };
+  }
+  const { data: t } = await db.from("trial_posts").select("*").eq("id", trialId).maybeSingle();
+  if (!t || t.status !== "planned") return { error: "That one isn't waiting to be posted." };
+  if (t.post_as !== "main") return { error: "Trial reels can't be posted through Instagram's API — post it from the app." };
+  if (!t.cut_id) return { error: "This one has no video file to publish." };
+
+  const when = whenISO ? new Date(whenISO) : null;
+  if (when && Number.isNaN(when.getTime())) return { error: "That date didn't parse." };
+  const scheduled = when && when.getTime() > Date.now() + 60_000;
+
+  const { data: job, error } = await db
+    .from("publish_jobs")
+    .insert({
+      video_id: t.video_id,
+      cut_id: t.cut_id,
+      caption: t.caption ?? null,
+      channels: ["instagram"],
+      scheduled_for: (scheduled ? when : new Date())!.toISOString(),
+      status: "scheduled",
+      cover_offset_ms: 0,
+      share_to_feed: true,
+      created_by: me.id,
+    })
+    .select("id")
+    .single();
+  if (error) return { error: error.message };
+
+  const stamp = { promoted_job_id: job.id, posted_by: me.id };
+  if (scheduled) {
+    // Goes out by itself at that time; until then it's on the calendar for that day.
+    await db.from("trial_posts").update({ ...stamp, status: "promoted" }).eq("id", trialId);
+    await db.from("videos").update({ post_date: when!.toISOString().slice(0, 10) }).eq("id", t.video_id);
+    revalidatePath("/posting");
+    revalidatePath("/calendar");
+    return { ok: true as const, scheduled: true };
+  }
+
+  const res = await runPublishJob(job.id);
+  if (!res.ok) return { error: `Instagram didn't take it: ${res.error}` };
+  await db
+    .from("trial_posts")
+    .update({ ...stamp, status: "posted", posted_at: new Date().toISOString() })
+    .eq("id", trialId);
+  await finishVideoIfDone(t.video_id as string);
+  revalidatePath("/posting");
+  return { ok: true as const, scheduled: false };
 }
 
 /** Trial numbers, typed in from the IG app's insights screen. */

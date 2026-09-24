@@ -18,7 +18,8 @@ import {
 import { suggestSlideVisualsAction } from "@/app/library-visuals-actions";
 import { ShotCard } from "@/components/library/VisualsBrowser";
 import { IconChevronDown, IconPlus, IconSparkles, IconTrash } from "@/components/ui/icons";
-import type { CarouselImage, LibraryShot } from "@/lib/types";
+import { ScriptComments } from "@/components/script/ScriptComments";
+import type { CarouselImage, LibraryShot, Profile, ScriptComment } from "@/lib/types";
 
 const STYLE_PRESETS: { label: string; style: string }[] = [
   {
@@ -56,10 +57,15 @@ export function CarouselSlides({
   videoId,
   slides,
   carouselStyle,
+  comments,
+  viewer,
 }: {
   videoId: string;
   slides: CarouselImage[];
   carouselStyle?: string | null;
+  /** When given (with a viewer), each slide gets a note thread. */
+  comments?: ScriptComment[];
+  viewer?: Pick<Profile, "id" | "role">;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -183,6 +189,8 @@ export function CarouselSlides({
               index={selectedIndex}
               count={slides.length}
               videoId={videoId}
+              comments={comments}
+              viewer={viewer}
             />
           ) : null}
         </div>
@@ -251,11 +259,15 @@ function SlideFocus({
   index: i,
   count,
   videoId,
+  comments,
+  viewer,
 }: {
   slide: CarouselImage;
   index: number;
   count: number;
   videoId: string;
+  comments?: ScriptComment[];
+  viewer?: Pick<Profile, "id" | "role">;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -267,6 +279,9 @@ function SlideFocus({
   const [generating, setGenerating] = useState(false);
   const [usingShotId, setUsingShotId] = useState<string | null>(null);
   const [layout, setLayout] = useState<ReferenceLayout | "">("");
+  // The line of the slide text the reader has selected — visuals are suggested
+  // for exactly that, not for the whole slide.
+  const [selection, setSelection] = useState<string | null>(null);
 
   const hasText = Boolean((s.caption ?? "").trim());
 
@@ -290,9 +305,9 @@ function SlideFocus({
     });
   }
 
-  function openPicker() {
+  function openPicker(forText: string) {
     startTransition(async () => {
-      const shots = await suggestSlideVisualsAction(s.caption ?? "");
+      const shots = await suggestSlideVisualsAction(forText);
       if (shots.length === 0) toast.error("Footage index is empty — sync the librarian first.");
       else setPicker(shots);
     });
@@ -396,6 +411,14 @@ function SlideFocus({
             defaultValue={s.caption ?? ""}
             rows={4}
             placeholder={`Slide ${i + 1} text…`}
+            onSelect={(e) => {
+              const el = e.currentTarget;
+              setSelection(
+                el.selectionEnd > el.selectionStart
+                  ? el.value.slice(el.selectionStart, el.selectionEnd).trim() || null
+                  : null
+              );
+            }}
             onBlur={(e) => {
               if (e.target.value === (s.caption ?? "")) return;
               startTransition(async () => {
@@ -405,6 +428,39 @@ function SlideFocus({
             }}
             className="w-full resize-y rounded-lg border border-line bg-app px-2.5 py-2 text-sm leading-relaxed placeholder:text-ink-3 focus:border-accent focus:outline-none"
           />
+
+          {/* Select the line that needs a picture and this appears — no
+              separate "suggest" button guessing at which part you meant. */}
+          {selection ? (
+            <button
+              type="button"
+              disabled={pending}
+              // mousedown, not click: a click would blur the textarea first and clear the selection.
+              onMouseDown={(e) => {
+                e.preventDefault();
+                openPicker(selection);
+              }}
+              className="flex max-w-full items-center gap-1.5 rounded-md border border-accent/50 bg-accent-ghost px-2.5 py-1.5 text-xs text-accent-hi hover:bg-accent/25 disabled:opacity-50"
+            >
+              <IconSparkles size={12} />
+              <span className="truncate">Suggest visuals for &ldquo;{selection}&rdquo;</span>
+            </button>
+          ) : !refs.length ? (
+            <p className="text-[10px] text-ink-3">
+              Select the line you need a visual for to get suggestions from the footage index.
+            </p>
+          ) : null}
+
+          {comments && viewer ? (
+            <ScriptComments
+              videoId={videoId}
+              target={`slide:${s.id}`}
+              comments={comments}
+              viewer={viewer}
+              compact
+              label={`Comment on slide ${i + 1}`}
+            />
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-1.5">
             {!s.storage_path ? (
@@ -437,14 +493,16 @@ function SlideFocus({
             >
               {showNote ? "Hide context" : "+ Add context"}
             </button>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={openPicker}
-              className="rounded-md border border-line px-2.5 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
-            >
-              {refs.length ? `References (${refs.length})` : "Suggest visuals"}
-            </button>
+            {refs.length ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => openPicker(selection ?? s.caption ?? "")}
+                className="rounded-md border border-line px-2.5 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
+              >
+                References ({refs.length})
+              </button>
+            ) : null}
             {s.gen_at ? (
               <span className="text-[10px] text-ink-3" title={s.gen_prompt ?? undefined}>
                 AI · {new Date(s.gen_at).toLocaleDateString()}

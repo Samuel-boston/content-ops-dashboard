@@ -7,12 +7,14 @@ import { useTrackedTransition } from "@/components/ui/Pending";
 import { useToast } from "@/components/ui/Toast";
 import { StageBack } from "@/components/pipeline/StageBack";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { TrialsPanel } from "@/components/workspace/TrialsPanel";
 import { CarouselSlides } from "@/components/script/CarouselSlides";
 import {
   approveCarouselCreativeAction,
   markPostedAction,
   requestCarouselRevisionsAction,
   resubmitCarouselCreativeAction,
+  submitCarouselCreativesAction,
 } from "@/app/pipeline-actions";
 import { IconCheck, IconChevronRight, IconSparkles } from "@/components/ui/icons";
 import { STATUS_COLOR, STATUS_LABELS, type CarouselImage, type Video } from "@/lib/types";
@@ -32,9 +34,11 @@ import { STATUS_COLOR, STATUS_LABELS, type CarouselImage, type Video } from "@/l
 export function CarouselPostView({
   video,
   carouselSlides,
+  chat,
 }: {
   video: Video;
   carouselSlides: CarouselImage[];
+  chat?: React.ReactNode;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -74,7 +78,26 @@ export function CarouselPostView({
             {STATUS_LABELS[video.status]}
           </span>
 
-          {video.status === "creative_review" ? (
+          {video.status === "needs_creatives" ? (
+            <span className="ml-auto flex items-center gap-1">
+              <StageBack videoId={video.id} status={video.status} carousel />
+              <span className="flex items-center gap-1.5 px-1 text-[11px] text-ink-3">
+                <IconSparkles size={12} />
+                Make the images below, then send them for review
+              </span>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() =>
+                  run(() => submitCarouselCreativesAction(video.id), "Sent for creative review.")
+                }
+                className="flex shrink-0 items-center gap-1 rounded-lg bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white transition hover:bg-accent-hi disabled:opacity-50"
+              >
+                Creatives are ready — review them
+                <IconChevronRight size={11} />
+              </button>
+            </span>
+          ) : video.status === "creative_review" ? (
             <span className="ml-auto flex items-center gap-1">
               <StageBack videoId={video.id} status={video.status} carousel />
               <button
@@ -145,6 +168,20 @@ export function CarouselPostView({
         slides={carouselSlides}
         carouselStyle={video.carousel_style}
       />
+
+      {/* Approved: hand it to the VA to post — notes, a cover and a caption. */}
+      {video.status === "ready_to_post" || video.status === "posted" ? (
+        <div className="max-w-2xl">
+          <TrialsPanel
+            videoId={video.id}
+            vaNotes={video.va_notes}
+            vaSentAt={video.va_sent_at}
+            hasCover={Boolean(video.cover_path)}
+          />
+        </div>
+      ) : null}
+
+      {chat}
 
       <ConfirmDialog
         open={confirmPosted}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useClientName } from "@/components/ClientName";
 import { useState } from "react";
 import { useTrackedTransition } from "@/components/ui/Pending";
 import { useRouter } from "next/navigation";
@@ -58,6 +59,7 @@ export function ClaimDialog({
   goToVideo?: boolean;
   onClose: () => void;
 }) {
+  const clientName = useClientName();
   const toast = useToast();
   const router = useRouter();
   const [pending, startTransition] = useTrackedTransition();
@@ -79,7 +81,7 @@ export function ClaimDialog({
         mode === "claim" ? await claimVideoAction(videoId, iso) : await setEtaAction(videoId, iso);
       if (res?.error) toast.error(res.error);
       else {
-        toast.success(mode === "claim" ? "Picked up — the client can see your ETA." : "ETA updated.");
+        toast.success(mode === "claim" ? `Picked up — ${clientName} can see your ETA.` : "ETA updated.");
         onClose();
         if (mode === "claim" && goToVideo) router.push(`/videos/${videoId}`);
         else router.refresh();
@@ -107,8 +109,8 @@ export function ClaimDialog({
           </p>
           <p className="mt-2 text-xs text-ink-3">
             {mode === "claim"
-              ? "The client sees this date on their dashboard, so they're not left guessing."
-              : "Changing a date the client has already seen will notify them."}
+              ? `${clientName} sees this date on their dashboard, so they're not left guessing.`
+              : `Changing a date ${clientName} has already seen will notify them.`}
           </p>
         </div>
 

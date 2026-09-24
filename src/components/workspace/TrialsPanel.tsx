@@ -10,41 +10,47 @@ import {
   markTrialPostedAction,
   markTrialWinnerAction,
   promoteTrialAction,
-  queueTrialAction,
   saveTrialMetricsAction,
   sendToVaAction,
-  setPostAsAction,
-  updateTrialAction,
+  sendVariantToVaAction,
+  updateVariantAction,
 } from "@/app/trial-actions";
 import { createFootageUploadUrlAction } from "@/app/asset-actions";
-import { IconClock, IconTrash } from "@/components/ui/icons";
+import { IconTrash } from "@/components/ui/icons";
 import { TRIAL_STATUS_LABELS, type TrialPost } from "@/lib/types";
 
 /**
- * Hook testing, made visible. Every hook variant can be queued as an
- * Instagram TRIAL reel; the VA posts them by hand from the Posting desk
- * (Meta's API can't post or read trials), the numbers get typed in from the
- * app's insights, the client stars the winner, and Promote hands the exact
- * cut to the ordinary publish pipeline. This panel is the manager's view of
- * that whole loop, scoped to one video.
+ * Variants — every version of this video that could go out (the main cut and
+ * each hook variant), what to do with each one, and the hand-off to the VA.
+ *
+ * Nothing reaches the VA by existing: each variant is a draft with a
+ * destination — Not selected, Trial reel, or Main feed — and its own caption,
+ * and goes across only when it's sent (one at a time, or all the chosen ones
+ * together with the notes and cover). Trials are posted by hand (Meta's API
+ * can't touch them); once one has numbers the client stars a winner and
+ * Promote hands the exact cut to the ordinary publish pipeline.
  */
 export function TrialsPanel({
   videoId,
   vaNotes = null,
   vaSentAt = null,
   hasCover = false,
+  fallbackCaption = "",
+  onWatch,
 }: {
   videoId: string;
   vaNotes?: string | null;
   vaSentAt?: string | null;
   hasCover?: boolean;
+  /** The Post tab's caption box — used for any variant that hasn't got its own. */
+  fallbackCaption?: string;
+  onWatch?: (cutId: string) => void;
 }) {
   const toast = useToast();
   const router = useRouter();
   const [pending, startTransition] = useTrackedTransition();
   const [trials, setTrials] = useState<TrialPost[] | null>(null);
   const [cuts, setCuts] = useState<{ id: string; label: string; kind: string }[]>([]);
-  const [pickCut, setPickCut] = useState("");
   const [notes, setNotes] = useState(vaNotes ?? "");
   const [coverPath, setCoverPath] = useState<string | null>(null);
   const [coverName, setCoverName] = useState<string | null>(null);
@@ -106,17 +112,14 @@ export function TrialsPanel({
     });
   }
 
-  const hookCuts = cuts.filter((c) => c.kind === "hook");
-  const unqueued = hookCuts.filter(
-    (c) => !(trials ?? []).some((t) => t.cut_id === c.id && t.status !== "archived")
-  );
-
   if (trials === null) {
-    return <p className="px-1 py-3 text-xs text-ink-3">Loading trials…</p>;
+    return <p className="px-1 py-3 text-xs text-ink-3">Loading variants…</p>;
   }
 
   const field =
     "rounded-md border border-line bg-raised px-2 py-1 text-xs placeholder:text-ink-3 focus:border-accent focus:outline-none";
+  const cutKind = (t: TrialPost) => cuts.find((c) => c.id === t.cut_id)?.kind ?? "main";
+  const waiting = trials.filter((t) => t.status === "planned" && !t.sent_to_va_at);
 
   return (
     <section className="mb-4 rounded-xl border border-line bg-card p-3">
@@ -134,7 +137,7 @@ export function TrialsPanel({
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
-          placeholder="Notes for the VA — what to say, when to post, anything specific."
+          placeholder="Notes for the VA — when to post, anything specific."
           className="w-full resize-y rounded-md border border-line bg-raised px-2.5 py-2 text-xs placeholder:text-ink-3 focus:border-accent focus:outline-none"
         />
         <div className="flex flex-wrap items-center gap-2">
@@ -161,13 +164,14 @@ export function TrialsPanel({
             type="button"
             disabled={pending || uploadingCover}
             onClick={() =>
-              run(() => sendToVaAction({ videoId, notes, coverPath }), () => {
-                toast.success(vaSentAt ? "Updated for the VA." : "Sent to the VA.");
-              })
+              run(
+                () => sendToVaAction({ videoId, notes, coverPath, fallbackCaption }),
+                () => toast.success(vaSentAt ? "Updated for the VA." : "Sent to the VA.")
+              )
             }
             className="ml-auto rounded-md bg-accent px-3 py-1.5 text-[11px] font-medium text-white hover:bg-accent-hi disabled:opacity-50"
           >
-            {vaSentAt ? "Send again / update" : "Send to the VA"}
+            {waiting.length > 1 ? "Send all chosen variants" : vaSentAt ? "Send again / update" : "Send to the VA"}
           </button>
         </div>
       </div>
@@ -177,64 +181,54 @@ export function TrialsPanel({
         <span className="text-xs text-ink-3">{trials.length}</span>
       </div>
       <p className="mb-3 text-[11px] leading-relaxed text-ink-3">
-        Each variant is either posted as a trial reel or straight to the main feed — pick per
-        variant; the VA sees the same choice. Trials post by hand (Instagram&rsquo;s API can&rsquo;t
-        touch them). Star a winner, then promote it to the main feed.
+        Give each variant a destination and a caption, then send it. Trials post by hand from the
+        Instagram app; a main-feed post can be published straight from the VA&rsquo;s desk once
+        Instagram is connected.
       </p>
 
       {trials.length === 0 ? (
         <div className="rounded-lg border border-dashed border-line px-3 py-6 text-center text-xs text-ink-3">
-          No trials yet.{" "}
-          Press &ldquo;Send to the VA&rdquo; above and the main cut and every variant land on their
-          Posting desk.
+          No cut on this video yet — variants appear here as soon as there&rsquo;s something to post.
         </div>
       ) : (
         <div className="space-y-2">
-          {trials.map((t) => (
-            <TrialRow key={t.id} trial={t} videoId={videoId} pending={pending} run={run} field={field} />
+          {trials.map((t, i) => (
+            <TrialRow
+              key={t.id}
+              trial={t}
+              index={i}
+              isMain={cutKind(t) === "main" || t.cut_id === null}
+              videoId={videoId}
+              fallbackCaption={fallbackCaption}
+              onWatch={onWatch}
+              pending={pending}
+              run={run}
+              field={field}
+            />
           ))}
         </div>
       )}
-
-      {unqueued.length > 0 ? (
-        <div className="mt-3 flex items-center gap-2 border-t border-line pt-3">
-          <select value={pickCut} onChange={(e) => setPickCut(e.target.value)} className={field}>
-            <option value="">Queue one variant…</option>
-            {unqueued.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={() => {
-              const cut = unqueued.find((c) => c.id === pickCut);
-              if (!cut) return;
-              run(
-                () => queueTrialAction({ videoId, cutId: cut.id, label: cut.label }),
-                () => setPickCut("")
-              );
-            }}
-            disabled={pending || !pickCut}
-            className="rounded-lg border border-line px-2.5 py-1 text-[11px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
-          >
-            Queue
-          </button>
-        </div>
-      ) : null}
     </section>
   );
 }
 
 function TrialRow({
   trial: t,
+  index,
+  isMain,
   videoId,
+  fallbackCaption,
+  onWatch,
   pending,
   run,
   field,
 }: {
   trial: TrialPost;
+  index: number;
+  isMain: boolean;
   videoId: string;
+  fallbackCaption: string;
+  onWatch?: (cutId: string) => void;
   pending: boolean;
   run: (fn: () => Promise<{ error?: string } | void>, then?: () => void) => void;
   field: string;
@@ -270,25 +264,39 @@ function TrialRow({
         >
           🏆
         </button>
-        <p className="min-w-0 flex-1 truncate text-xs font-medium">{t.label}</p>
-        {t.status === "planned" ? (
+        <p className="min-w-0 flex-1 truncate text-xs font-medium">
+          {isMain ? t.label : `Variant ${index + 1} — ${t.label}`}
+        </p>
+        {onWatch && t.cut_id ? (
+          <button
+            type="button"
+            onClick={() => onWatch(t.cut_id as string)}
+            className="rounded-md border border-line px-2 py-1 text-[10px] text-ink-2 hover:border-accent hover:text-ink"
+          >
+            Watch
+          </button>
+        ) : null}
+        {t.status === "planned" && !t.sent_to_va_at ? (
           <select
-            value={t.post_as ?? "trial"}
+            value={t.post_as ?? "none"}
             disabled={pending}
-            onChange={(e) => run(() => setPostAsAction(t.id, videoId, e.target.value as "trial" | "main"))}
+            onChange={(e) =>
+              run(() => updateVariantAction(t.id, videoId, { postAs: e.target.value as "trial" | "main" | "none" }))
+            }
             aria-label="Post as"
             className={field}
           >
+            <option value="none">Not selected</option>
             <option value="trial">Trial reel</option>
             <option value="main">Post to main feed</option>
           </select>
         ) : (
           <span className="rounded-md bg-raised px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-3">
-            {t.post_as === "main" ? "Main feed" : "Trial"}
+            {t.post_as === "main" ? "Main feed" : t.post_as === "trial" ? "Trial" : "—"}
           </span>
         )}
         <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${chip}`}>
-          {TRIAL_STATUS_LABELS[t.status]}
+          {t.status === "planned" && t.sent_to_va_at ? "With the VA" : TRIAL_STATUS_LABELS[t.status]}
         </span>
         <button
           title="Archive this trial"
@@ -315,32 +323,49 @@ function TrialRow({
       ) : null}
 
       {t.status === "planned" ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1 text-[10px] text-ink-3">
-            <IconClock size={11} />
-            <input
-              type="datetime-local"
-              defaultValue={t.scheduled_for ? t.scheduled_for.slice(0, 16) : ""}
-              onBlur={(e) =>
-                e.target.value !== (t.scheduled_for?.slice(0, 16) ?? "") &&
-                run(() => updateTrialAction(t.id, videoId, { scheduled_for: e.target.value || null }))
-              }
-              className={field}
-            />
-          </label>
-          <input
-            value={permalink}
-            onChange={(e) => setPermalink(e.target.value)}
-            placeholder="Posted it yourself? Paste the link…"
-            className={`${field} min-w-0 flex-1`}
+        <div className="mt-2 space-y-1.5">
+          <textarea
+            defaultValue={t.caption ?? ""}
+            rows={2}
+            disabled={Boolean(t.sent_to_va_at)}
+            placeholder={fallbackCaption ? "Caption — using the one from the box below unless you write one here" : "Caption for this variant"}
+            onBlur={(e) => {
+              if (e.target.value.trim() === (t.caption ?? "").trim()) return;
+              run(() => updateVariantAction(t.id, videoId, { caption: e.target.value }));
+            }}
+            className={`${field} w-full resize-y disabled:opacity-60`}
           />
-          <button
-            onClick={() => run(() => markTrialPostedAction(t.id, videoId, permalink))}
-            disabled={pending || !permalink.trim()}
-            className="rounded-md border border-line px-2 py-1 text-[10px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
-          >
-            Mark live
-          </button>
+          <div className="flex items-center gap-2">
+            {t.sent_to_va_at ? (
+              <span className="text-[11px] text-ok">
+                ✓ Sent to the VA{" "}
+                {new Date(t.sent_to_va_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+              </span>
+            ) : (
+              <button
+                onClick={() => run(() => sendVariantToVaAction(t.id, videoId, fallbackCaption))}
+                disabled={pending}
+                className="rounded-md bg-accent px-2.5 py-1 text-[11px] font-medium text-white hover:bg-accent-hi disabled:opacity-50"
+              >
+                Send this one to the VA
+              </button>
+            )}
+            <span className="ml-auto flex items-center gap-1">
+              <input
+                value={permalink}
+                onChange={(e) => setPermalink(e.target.value)}
+                placeholder="Posted it yourself? Paste the link…"
+                className={`${field} w-52 min-w-0`}
+              />
+              <button
+                onClick={() => run(() => markTrialPostedAction(t.id, videoId, permalink))}
+                disabled={pending || !permalink.trim()}
+                className="rounded-md border border-line px-2 py-1 text-[10px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
+              >
+                Mark live
+              </button>
+            </span>
+          </div>
         </div>
       ) : null}
 
