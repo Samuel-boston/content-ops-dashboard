@@ -111,7 +111,7 @@ export function VideoWorkDialog({
           <div className="rounded-xl border border-warn/40 bg-warn/5 p-3">
             <p className="text-xs font-medium text-ink">Send this back to {clientName}&rsquo;s side — it goes back to Ready to Post.</p>
             <p className="mt-0.5 text-[11px] text-ink-3">
-              It leaves this board (captions are kept) and anything scheduled is taken off the schedule. Say what needs changing — it goes
+              It leaves this board (captions are kept) and anything scheduled is taken off the schedule. Say what's not right — it goes
               in the video&rsquo;s chat and they&rsquo;re notified.
             </p>
             <textarea
@@ -153,7 +153,7 @@ export function VideoWorkDialog({
               onClick={() => setSendingBack(true)}
               className="rounded-lg border border-line px-3 py-1.5 text-xs text-ink-2 hover:border-warn hover:text-ink"
             >
-              Something needs changing — send it back
+              Something not quite right?
             </button>
             <button
               type="button"

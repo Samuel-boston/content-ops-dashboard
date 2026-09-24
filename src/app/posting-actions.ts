@@ -617,7 +617,7 @@ export async function vaSaveLinkAction(trialId: string, permalink: string) {
 export async function vaSendBackAction(videoId: string, reason: string) {
   const me = await requireRole("va", "owner", "admin");
   const note = reason.trim();
-  if (!note) return { error: "Say what needs changing, so they know what to look at." };
+  if (!note) return { error: "Say what's not quite right, so they know what to look at." };
   const db = supabaseAdmin();
   const { data: video } = await db.from("videos").select("title, status").eq("id", videoId).maybeSingle();
   if (!video) return { error: "Video not found." };
