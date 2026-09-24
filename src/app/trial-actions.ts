@@ -96,13 +96,11 @@ export async function sendToVaAction(input: {
   const supabase = await supabaseServer();
   await ensureVariantRows(supabase, me.id, input.videoId);
 
-  const [{ data: video }, { data: rows }, { data: cuts }] = await Promise.all([
+  const [{ data: video }, { data: rows }] = await Promise.all([
     supabase.from("videos").select("cover_path").eq("id", input.videoId).single(),
     supabase.from("trial_posts").select("*").eq("video_id", input.videoId),
-    supabase.from("video_cuts").select("id, kind").eq("video_id", input.videoId),
   ]);
   if (!video) return { error: "Video not found." };
-  const kindOf = new Map((cuts ?? []).map((c) => [c.id as string, c.kind as string]));
 
   const live = ((rows as TrialPost[]) ?? []).filter((t) => t.status === "planned" && !t.sent_to_va_at);
   if (!live.length && !(rows ?? []).length) return { error: "There's no cut on this video to send yet." };
