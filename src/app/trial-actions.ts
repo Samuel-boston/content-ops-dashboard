@@ -42,13 +42,13 @@ async function ensureVariantRows(supabase: Db, createdBy: string, videoId: strin
   const rows: Record<string, unknown>[] = [];
   if (video && isCarouselFormat(video.formats as string[])) {
     if (!live.some((t) => t.cut_id === null)) {
-      rows.push({ video_id: videoId, cut_id: null, label: "Carousel", status: "planned", post_as: "none", created_by: createdBy });
+      rows.push({ video_id: videoId, cut_id: null, label: "Carousel", status: "planned", post_as: "main", created_by: createdBy });
     }
   } else {
     const have = new Set(live.map((t) => t.cut_id as string | null));
     for (const c of cuts ?? []) {
       if (!have.has(c.id)) {
-        rows.push({ video_id: videoId, cut_id: c.id, label: c.label, status: "planned", post_as: "none", created_by: createdBy });
+        rows.push({ video_id: videoId, cut_id: c.id, label: c.label, status: "planned", post_as: "trial", created_by: createdBy });
       }
     }
   }
@@ -113,8 +113,9 @@ export async function sendToVaAction(input: {
   let sent = 0;
   for (const t of live) {
     let postAs = t.post_as;
-    if (postAs === "none" && (t.cut_id === null || kindOf.get(t.cut_id) === "main")) postAs = "main";
-    if (postAs === "none") continue;
+    // Nothing chosen: a carousel can only go to the feed; everything else is
+    // posted as a trial first, and the best one is promoted to the main feed later.
+    if (postAs === "none") postAs = t.cut_id === null ? "main" : "trial";
     const { error } = await supabase
       .from("trial_posts")
       .update({
@@ -139,7 +140,7 @@ export async function sendToVaAction(input: {
   if (vErr) return { error: vErr.message };
 
   if (sent === 0) {
-    return { error: "Choose Trial reel or Main feed on at least one variant first." };
+    return { error: "Nothing to send — every variant is already with the VA or posted." };
   }
   revalidateTrials(input.videoId);
   return { ok: true as const, queued: sent };
@@ -172,10 +173,11 @@ export async function sendVariantToVaAction(id: string, videoId: string, fallbac
     supabase.from("videos").select("va_notes").eq("id", videoId).single(),
   ]);
   if (!t) return { error: "Variant not found." };
-  if (t.post_as === "none") return { error: "Choose Trial reel or Main feed for it first." };
+  const postAs = t.post_as === "none" ? (t.cut_id === null ? "main" : "trial") : t.post_as;
   const { error } = await supabase
     .from("trial_posts")
     .update({
+      post_as: postAs,
       sent_to_va_at: new Date().toISOString(),
       caption: (t.caption as string | null)?.trim() || fallbackCaption?.trim() || null,
       notes: t.notes ?? v?.va_notes ?? null,

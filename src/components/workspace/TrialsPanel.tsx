@@ -288,7 +288,7 @@ function TrialRow({
         </button>
         {!open ? (
           <span className="shrink-0 rounded-md bg-raised px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-3">
-            {t.post_as === "main" ? "Main feed" : t.post_as === "trial" ? "Trial" : "Not selected"}
+            {t.post_as === "main" ? "Main feed" : "Trial"}
           </span>
         ) : null}
         <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${chip}`}>
@@ -317,7 +317,7 @@ function TrialRow({
           ) : null}
           {t.status === "planned" ? (
             <select
-              value={t.post_as ?? "none"}
+              value={t.post_as === "main" ? "main" : "trial"}
               disabled={pending}
               onChange={(e) =>
                 run(() => updateVariantAction(t.id, videoId, { postAs: e.target.value as "trial" | "main" | "none" }))
@@ -325,7 +325,6 @@ function TrialRow({
               aria-label="Post as"
               className={`${field} min-w-0 flex-1`}
             >
-              <option value="none">Not selected</option>
               <option value="trial">Trial reel</option>
               <option value="main">Post to main feed</option>
             </select>
