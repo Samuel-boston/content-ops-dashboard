@@ -36,7 +36,7 @@ Every video is a card that moves left to right through stages. Each person only 
 
 ## Trial reels, then the feed
 
-Everything is posted as a **trial reel** first (posted by hand in the Instagram app — Instagram doesn't let any app post trials or read their numbers). The VA (or you) types each trial's **views/likes** into the dashboard, and the Archive shows which one is winning with a **Post it to the main feed →** button. That opens a form with the caption — post now or schedule — and posts through the Instagram connection. Feed posts bring their own numbers in automatically.
+Everything is posted as a **trial reel** first. With **Publer** connected the VA posts it straight from the dashboard (**Post trial reel via Publer…**); without it, by hand in the Instagram app (Meta's own API can't post trials). Either way the VA (or you) types each trial's **views/likes** into the dashboard, and the Archive shows which one is winning with a **Post it to the main feed →** button. That opens a form with the caption — post now or schedule — and posts through Publer (or the Instagram connection). Feed posts bring their own numbers in automatically.
 
 ## The other places
 

@@ -246,9 +246,9 @@ export function TrialsPanel({
         <span className="text-xs text-ink-3">{trials.length}</span>
       </div>
       <p className="mb-3 text-[11px] leading-relaxed text-ink-3">
-        Set each variant to a trial reel or the main feed and write its caption. Trials are posted by
-        hand from the Instagram app; a main-feed post can be published straight from the VA&rsquo;s desk
-        once Instagram is connected.
+        Set each variant to a trial reel or the main feed and write its caption. With Publer connected, trial reels and
+        main-feed posts are both published straight from the VA&rsquo;s desk; without it, trials are posted by
+        hand from the Instagram app and a main-feed post needs Instagram connected.
       </p>
 
       {best ? (

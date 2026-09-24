@@ -14,7 +14,7 @@ Each guide can be done **three ways**. In the dashboard open **avatar menu → S
 
 The prompts contain no passwords or keys. The AI types values only into the boxes in Settings. Save settings after each one and test it.
 
-Recommended order: **Google Drive → Groq → scheduled jobs → Telegram → Instagram → email → your own Claude.** (Cloudflare Stream was done on the call.)
+Recommended order: **Google Drive → Groq → scheduled jobs → Telegram → Publer (or Instagram) → email → your own Claude.** (Cloudflare Stream was done on the call.)
 
 `;
 for (const g of SETUP_GUIDES) {

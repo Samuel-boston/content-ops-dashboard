@@ -54,9 +54,22 @@ export const SETUP_GUIDES: SetupGuideItem[] = [
     finish: "Save settings, then press “Test the connection” — it must say Connected. Careful copying the refresh token: letters O and zero look alike.",
   },
   {
+    id: "publer",
+    title: "Publer — post and schedule Reels, including trial reels",
+    blurb: "The easy way to post from the dashboard: no Meta app or verification needed, and it can post Instagram trial reels, which Meta's own API cannot. Needs a Publer Business plan (check Publer's current pricing); it replaces the Meta / Instagram guide for posting.",
+    steps: [
+      "Go to publer.com and sign up or log in. Choose a Business plan — the API is not available on lower plans.",
+      "In Publer open Social Accounts → Add account → Instagram, and connect the Instagram account you post from. It must be a Professional (Creator or Business) account.",
+      "Open Settings → Access & Login → API Keys → Create API Key. Give it a name and tick these permissions: workspaces, accounts, posts and media. Create it and copy the key now.",
+      "In this dashboard open Settings → Publer, paste the key, and press Connect. It finds your workspace and Instagram account by itself; if you have more than one account it asks which to post to.",
+    ],
+    fields: ["Publer → the API key box, then the Connect button (nothing else to fill in)"],
+    finish: "The Publer card turns green and says Connected to Instagram. Press “Test the connection” to check it. Then on any video that is with the VA, mark a variant as a trial reel and press “Post trial reel via Publer…”. Choose whether trial reels stay trials or may be shared by Instagram automatically at the top of the Publer card.",
+  },
+  {
     id: "instagram",
     title: "Meta / Instagram — analytics and posting",
-    blurb: "Lets the dashboard post and schedule Reels and carousels to the feed and read their numbers. Free. Trial reels can't be posted by any app — those are still posted by hand.",
+    blurb: "Lets the dashboard post and schedule Reels and carousels to the feed and read their numbers. Free. Meta's own API cannot post trial reels — use the Publer guide above if you want those posted from the dashboard.",
     steps: [
       "Make sure the Instagram account is a Professional account (Creator or Business) and is linked to a Facebook Page you manage.",
       "Go to business.facebook.com and create (or open) the Business portfolio that owns that Page and Instagram account.",

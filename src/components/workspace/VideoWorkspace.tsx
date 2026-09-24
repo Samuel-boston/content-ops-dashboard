@@ -387,7 +387,8 @@ export function VideoWorkspace({
             cutId={activeCut?.id ?? null}
             jobs={publishJobs}
             canManage={viewer.role !== "editor"}
-            instagramConfigured={integrations.instagram}
+            instagramConfigured={integrations.instagram || integrations.publer}
+            publerConnected={integrations.publer}
             durationSeconds={version?.duration_seconds ?? null}
             variantsOnly={video.status === "awaiting_variants" || video.status === "final_review"}
             onWatch={(cutId) => {

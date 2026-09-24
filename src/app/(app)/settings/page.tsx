@@ -10,6 +10,7 @@ import {
 } from "@/lib/workspace";
 import { SettingsForm } from "@/components/SettingsForm";
 import { BrandingForm } from "@/components/BrandingForm";
+import { PublerConnect } from "@/components/PublerConnect";
 
 export default async function SettingsPage() {
   await requireRole("owner");
@@ -32,6 +33,12 @@ export default async function SettingsPage() {
         brandName={settings.brand_name}
         clientName={settings.client_name}
         logoUrl={branding.logoUrl}
+      />
+      <PublerConnect
+        connected={integrationStatus(settings).publer}
+        hasKey={Boolean(settings.publer_api_key)}
+        accountName={settings.publer_account_name}
+        trialMode={settings.publer_trial_mode ?? "MANUAL"}
       />
       <SettingsForm
         settings={redactSettings(settings)}

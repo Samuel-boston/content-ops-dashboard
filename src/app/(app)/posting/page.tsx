@@ -15,7 +15,7 @@ import { VaTaskBoard } from "@/components/tasks/VaTaskBoard";
  */
 export default async function PostingPage() {
   const viewer = await requireRole("va", "owner", "admin");
-  const [{ trials, jobs, instagramConnected }, archive, tasks, clientName] = await Promise.all([
+  const [{ trials, jobs, instagramConnected, publerConnected }, archive, tasks, clientName] = await Promise.all([
     listPostingWork(),
     listPostedVideos(),
     listVaTasks(),
@@ -36,6 +36,7 @@ export default async function PostingPage() {
         jobs={jobs}
         archive={archive}
         instagramConnected={instagramConnected}
+        publerConnected={publerConnected}
         clientName={clientName}
       />
 

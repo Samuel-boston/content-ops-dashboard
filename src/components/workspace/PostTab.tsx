@@ -34,6 +34,7 @@ export function PostTab({
   jobs,
   canManage,
   instagramConfigured,
+  publerConnected = false,
   durationSeconds,
   variantsOnly = false,
   onWatch,
@@ -43,6 +44,8 @@ export function PostTab({
   jobs: PublishJob[];
   canManage: boolean;
   instagramConfigured: boolean;
+  /** Publer is the route in use: it picks its own cover frame. */
+  publerConnected?: boolean;
   /** The active cut's duration, so the cover-frame picker can be bounded to it. */
   durationSeconds?: number | null;
   /** Final Review: just the variants and the hand-off — no scheduling. */
@@ -102,6 +105,7 @@ export function PostTab({
             caption={caption}
             onCaptionChange={changeCaption}
             connected={instagramConfigured ? ["instagram"] : []}
+            coverEnabled={!publerConnected}
             emptyHint={<>Connect one in Settings → Integrations and it shows up here.</>}
             isVideo={!isCarouselFormat(video.formats)}
             durationSeconds={durationSeconds}

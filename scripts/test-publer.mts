@@ -1,0 +1,101 @@
+// Exercises src/lib/publer-client.ts against a fake Publer API.
+//   npx tsx scripts/test-publer.mts
+import http from "node:http";
+import assert from "node:assert/strict";
+import {
+  listWorkspaces, listAccounts, uploadMedia, importMediaFromUrl, publishReel, reelBody, findMedia, readFailures, PublerError,
+} from "../src/lib/publer-client.ts";
+
+type Seen = { method: string; url: string; headers: http.IncomingHttpHeaders; body: string };
+const seen: Seen[] = [];
+let jobPolls = 0;
+let failPost = false;
+let importPayload: unknown = { media: [{ id: "m-imp", path: "https://cdn/x.mp4", type: "video" }] };
+
+const server = http.createServer((req, res) => {
+  const chunks: Buffer[] = [];
+  req.on("data", (c) => chunks.push(c));
+  req.on("end", () => {
+    const body = Buffer.concat(chunks).toString("latin1");
+    seen.push({ method: req.method ?? "", url: req.url ?? "", headers: req.headers, body });
+    const send = (code: number, j: unknown) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(j)); };
+    if (req.headers.authorization !== "Bearer-API good") return send(401, { errors: ["Unauthorized"] });
+    const u = req.url ?? "";
+    if (u === "/workspaces") return send(200, [{ id: "w1", name: "Studio", plan: "business" }, { id: "w2", name: "Other" }]);
+    if (u === "/accounts") {
+      if (!req.headers["publer-workspace-id"]) return send(403, { errors: ["Permission denied or missing required scope"] });
+      return send(200, req.headers["publer-workspace-id"] === "w1"
+        ? [{ id: "a1", provider: "instagram", name: "adam.kunder" }, { id: "a2", provider: "tiktok", name: "adam" }]
+        : []);
+    }
+    if (u === "/media") return send(200, { id: "m1", path: "https://cdn/m1.mp4", thumbnail: "t", type: "video", validity: { instagram: { reel: true } } });
+    if (u === "/media/from-url") return send(200, { job_id: "j-media" });
+    if (u === "/posts/schedule/publish" || u === "/posts/schedule") return send(200, { success: true, data: { job_id: "j-post" } });
+    if (u.startsWith("/job_status/")) {
+      const id = u.split("/").pop();
+      if (id === "j-media") return send(200, { success: true, data: { status: "complete", result: { status: "complete", payload: importPayload } } });
+      jobPolls++;
+      if (jobPolls < 2) return send(200, { success: true, data: { status: "working" } });
+      return send(200, { success: true, data: { status: "complete", result: { status: "complete", payload: { failures: failPost ? [{ account_name: "adam.kunder", provider: "instagram", message: "Video too long" }] : {} } } } });
+    }
+    send(404, {});
+  });
+});
+await new Promise<void>((r) => server.listen(0, r));
+const baseUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+const good = { apiKey: "good", baseUrl };
+
+// auth + connect flow
+await assert.rejects(() => listWorkspaces({ apiKey: "bad", baseUrl }), (e: PublerError) => e.status === 401 && /API key/.test(e.message));
+const ws = await listWorkspaces(good);
+assert.deepEqual(ws.map((w) => w.id), ["w1", "w2"]);
+await assert.rejects(() => listAccounts(good), (e: PublerError) => e.status === 403 && /Business|permission/i.test(e.message));
+const accts = await listAccounts({ ...good, workspaceId: "w1" });
+assert.equal(accts.filter((a) => a.provider === "instagram").length, 1);
+assert.equal(seen.at(-1)!.headers["publer-workspace-id"], "w1");
+
+// upload (multipart) and the media object it returns
+const media = await uploadMedia({ ...good, workspaceId: "w1" }, new Blob(["video-bytes"], { type: "video/mp4" }), "cut.mp4");
+assert.equal(media.id, "m1"); assert.equal(media.reelOk, true);
+const up = seen.find((s) => s.url === "/media")!;
+assert.match(String(up.headers["content-type"]), /multipart\/form-data/);
+assert.match(up.body, /name="file"/);
+
+// URL import, including the payload shape variants
+assert.equal((await importMediaFromUrl({ ...good, workspaceId: "w1" }, "https://x/y.mp4", "y.mp4")).id, "m-imp");
+importPayload = [{ id: "m-arr", path: "p", type: "video" }];
+assert.equal((await importMediaFromUrl({ ...good, workspaceId: "w1" }, "https://x/y.mp4", "y.mp4")).id, "m-arr");
+importPayload = { failures: {} };
+await assert.rejects(() => importMediaFromUrl({ ...good, workspaceId: "w1" }, "https://x/y.mp4", "y.mp4"), /over 200 MB/);
+
+// posting: a trial reel, then a normal feed reel, then a failure
+jobPolls = 0;
+const c = { ...good, workspaceId: "w1" };
+await publishReel(c, { accountId: "a1", media, caption: "hello", trial: "MANUAL" });
+const trialPost = seen.filter((s) => s.url === "/posts/schedule/publish").at(-1)!;
+const tb = JSON.parse(trialPost.body);
+const ig = tb.bulk.posts[0].networks.instagram;
+assert.equal(ig.details.trial_reel, "MANUAL"); assert.equal(ig.details.feed, false); assert.equal(ig.details.type, "reel");
+assert.equal(ig.media[0].id, "m1"); assert.equal(ig.text, "hello");
+assert.equal(tb.bulk.posts[0].accounts[0].scheduled_at, undefined);
+
+jobPolls = 0;
+await publishReel(c, { accountId: "a1", media, caption: "feed", shareToFeed: true, scheduledAt: "2026-10-01T18:00:00.000Z" });
+const sched = seen.filter((s) => s.url === "/posts/schedule").at(-1)!;
+const sb = JSON.parse(sched.body).bulk.posts[0];
+assert.equal(sb.accounts[0].scheduled_at, "2026-10-01T18:00:00.000Z");
+assert.equal(sb.networks.instagram.details.trial_reel, undefined); assert.equal(sb.networks.instagram.details.feed, true);
+
+jobPolls = 0; failPost = true;
+await assert.rejects(() => publishReel(c, { accountId: "a1", media, caption: "x" }), /Video too long/);
+await assert.rejects(() => publishReel(c, { accountId: "a1", media: { ...media, reelOk: false }, caption: "x" }), /9:16/);
+
+// pure helpers
+assert.deepEqual(readFailures({ failures: {} }), []);
+assert.deepEqual(readFailures({ failures: [{ account_name: "A", message: "no" }] }), ["A: no"]);
+assert.equal(findMedia({ deep: { list: [{ id: "z", type: "video" }] } })?.id, "z");
+assert.equal(findMedia({ id: "only-an-id" }), null);
+assert.equal(reelBody({ accountId: "a", media, caption: "c", trial: "SS_PERFORMANCE" }).bulk.posts[0].networks.instagram.details.trial_reel, "SS_PERFORMANCE");
+
+server.close();
+console.log("publer client: all checks passed");

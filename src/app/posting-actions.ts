@@ -227,6 +227,7 @@ export async function listPostingWork(): Promise<{
   jobs: PostingJobItem[];
   feedMetrics: Record<string, PostingFeedMetrics>;
   instagramConnected: boolean;
+  publerConnected: boolean;
 }> {
   await requireRole("va", "owner", "admin");
   const db = supabaseAdmin();
@@ -242,7 +243,9 @@ export async function listPostingWork(): Promise<{
     jobsFor(db, ids),
   ]);
   return {
-    instagramConnected: integrationStatus(settings).instagram,
+    // "Can post straight from here": Publer or the Instagram Graph API.
+    instagramConnected: integrationStatus(settings).instagram || integrationStatus(settings).publer,
+    publerConnected: integrationStatus(settings).publer,
     feedMetrics: {},
     trials: await buildItems(db, (rows ?? []) as unknown as (TrialPost & { video: VideoJoin })[], jobs),
     jobs,
@@ -255,6 +258,7 @@ export async function getPostingVideoAction(videoId: string): Promise<{
   jobs: PostingJobItem[];
   feedMetrics: Record<string, PostingFeedMetrics>;
   instagramConnected: boolean;
+  publerConnected: boolean;
 }> {
   await requireRole("va", "owner", "admin");
   const db = supabaseAdmin();
@@ -267,7 +271,9 @@ export async function getPostingVideoAction(videoId: string): Promise<{
     .order("created_at");
   const jobs = await jobsFor(db, [videoId]);
   return {
-    instagramConnected: integrationStatus(settings).instagram,
+    // "Can post straight from here": Publer or the Instagram Graph API.
+    instagramConnected: integrationStatus(settings).instagram || integrationStatus(settings).publer,
+    publerConnected: integrationStatus(settings).publer,
     feedMetrics: await feedMetricsFor(db, [videoId]),
     trials: await buildItems(db, (rows ?? []) as unknown as (TrialPost & { video: VideoJoin })[], jobs),
     jobs,
@@ -415,14 +421,21 @@ export async function vaPublishAction(
     caption?: string | null;
     coverOffsetMs?: number;
     shareToFeed?: boolean;
+    /** Post it as an Instagram trial reel (Publer only, and only "now"). */
+    asTrial?: boolean;
   } = {}
 ) {
-  const whenISO = opts.whenISO ?? null;
+  const whenISO = opts.asTrial ? null : (opts.whenISO ?? null);
   const me = await requireRole("va", "owner", "admin");
   const db = supabaseAdmin();
   const settings = await getWorkspaceSettings();
-  if (!integrationStatus(settings).instagram) {
-    return { error: "Instagram isn't connected yet. Connect it in Settings → Integrations, or post by hand and mark it posted." };
+  const connected = integrationStatus(settings);
+  if (opts.asTrial ? !connected.publer : !(connected.instagram || connected.publer)) {
+    return {
+      error: opts.asTrial
+        ? "Trial reels are posted through Publer, which isn't connected yet. Connect it in Settings → Integrations, or post it by hand and tick Posted."
+        : "Nothing is connected to post with yet. Connect Publer or Instagram in Settings → Integrations, or post by hand and mark it posted.",
+    };
   }
   const { data: t } = await db.from("trial_posts").select("*").eq("id", trialId).maybeSingle();
   const st = t ? variantState(t) : null;
@@ -430,6 +443,7 @@ export async function vaPublishAction(
   if (!t || (st !== "to_trial" && st !== "to_feed" && st !== "trial_posted")) {
     return { error: "That one isn't waiting to be posted." };
   }
+  if (opts.asTrial && st !== "to_trial") return { error: "Only a variant marked as a trial reel can be posted as one." };
   if (!t.cut_id && !t.post_as) return { error: "Nothing to post." };
 
   const caption =
@@ -453,11 +467,24 @@ export async function vaPublishAction(
       status: "scheduled",
       cover_offset_ms: Math.max(0, Math.round(opts.coverOffsetMs ?? 0)),
       share_to_feed: opts.shareToFeed ?? true,
+      as_trial: Boolean(opts.asTrial),
       created_by: me.id,
     })
     .select("id")
     .single();
   if (error) return { error: error.message };
+
+  if (opts.asTrial) {
+    const sent = await runPublishJob(job.id);
+    if (!sent.ok) return { error: `It didn't go through: ${sent.error}` };
+    await db
+      .from("trial_posts")
+      .update({ status: "posted", post_as: "trial", posted_by: me.id, posted_at: new Date().toISOString() })
+      .eq("id", trialId);
+    revalidatePath("/posting");
+    revalidatePath("/calendar");
+    return { ok: true as const, scheduled: false };
+  }
 
   const stamp = { promoted_job_id: job.id, posted_by: me.id, post_as: "main" };
   if (scheduled) {
@@ -471,7 +498,7 @@ export async function vaPublishAction(
   }
 
   const res = await runPublishJob(job.id);
-  if (!res.ok) return { error: `Instagram didn't take it: ${res.error}` };
+  if (!res.ok) return { error: `It didn't go through: ${res.error}` };
   await db
     .from("trial_posts")
     .update({ ...stamp, status: "posted", posted_at: new Date().toISOString(), ...(st === "trial_posted" ? { winner: true } : {}) })

@@ -131,12 +131,14 @@ export function PostingBoard({
   jobs,
   archive,
   instagramConnected,
+  publerConnected = false,
   clientName,
 }: {
   trials: PostingTrialItem[];
   jobs: PostingJobItem[];
   archive: PostedVideoRow[];
   instagramConnected: boolean;
+  publerConnected?: boolean;
   clientName: string;
 }) {
   const toast = useToast();
@@ -232,6 +234,7 @@ export function PostingBoard({
           trials={opened.trials}
           jobs={jobs}
           instagramConnected={instagramConnected}
+          publerConnected={publerConnected}
           clientName={clientName}
           onClose={() => setOpenVideo(null)}
         />

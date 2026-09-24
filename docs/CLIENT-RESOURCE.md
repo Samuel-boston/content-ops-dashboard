@@ -16,18 +16,18 @@ The dashboard is live and you can already run the whole pipeline. What's left ar
 | 2 | **Groq** (free AI) | Voice notes → transcripts, sorts ideas from Telegram | 5 min | No |
 | 3 | **Scheduled jobs** (cron-job.org) | Scheduled posts go out on time; finished uploads get picked up | 10 min | No |
 | 4 | **Telegram** | Send an idea from your phone in 10 seconds | 15 min | No |
-| 5 | **Instagram / Meta** | Post and schedule to the feed from the dashboard; numbers come in automatically | 1–2 hrs | **Maybe — see below** |
+| 5 | **Publer** (or Instagram / Meta) | Post and schedule Reels from the dashboard, **including trial reels** | Publer 15 min · Meta 1–2 hrs | Publer: no. Meta: **maybe — see below** |
 | 6 | **Email** (Resend) | "You were mentioned / revisions requested" emails | 20 min | **Yes — DNS** |
 | 7 | **Your own Claude** | Work on scripts and run the board from inside Claude | 10 min each person | No |
 | 8 | **Upload limit** (only if you skipped it on the call) | Cuts bigger than 50 MB | 5 min | No |
 
-You can run the business without 5, 6 and 7 — trial reels are always posted by hand from the Instagram app anyway. Do 1–4 first.
+You can run the business without 5, 6 and 7 — the VA can always post by hand from the Instagram app and tick Posted. Do 1–4 first. Publer (a paid Business plan) is the quickest way to post from the dashboard: no Meta app, no Meta verification, and it can post trial reels.
 
 ## What's slow and **not your fault**
 
 These are outside anyone's control. If one stalls, note where and message Nathan — don't lose a day to it.
 
-- **Meta (Instagram).** Meta sometimes asks you to verify your business or identity before it lets an app connect to Instagram. That can take from minutes to a few days. Until it's done, post by hand and tick **Posted** in the dashboard — nothing breaks.
+- **Meta (Instagram), only if you connect Instagram directly instead of Publer.** Meta sometimes asks you to verify your business or identity before it lets an app connect to Instagram. That can take from minutes to a few days. Until it's done, post by hand and tick **Posted** in the dashboard — nothing breaks.
 - **Email DNS.** After adding the records Resend gives you at your domain provider, verification can take anywhere from a few minutes to a few hours (rarely a day). Notifications still show inside the dashboard in the meantime.
 - **Google's consent screen.** Google shows an "unverified app" warning for your own app. That's normal — click *Advanced → Continue*. It is what lets the login stay permanent.
 
@@ -55,7 +55,7 @@ Each guide can be done **three ways**. In the dashboard open **avatar menu → S
 
 The prompts contain no passwords or keys. The AI types values only into the boxes in Settings. Save settings after each one and test it.
 
-Recommended order: **Google Drive → Groq → scheduled jobs → Telegram → Instagram → email → your own Claude.** (Cloudflare Stream was done on the call.)
+Recommended order: **Google Drive → Groq → scheduled jobs → Telegram → Publer (or Instagram) → email → your own Claude.** (Cloudflare Stream was done on the call.)
 
 ---
 
@@ -110,9 +110,30 @@ Save settings, then press “Test the connection” — it must say Connected. C
 
 ---
 
+## Publer — post and schedule Reels, including trial reels
+
+The easy way to post from the dashboard: no Meta app or verification needed, and it can post Instagram trial reels, which Meta's own API cannot. Needs a Publer Business plan (check Publer's current pricing); it replaces the Meta / Instagram guide for posting.
+
+### Steps
+
+1. Go to publer.com and sign up or log in. Choose a Business plan — the API is not available on lower plans.
+2. In Publer open Social Accounts → Add account → Instagram, and connect the Instagram account you post from. It must be a Professional (Creator or Business) account.
+3. Open Settings → Access & Login → API Keys → Create API Key. Give it a name and tick these permissions: workspaces, accounts, posts and media. Create it and copy the key now.
+4. In this dashboard open Settings → Publer, paste the key, and press Connect. It finds your workspace and Instagram account by itself; if you have more than one account it asks which to post to.
+
+### Paste into Settings
+
+- Publer → the API key box, then the Connect button (nothing else to fill in)
+
+### Then
+
+The Publer card turns green and says Connected to Instagram. Press “Test the connection” to check it. Then on any video that is with the VA, mark a variant as a trial reel and press “Post trial reel via Publer…”. Choose whether trial reels stay trials or may be shared by Instagram automatically at the top of the Publer card.
+
+---
+
 ## Meta / Instagram — analytics and posting
 
-Lets the dashboard post and schedule Reels and carousels to the feed and read their numbers. Free. Trial reels can't be posted by any app — those are still posted by hand.
+Lets the dashboard post and schedule Reels and carousels to the feed and read their numbers. Free. Meta's own API cannot post trial reels — use the Publer guide above if you want those posted from the dashboard.
 
 ### Steps
 
@@ -281,7 +302,7 @@ Every video is a card that moves left to right through stages. Each person only 
 
 ## Trial reels, then the feed
 
-Everything is posted as a **trial reel** first (posted by hand in the Instagram app — Instagram doesn't let any app post trials or read their numbers). The VA (or you) types each trial's **views/likes** into the dashboard, and the Archive shows which one is winning with a **Post it to the main feed →** button. That opens a form with the caption — post now or schedule — and posts through the Instagram connection. Feed posts bring their own numbers in automatically.
+Everything is posted as a **trial reel** first. With **Publer** connected the VA posts it straight from the dashboard (**Post trial reel via Publer…**); without it, by hand in the Instagram app (Meta's own API can't post trials). Either way the VA (or you) types each trial's **views/likes** into the dashboard, and the Archive shows which one is winning with a **Post it to the main feed →** button. That opens a form with the caption — post now or schedule — and posts through Publer (or the Instagram connection). Feed posts bring their own numbers in automatically.
 
 ## The other places
 

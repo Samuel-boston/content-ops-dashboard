@@ -29,10 +29,13 @@ const btn = "rounded-md border border-line px-2.5 py-1 text-[11px] text-ink-2 ho
 export function VariantWorkRow({
   trial,
   instagramConnected,
+  publerConnected = false,
   clientName,
 }: {
   trial: PostingTrialItem;
   instagramConnected: boolean;
+  /** Publer is connected: trial reels can be posted from here, and covers are Publer's. */
+  publerConnected?: boolean;
   clientName: string;
 }) {
   const toast = useToast();
@@ -88,9 +91,16 @@ export function VariantWorkRow({
         caption: v.caption,
         coverOffsetMs: v.coverOffsetMs,
         shareToFeed: v.shareToFeed,
+        asTrial: dest === "trial",
       });
       if (res?.error) return toast.error(res.error);
-      toast.success(res.scheduled ? "Scheduled for the feed — it'll go out by itself." : "Posted to the feed on Instagram ✓");
+      toast.success(
+        dest === "trial"
+          ? "Posted as a trial reel ✓"
+          : res.scheduled
+            ? "Scheduled for the feed — it'll go out by itself."
+            : "Posted to the feed ✓"
+      );
       router.refresh();
     });
   }
@@ -195,9 +205,13 @@ export function VariantWorkRow({
         <button onClick={copyCaption} disabled={pending} className={btn}>
           Copy caption
         </button>
-        {dest === "main" && !posted && !scheduled ? (
+        {(dest === "main" || publerConnected) && !posted && !scheduled ? (
           <button onClick={() => setComposing((v) => !v)} className={`${btn} border-accent/40 text-accent-hi`}>
-            {composing ? "Close Instagram form" : "Post via Instagram…"}
+            {composing
+              ? "Close form"
+              : dest === "trial"
+                ? "Post trial reel via Publer…"
+                : `Post via ${publerConnected ? "Publer" : "Instagram"}…`}
           </button>
         ) : null}
       </div>
@@ -219,7 +233,9 @@ export function VariantWorkRow({
           <PostComposer
             caption={draftCaption}
             onCaptionChange={setDraftCaption}
-            connected={instagramConnected ? ["instagram"] : []}
+            connected={(dest === "trial" ? publerConnected : instagramConnected) ? ["instagram"] : []}
+            nowOnly={dest === "trial"}
+            coverEnabled={!publerConnected}
             emptyHint={
               <>
                 {clientName} connects channels once in Settings → Integrations — after that they show up here to post and

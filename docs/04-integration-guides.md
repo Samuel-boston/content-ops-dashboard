@@ -8,7 +8,7 @@ Each guide can be done **three ways**. In the dashboard open **avatar menu → S
 
 The prompts contain no passwords or keys. The AI types values only into the boxes in Settings. Save settings after each one and test it.
 
-Recommended order: **Google Drive → Groq → scheduled jobs → Telegram → Instagram → email → your own Claude.** (Cloudflare Stream was done on the call.)
+Recommended order: **Google Drive → Groq → scheduled jobs → Telegram → Publer (or Instagram) → email → your own Claude.** (Cloudflare Stream was done on the call.)
 
 ---
 
@@ -63,9 +63,30 @@ Save settings, then press “Test the connection” — it must say Connected. C
 
 ---
 
+## Publer — post and schedule Reels, including trial reels
+
+The easy way to post from the dashboard: no Meta app or verification needed, and it can post Instagram trial reels, which Meta's own API cannot. Needs a Publer Business plan (check Publer's current pricing); it replaces the Meta / Instagram guide for posting.
+
+### Steps
+
+1. Go to publer.com and sign up or log in. Choose a Business plan — the API is not available on lower plans.
+2. In Publer open Social Accounts → Add account → Instagram, and connect the Instagram account you post from. It must be a Professional (Creator or Business) account.
+3. Open Settings → Access & Login → API Keys → Create API Key. Give it a name and tick these permissions: workspaces, accounts, posts and media. Create it and copy the key now.
+4. In this dashboard open Settings → Publer, paste the key, and press Connect. It finds your workspace and Instagram account by itself; if you have more than one account it asks which to post to.
+
+### Paste into Settings
+
+- Publer → the API key box, then the Connect button (nothing else to fill in)
+
+### Then
+
+The Publer card turns green and says Connected to Instagram. Press “Test the connection” to check it. Then on any video that is with the VA, mark a variant as a trial reel and press “Post trial reel via Publer…”. Choose whether trial reels stay trials or may be shared by Instagram automatically at the top of the Publer card.
+
+---
+
 ## Meta / Instagram — analytics and posting
 
-Lets the dashboard post and schedule Reels and carousels to the feed and read their numbers. Free. Trial reels can't be posted by any app — those are still posted by hand.
+Lets the dashboard post and schedule Reels and carousels to the feed and read their numbers. Free. Meta's own API cannot post trial reels — use the Publer guide above if you want those posted from the dashboard.
 
 ### Steps
 

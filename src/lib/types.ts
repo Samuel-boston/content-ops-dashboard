@@ -784,6 +784,10 @@ export interface PublishJob {
   published_at: string | null;
   cover_offset_ms: number;
   share_to_feed: boolean;
+  as_trial: boolean;
+  provider: "instagram" | "publer" | null;
+  publer_job_id: string | null;
+  permalink: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -800,6 +804,12 @@ export interface WorkspaceSettings {
   ig_user_id: string | null;
   ig_access_token: string | null;
   ig_token_expires_at: string | null;
+  /** Publer — posts and schedules Reels, including trial reels. Secret. */
+  publer_api_key: string | null;
+  publer_workspace_id: string | null;
+  publer_account_id: string | null;
+  publer_account_name: string | null;
+  publer_trial_mode: "MANUAL" | "SS_PERFORMANCE";
   telegram_bot_token: string | null;
   telegram_chat_ids: number[];
   telegram_user_ids: number[];
@@ -827,6 +837,8 @@ export interface IntegrationStatus {
   stream: boolean;
   drive: boolean;
   instagram: boolean;
+  /** Publer is connected and an Instagram account is chosen. */
+  publer: boolean;
   telegram: boolean;
   whisper: boolean;
   ai: boolean;

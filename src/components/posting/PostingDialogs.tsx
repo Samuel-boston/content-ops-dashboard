@@ -22,6 +22,7 @@ interface Loaded {
   jobs: PostingJobItem[];
   feedMetrics: Record<string, PostingFeedMetrics>;
   instagramConnected: boolean;
+  publerConnected?: boolean;
 }
 
 function Shell({ title, subtitle, cover, onClose, children }: { title: string; subtitle: string; cover?: string | null; onClose: () => void; children: React.ReactNode }) {
@@ -63,12 +64,14 @@ export function VideoWorkDialog({
   trials,
   jobs,
   instagramConnected,
+  publerConnected = false,
   clientName,
   onClose,
 }: {
   trials: PostingTrialItem[];
   jobs: PostingJobItem[];
   instagramConnected: boolean;
+  publerConnected?: boolean;
   clientName: string;
   onClose: () => void;
 }) {
@@ -112,7 +115,7 @@ export function VideoWorkDialog({
         ))}
 
         {trials.map((t) => (
-          <VariantWorkRow key={t.id} trial={t} instagramConnected={instagramConnected} clientName={clientName} />
+          <VariantWorkRow key={t.id} trial={t} instagramConnected={instagramConnected} publerConnected={publerConnected} clientName={clientName} />
         ))}
 
         {sendingBack ? (

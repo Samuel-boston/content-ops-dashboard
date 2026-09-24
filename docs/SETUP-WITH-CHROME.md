@@ -69,5 +69,5 @@ STEP 9. Finish. Tell me the site address. Remind me to save: the database passwo
 
 - **Cloudflare Stream** (video playback): account and card are the Owner's; then paste three values into Settings. Claude in Chrome can do this from the guide in Settings.
 - **Google Drive, Groq, Telegram, cron-job.org:** each has a guide in Settings > Set up your integrations that Claude in Chrome can follow. The Owner logs in, and types or approves anything secret.
-- **Instagram / Meta and email (Resend):** the Owner's identity checks and DNS changes are slow and not the Owner's fault. Post by hand and rely on in-app notifications until they clear.
+- **Publer, or Instagram / Meta, and email (Resend):** Publer needs a paid Business plan and has no verification wait. Meta identity checks (if Instagram is connected directly) and email DNS changes are slow and not the Owner's fault. Post by hand and rely on in-app notifications until they clear.
 - **Team logins:** the Owner adds each person under Team > Seats.

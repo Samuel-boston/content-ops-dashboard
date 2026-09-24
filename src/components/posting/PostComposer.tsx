@@ -47,6 +47,8 @@ export function PostComposer({
   durationSeconds,
   suggestedSlot,
   pending,
+  nowOnly = false,
+  coverEnabled = true,
   onSubmit,
 }: {
   caption: string;
@@ -61,6 +63,10 @@ export function PostComposer({
   /** A local datetime-input value for the "Suggested" button, if there is one. */
   suggestedSlot?: string;
   pending: boolean;
+  /** Only "post now" — no date and no cover/feed options. For trial reels. */
+  nowOnly?: boolean;
+  /** Whether the route in use honours a chosen cover frame (Publer picks its own). */
+  coverEnabled?: boolean;
   onSubmit: (v: ComposerSubmit) => void;
 }) {
   const [channels, setChannels] = useState<PublishChannel[]>(connected);
@@ -140,10 +146,11 @@ export function PostComposer({
       </div>
 
       {/* Cover & options — real Reels container settings */}
-      {isVideo && active.includes("instagram") ? (
+      {isVideo && active.includes("instagram") && !nowOnly ? (
         <div>
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-3">Cover &amp; options</h3>
           <div className="space-y-2 rounded-xl border border-line bg-card p-2.5">
+            {coverEnabled ? (
             <label className="flex items-center gap-2 text-xs text-ink-2">
               <span className="w-24 shrink-0 text-ink-3">Cover frame</span>
               <input
@@ -159,6 +166,7 @@ export function PostComposer({
                 seconds in{durationSeconds ? ` (of ${durationSeconds.toFixed(0)}s)` : ""}
               </span>
             </label>
+            ) : null}
             <label className="flex items-center gap-2 text-xs text-ink-2">
               <input
                 type="checkbox"
@@ -173,6 +181,7 @@ export function PostComposer({
       ) : null}
 
       {/* When */}
+      {nowOnly ? null : (
       <div>
         <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-ink-3">When</h3>
         <div className="flex items-center gap-2">
@@ -200,8 +209,10 @@ export function PostComposer({
           ) : null}
         </div>
       </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
+        {nowOnly ? null : (
         <button
           type="button"
           disabled={pending || active.length === 0 || !when}
@@ -210,13 +221,18 @@ export function PostComposer({
         >
           {pending ? "Working…" : "Schedule post"}
         </button>
+        )}
         <button
           type="button"
           disabled={pending || active.length === 0}
           onClick={() => submit(true)}
-          className="rounded-xl border border-line px-4 py-2.5 text-sm font-medium text-ink-2 transition hover:border-accent hover:text-ink disabled:opacity-50"
+          className={
+            nowOnly
+              ? "flex-1 rounded-xl bg-accent py-2.5 text-sm font-semibold text-white transition hover:bg-accent-hi disabled:opacity-50"
+              : "rounded-xl border border-line px-4 py-2.5 text-sm font-medium text-ink-2 transition hover:border-accent hover:text-ink disabled:opacity-50"
+          }
         >
-          Post now
+          {nowOnly ? (pending ? "Posting…" : "Post trial reel now") : "Post now"}
         </button>
       </div>
     </div>
