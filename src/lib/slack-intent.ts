@@ -30,6 +30,7 @@ export type SlackIntent =
   | { kind: "count"; stage: StageKey | null }
   | { kind: "list"; stage: StageKey | null }
   | { kind: "find"; query: string }
+  | { kind: "top" }
   | { kind: "move"; query: string; stage: StageKey }
   | { kind: "unknown"; text: string };
 
@@ -108,6 +109,8 @@ export function parseIntent(raw: string): SlackIntent {
     if (!body && /^(?:add|new|log|save|create)\b/i.test(text)) return { kind: "help" };
   }
 
+  if (/\b(top|best)\s+(performing\s+|posts?|videos?|content)/i.test(lower) || /\bwhat(?:'s| is)\s+(?:working|performing)\b/.test(lower)) return { kind: "top" };
+
   // move <title> to <stage>
   const mv = /^move\s+(.+?)\s+(?:to|into)\s+(.+)$/i.exec(text);
   if (mv) {
@@ -134,6 +137,7 @@ export const HELP_TEXT = [
   "• `how many in scripting` — a count for any stage; `pipeline` for all of them",
   "• `what's in scripting` / `list ready to edit` — the titles, with links",
   "• `find <words>` — search videos by title",
+  "• `top posts` — the best-performing posts on the Top posts list",
   "• `move <title> to scripting` — owners and admins can move an idea between Ideation, Scripting and Ready to Film",
   "Say it in your own words too — I'll try to work it out.",
 ].join("\n");

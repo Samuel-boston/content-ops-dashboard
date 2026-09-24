@@ -143,6 +143,43 @@ function buildServer(profile: Profile) {
     }
   );
 
+  server.registerTool(
+    "list_top_posts",
+    {
+      title: "List top posts",
+      description:
+        "The dashboard's curated list of top-performing posts (topic, hook, views, link, platform, creator), best first. " +
+        "Use it to see what has already been saved before suggesting more.",
+      inputSchema: tools.listTopPostsSchema.shape,
+    },
+    async (args) => {
+      try {
+        return ok(await tools.listTopPosts(profile, args));
+      } catch (e) {
+        return fail((e as Error).message);
+      }
+    }
+  );
+
+  server.registerTool(
+    "add_top_posts",
+    {
+      title: "Add top posts",
+      description:
+        "Add posts to the dashboard's Top posts list once the user has said they are good — each with its topic, the exact " +
+        "hook, the view count, and the link. Only add posts the user approved. Posts already on the list are skipped. " +
+        "Owners and admins only.",
+      inputSchema: tools.addTopPostsSchema.shape,
+    },
+    async (args) => {
+      try {
+        return ok(await tools.addTopPosts(profile, args));
+      } catch (e) {
+        return fail((e as Error).message);
+      }
+    }
+  );
+
   return server;
 }
 

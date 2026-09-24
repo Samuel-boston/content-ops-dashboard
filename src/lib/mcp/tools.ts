@@ -290,3 +290,71 @@ export async function messageEditor(profile: Profile, args: z.infer<typeof messa
   }
   return { ok: true, link: videoLink(args.video_id) };
 }
+
+// ---- Top posts ------------------------------------------------------------
+
+export const listTopPostsSchema = z.object({
+  query: z.string().optional().describe("Words to look for in the topic, hook or creator."),
+  source: z.enum(["own", "inspiration"]).optional().describe("Only the client's own posts, or only inspiration from other accounts."),
+  limit: z.number().int().min(1).max(100).optional().describe("How many to return (default 25, best first)."),
+});
+
+/** The curated list of top-performing posts, best first. Any seat may read it. */
+export async function listTopPosts(_profile: Profile, args: z.infer<typeof listTopPostsSchema>) {
+  const db = supabaseAdmin();
+  let q = db.from("top_posts").select("id, topic, hook, views, link, platform, creator, format, posted_on, notes, source").order("views", { ascending: false, nullsFirst: false }).limit(args.limit ?? 25);
+  if (args.source) q = q.eq("source", args.source);
+  if (args.query) {
+    const w = args.query.replace(/[%,()]/g, " ").trim();
+    if (w) q = q.or(`topic.ilike.%${w}%,hook.ilike.%${w}%,creator.ilike.%${w}%`);
+  }
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return { posts: data ?? [] };
+}
+
+export const addTopPostsSchema = z.object({
+  posts: z
+    .array(
+      z.object({
+        topic: z.string().min(1).describe("What the post was about, in a few words."),
+        hook: z.string().optional().describe("The exact opening line."),
+        views: z.union([z.number(), z.string()]).optional().describe('View count: 120000, "1.2M" or "350k".'),
+        link: z.string().optional().describe("Link to the post."),
+        platform: z.string().optional().describe("instagram, tiktok, youtube, linkedin, x or other. Worked out from the link when left out."),
+        creator: z.string().optional().describe("The account or channel that posted it."),
+        format: z.string().optional().describe("reel, short, carousel, long video…"),
+        posted_on: z.string().optional().describe("YYYY-MM-DD."),
+        notes: z.string().optional().describe("Why it worked."),
+        source: z.enum(["own", "inspiration"]).optional().describe('"own" for the client\'s own posts, otherwise "inspiration" (the default).'),
+      })
+    )
+    .min(1)
+    .max(50),
+});
+
+/**
+ * Add posts the user has approved to the Top posts list. Owners and admins only.
+ * Posts whose link is already on the list are skipped, so it is safe to repeat.
+ */
+export async function addTopPosts(profile: Profile, args: z.infer<typeof addTopPostsSchema>) {
+  if (!isManager(profile)) return { error: "Only an owner or admin can add to the Top posts list." };
+  const { insertTopPosts } = await import("@/lib/top-posts");
+  const { parseViews, platformOf } = await import("@/lib/top-posts-parse");
+  const res = await insertTopPosts(
+    args.posts.map((p) => ({
+      topic: p.topic,
+      hook: p.hook ?? null,
+      views: parseViews(p.views ?? null),
+      link: p.link ?? null,
+      platform: (p.platform?.toLowerCase() || platformOf(p.link)) ?? null,
+      creator: p.creator ?? null,
+      format: p.format ?? null,
+      posted_on: /^\d{4}-\d{2}-\d{2}/.test(p.posted_on ?? "") ? (p.posted_on as string).slice(0, 10) : null,
+      notes: p.notes ?? null,
+      source: p.source ?? "inspiration",
+    })),
+    profile.id
+  );
+  return { ok: true, ...res, link: `${APP_URL}/library/top-posts` };
+}

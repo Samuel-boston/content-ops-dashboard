@@ -172,9 +172,9 @@ It's quick and it lets you demo the review room. Follow the **Cloudflare Stream*
 
 ## 9. Live walkthrough (20 min) — use `05-how-it-works.md`
 
-1. Create an idea → drag it through Scripting → Script Review → Ready to Film → Editor Brief → Ready to Edit.
+1. Create an idea → move it through Scripting → Ready to Film → Editor Brief → Ready to Edit.
 2. Editor login: take it, upload a cut, submit for review.
-3. Owner: review → approve → **Ready to Post → drag to With the VA** → check each variant's destination and caption → Send.
+3. Owner: review → **Approve** (it goes straight to the VA's desk) → open the **Post** tab and check each variant's destination and caption.
 4. VA login: open it, work through the variants, **Mark as posted**.
 5. Show the **Archive** (calendar view) and the **Calendar**.
 6. Delete the test video.
@@ -502,7 +502,7 @@ There is no Script Review and no Ready to Post: a script lives in Scripting unti
 
 **Later:** any video, at any stage, can be shelved with the **Later** button (top of the video) and picked back up from **More → Later**. It leaves every board and count until you bring it back. Next to it is a **bin icon** that deletes a video for good, including its heavy files (owner and admins; it asks first).
 
-**The Board** opens on **All**: videos and carousels together, every stage, in one view. **Videos**, **Carousels** and **Filming** narrow it down.
+**The Board** opens on **All videos**: videos and carousels together, every stage, in one view. **Carousels**, **Filming** and **Long-form** narrow it down. Long-form is for YouTube: give a video the format **Long video** and it appears there; the VA posts it to YouTube as a regular video (not a Short, never a trial reel).
 
 **Every video, at every stage,** has a title, a **Thumbnail** (its own section: attach images from the B-Roll library or upload your own, write a brief, and ChatGPT designs it — or upload a finished one), a script and its video.
 
@@ -539,6 +539,8 @@ Everything is posted as a **trial reel** first. With **Publer** connected the VA
 - **Team** — each editor's work and pay, the copywriter's scripting pipeline, the VA's posting desk and tasks. Click a person to open their view.
 - **Library** — Footage (b-roll), Music (drag and drop as many tracks as you like; **categorise the ones marked with a red !**), References, and the SOP / Playbook.
 - **Analytics** — performance across videos.
+- **Library → Top posts** — the posts that worked: views, topic, hook and link. Add one by hand, paste a list, or let your own ChatGPT or Claude find good ones and add the ones you approve through the connector. Your own best posts are suggested automatically.
+- **The Monday digest** (email, Telegram and Slack) now includes performance: the last 7 and 30 days, the best posts, and the individual **standouts** — posts far above (or well below) what a typical post gets.
 - **Overview** — what needs your attention today.
 - **Slack** — once connected (Settings → Slack) the team can type `/ops add idea …`, `/ops how many in scripting`, `/ops what's in review` in Slack, and the dashboard announces scripts done, cuts ready for review, approvals and posts in a channel.
 - **Connect AI** (avatar menu) — connect your own Claude so it can list videos, write scripts, and move scripts between Ideation, Scripting and Script Review.

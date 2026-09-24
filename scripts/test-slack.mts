@@ -34,6 +34,9 @@ assert.deepEqual(k("find burnout"), { kind: "find", query: "burnout" });
 assert.deepEqual(k('where is "morning routine"'), { kind: "find", query: "morning routine" });
 assert.deepEqual(k("move morning routine to scripting"), { kind: "move", query: "morning routine", stage: "scripting" });
 
+assert.deepEqual(k("top posts"), { kind: "top" });
+assert.deepEqual(k("what's working"), { kind: "top" });
+
 // help / unknown
 assert.equal(k("").kind, "help");
 assert.equal(k("help").kind, "help");

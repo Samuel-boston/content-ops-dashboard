@@ -128,6 +128,17 @@ async function run(intent: SlackIntent, actor: Actor): Promise<string> {
       return `*${STAGE_LABEL[stage]}* (${rows.length > 15 ? "15+" : rows.length})\n${shown.join("\n")}${more}`;
     }
 
+    case "top": {
+      const { data } = await db
+        .from("top_posts")
+        .select("topic, hook, views, link")
+        .order("views", { ascending: false, nullsFirst: false })
+        .limit(5);
+      if (!data?.length) return "The Top posts list is empty. Add some in Library → Top posts.";
+      const fmt = (n: number | null) => (n === null ? "?" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
+      return `*Top posts*\n` + data.map((r) => `• *${fmt(r.views as number | null)}* ${r.link ? `<${r.link}|${String(r.topic).replace(/[<>|]/g, "")}>` : String(r.topic).replace(/[<>|]/g, "")}${r.hook ? ` — “${String(r.hook).replace(/[<>|]/g, "")}”` : ""}`).join("\n");
+    }
+
     case "find": {
       const q = intent.query.replace(/[%,()]/g, " ").trim();
       if (!q) return "Find what? Try `find burnout`.";
