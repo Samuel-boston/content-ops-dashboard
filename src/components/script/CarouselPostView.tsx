@@ -182,8 +182,7 @@ export function CarouselPostView({
           <TrialsPanel
             videoId={video.id}
             vaNotes={video.va_notes}
-            vaSentAt={video.va_sent_at}
-            withVa={video.status === "with_va"}
+            status={video.status}
             hasCover={Boolean(video.cover_path)}
           />
         </div>

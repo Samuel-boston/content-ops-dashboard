@@ -9,6 +9,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getCurrentProfile, requireRole, requireUser } from "@/lib/auth";
 import { notify, notifyTelegram } from "@/lib/notify";
 import { STATUS_ORDER } from "@/lib/types";
+import { releaseFromVa } from "@/lib/va-handoff";
 import type {
   Priority,
   Profile,
@@ -372,8 +373,15 @@ export async function setStatusAction(id: string, status: VideoStatus) {
     .select("assigned_editor_id, title, status")
     .eq("id", id)
     .single();
+  // "With the VA" is entered through the hand-off (variants, captions,
+  // destinations, instructions), never by just changing the status.
+  if (status === "with_va" && before?.status !== "with_va") {
+    return { error: "Send it to the VA from Ready to Post — the VA needs each variant's destination and caption." };
+  }
   const { error } = await supabase.from("videos").update({ status }).eq("id", id);
   if (error) return { error: error.message };
+  // Leaving the VA's desk for anywhere but Posted clears their side.
+  if (before?.status === "with_va" && status !== "with_va" && status !== "posted") await releaseFromVa(id);
 
   // Sending a video back for revisions pings the editor it's assigned to.
   if (status === "revisions" && before?.assigned_editor_id && before.assigned_editor_id !== me.id) {

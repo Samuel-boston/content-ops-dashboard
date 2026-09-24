@@ -11,15 +11,15 @@ import {
   markTrialWinnerAction,
   promoteTrialAction,
   saveTrialMetricsAction,
+  saveVaCoverAction,
+  saveVaNotesAction,
   sendToVaAction,
-  sendVariantToVaAction,
   takeBackFromVaAction,
-  takeBackVariantAction,
   updateVariantAction,
 } from "@/app/trial-actions";
 import { createFootageUploadUrlAction } from "@/app/asset-actions";
 import { IconTrash } from "@/components/ui/icons";
-import { TRIAL_STATUS_LABELS, type TrialPost } from "@/lib/types";
+import { TRIAL_STATUS_LABELS, type TrialPost, type VideoStatus } from "@/lib/types";
 import { CHOICE_LABELS, variantChoice, variantStateLabel, type VariantChoice } from "@/lib/variant-state";
 import { vaSetVariantStateAction } from "@/app/posting-actions";
 
@@ -37,17 +37,18 @@ import { vaSetVariantStateAction } from "@/app/posting-actions";
 export function TrialsPanel({
   videoId,
   vaNotes = null,
-  vaSentAt = null,
-  withVa = false,
+  status,
   hasCover = false,
   fallbackCaption = "",
   onWatch,
+  onSent,
 }: {
   videoId: string;
   vaNotes?: string | null;
-  vaSentAt?: string | null;
-  /** The video is in the "With the VA" stage. */
-  withVa?: boolean;
+  /** The video's stage: Ready to Post shows the hand-off, With the VA shows the take-back. */
+  status: VideoStatus;
+  /** Called once the video has been sent to (or taken back from) the VA. */
+  onSent?: () => void;
   hasCover?: boolean;
   /** The Post tab's caption box — used for any variant that hasn't got its own. */
   fallbackCaption?: string;
@@ -66,6 +67,8 @@ export function TrialsPanel({
   // null = the first one still waiting to be sent; "none" = all collapsed.
   const [openId, setOpenId] = useState<string | null>(null);
   const coverInput = useRef<HTMLInputElement>(null);
+  const withVa = status === "with_va";
+  const readyToSend = status === "ready_to_post";
 
   async function uploadCover(file: File) {
     if (file.size > 20 * 1024 * 1024) {
@@ -84,6 +87,12 @@ export function TrialsPanel({
       if (!put.ok) throw new Error(`Upload failed (${put.status}).`);
       setCoverPath(up.path);
       setCoverName(file.name);
+      // Already with the VA: the new cover reaches them straight away.
+      if (withVa) {
+        const saved = await saveVaCoverAction(videoId, up.path);
+        if (saved && "error" in saved && saved.error) throw new Error(saved.error);
+        toast.success("Cover updated.");
+      }
     } catch (e) {
       toast.error((e as Error).message);
     }
@@ -129,87 +138,103 @@ export function TrialsPanel({
   const field =
     "rounded-md border border-line bg-raised px-2 py-1 text-xs placeholder:text-ink-3 focus:border-accent focus:outline-none";
   const cutKind = (t: TrialPost) => cuts.find((c) => c.id === t.cut_id)?.kind ?? "main";
-  const waiting = trials.filter((t) => t.status === "planned" && !t.sent_to_va_at);
+  const waiting = trials.filter((t) => t.status === "planned");
   const activeId = openId ?? (waiting[0] ?? trials[0])?.id ?? "";
 
   return (
     <section className="mb-4 rounded-xl border border-line bg-card p-3">
-      {/* The hand-off: nothing reaches the VA until this is pressed. */}
-      <div className="mb-3 space-y-2 rounded-lg border border-accent/30 bg-accent-ghost p-2.5">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold">Send to the VA</h3>
-          {vaSentAt ? (
-            <span className="rounded-md bg-ok/15 px-1.5 py-0.5 text-[10px] font-medium text-ok">
-              Sent {new Date(vaSentAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-            </span>
-          ) : null}
-        </div>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={3}
-          placeholder="Notes for the VA — when to post, anything specific."
-          className="w-full resize-y rounded-md border border-line bg-raised px-2.5 py-2 text-xs placeholder:text-ink-3 focus:border-accent focus:outline-none"
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => coverInput.current?.click()}
-            disabled={uploadingCover}
-            className="rounded-md border border-line bg-card px-2.5 py-1.5 text-[11px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
-          >
-            {uploadingCover ? "Uploading…" : coverName ? `Cover: ${coverName}` : hasCover ? "Replace the cover" : "Upload a cover"}
-          </button>
-          <input
-            ref={coverInput}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void uploadCover(f);
-              e.target.value = "";
+      {/* The hand-off. Ready to Post: this is where it's sent. With the VA: it can be edited live or taken back. */}
+      {readyToSend || withVa ? (
+        <div className="mb-3 space-y-2 rounded-lg border border-accent/30 bg-accent-ghost p-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-semibold">{withVa ? "With the VA" : "Send to the VA"}</h3>
+            {withVa ? (
+              <span className="text-[11px] text-ink-3">
+                Anything you change here — captions, destinations, instructions, the cover — reaches them straight away.
+              </span>
+            ) : (
+              <span className="text-[11px] text-ink-3">
+                They get every variant below, each with its destination (trial reel or main feed) and caption.
+              </span>
+            )}
+          </div>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            onBlur={() => {
+              if (withVa && notes.trim() !== (vaNotes ?? "").trim()) void saveVaNotesAction(videoId, notes);
             }}
+            rows={3}
+            placeholder="Instructions for the VA — when to post, anything specific."
+            className="w-full resize-y rounded-md border border-line bg-raised px-2.5 py-2 text-xs placeholder:text-ink-3 focus:border-accent focus:outline-none"
           />
-          <button
-            type="button"
-            disabled={pending || uploadingCover}
-            onClick={() =>
-              run(
-                () => sendToVaAction({ videoId, notes, coverPath, fallbackCaption }),
-                () => toast.success(vaSentAt ? "Updated for the VA." : "Sent to the VA.")
-              )
-            }
-            className="ml-auto rounded-md bg-accent px-3 py-1.5 text-[11px] font-medium text-white hover:bg-accent-hi disabled:opacity-50"
-          >
-            {waiting.length > 1 ? "Send all chosen variants" : withVa ? "Update what the VA sees" : "Send to the VA"}
-          </button>
-          {withVa ? (
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              disabled={pending}
-              onClick={() =>
-                run(
-                  () => takeBackFromVaAction(videoId),
-                  () => toast.success("Taken back from the VA — it's in Ready to Post again.")
-                )
-              }
-              className="rounded-md border border-line bg-card px-3 py-1.5 text-[11px] text-ink-2 hover:border-warn hover:text-ink disabled:opacity-50"
+              onClick={() => coverInput.current?.click()}
+              disabled={uploadingCover}
+              className="rounded-md border border-line bg-card px-2.5 py-1.5 text-[11px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
             >
-              Take it back from the VA
+              {uploadingCover ? "Uploading…" : coverName ? `Cover: ${coverName}` : hasCover ? "Replace the cover" : "Upload a cover"}
             </button>
-          ) : null}
+            <input
+              ref={coverInput}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void uploadCover(f);
+                e.target.value = "";
+              }}
+            />
+            {withVa ? (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() =>
+                  run(
+                    () => takeBackFromVaAction(videoId),
+                    () => {
+                      toast.success("Taken back — it's in Ready to Post again.");
+                      onSent?.();
+                    }
+                  )
+                }
+                className="ml-auto rounded-md border border-line bg-card px-3 py-1.5 text-[11px] text-ink-2 hover:border-warn hover:text-ink disabled:opacity-50"
+              >
+                Take it back from the VA
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={pending || uploadingCover}
+                onClick={() =>
+                  run(
+                    () => sendToVaAction({ videoId, notes, coverPath }),
+                    () => {
+                      toast.success("Sent to the VA.");
+                      onSent?.();
+                    }
+                  )
+                }
+                className="ml-auto rounded-md bg-accent px-4 py-1.5 text-xs font-medium text-white hover:bg-accent-hi disabled:opacity-50"
+              >
+                Send to the VA
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-semibold">Variants</h3>
         <span className="text-xs text-ink-3">{trials.length}</span>
       </div>
       <p className="mb-3 text-[11px] leading-relaxed text-ink-3">
-        Give each variant a destination and a caption, then send it. Trials post by hand from the
-        Instagram app; a main-feed post can be published straight from the VA&rsquo;s desk once
-        Instagram is connected.
+        Set each variant to a trial reel or the main feed and write its caption. Trials are posted by
+        hand from the Instagram app; a main-feed post can be published straight from the VA&rsquo;s desk
+        once Instagram is connected.
       </p>
 
       {trials.length === 0 ? (
@@ -311,7 +336,7 @@ function TrialRow({
           </span>
         ) : null}
         <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${chip}`}>
-          {t.status === "planned" && t.sent_to_va_at ? "With the VA" : t.status === "planned" ? TRIAL_STATUS_LABELS[t.status] : variantStateLabel(t)}
+          {t.status === "planned" ? TRIAL_STATUS_LABELS[t.status] : variantStateLabel(t)}
         </span>
         <button
           title="Archive this trial"
@@ -405,30 +430,6 @@ function TrialRow({
             className={`${field} min-h-32 w-full resize-y text-sm leading-relaxed`}
           />
           <div className="flex flex-wrap items-center gap-2">
-            {t.sent_to_va_at ? (
-              <>
-                <span className="text-[11px] text-ok">
-                  ✓ With the VA since{" "}
-                  {new Date(t.sent_to_va_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} — changes
-                  here reach them straight away.
-                </span>
-                <button
-                  onClick={() => run(() => takeBackVariantAction(t.id, videoId))}
-                  disabled={pending}
-                  className="ml-auto rounded-md border border-line px-2.5 py-1 text-[11px] text-ink-2 hover:border-warn hover:text-ink disabled:opacity-50"
-                >
-                  Take it back from the VA
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={() => run(() => sendVariantToVaAction(t.id, videoId, fallbackCaption))}
-                disabled={pending}
-                className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hi disabled:opacity-50"
-              >
-                Send this one to the VA
-              </button>
-            )}
             <span className="flex w-full items-center gap-1">
               <input
                 value={permalink}

@@ -8,6 +8,7 @@ import { displayName } from "@/lib/format";
 import { NUDGES, type NudgeKind } from "@/lib/nudges";
 import { previousStage, type VideoStatus } from "@/lib/types";
 import { isCarouselFormat } from "@/lib/taxonomy";
+import { releaseFromVa } from "@/lib/va-handoff";
 
 function revalidateAll(videoId?: string) {
   for (const p of [
@@ -525,6 +526,8 @@ export async function stepBackStageAction(videoId: string) {
 
   const { error } = await supabase.from("videos").update({ status: back }).eq("id", videoId);
   if (error) return { error: error.message };
+  // Stepping back out of the VA's hands clears their side, same as taking it back.
+  if (video.status === "with_va") await releaseFromVa(videoId);
 
   await supabase.from("video_activity").insert({
     video_id: videoId,

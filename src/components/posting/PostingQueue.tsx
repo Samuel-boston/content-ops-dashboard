@@ -633,11 +633,11 @@ function VideoDialog({
             {sendingBack ? (
               <div className="rounded-xl border border-warn/40 bg-warn/5 p-3">
                 <p className="text-xs font-medium text-ink">
-                  Send this back to {clientName}&rsquo;s side — it goes to Final Review.
+                  Send this back to {clientName}&rsquo;s side — it goes back to Ready to Post.
                 </p>
                 <p className="mt-0.5 text-[11px] text-ink-3">
-                  Unposted variants leave your desk (their captions are kept) and anything scheduled is taken off the
-                  schedule. Say what needs changing — it goes in the video&rsquo;s chat and they&rsquo;re notified.
+                  It leaves your desk (captions are kept) and anything scheduled is taken off the schedule. Say what
+                  needs changing — it goes in the video&rsquo;s chat and they&rsquo;re notified.
                 </p>
                 <textarea
                   value={reason}
@@ -656,7 +656,7 @@ function VideoDialog({
                         const res = await vaSendBackAction(group.videoId, reason);
                         if (res?.error) toast.error(res.error);
                         else {
-                          toast.success("Sent back — it's in Final Review now.");
+                          toast.success("Sent back — it's in Ready to Post on their board.");
                           onClose();
                           router.refresh();
                         }

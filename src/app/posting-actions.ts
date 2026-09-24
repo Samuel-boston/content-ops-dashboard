@@ -12,7 +12,7 @@ import { runPublishJob } from "@/lib/publish-runner";
 import { linkMainFeedAnalytics } from "@/lib/analytics-link";
 import { isOnMainFeed, type VariantChoice } from "@/lib/variant-state";
 import { notify } from "@/lib/notify";
-import { isCarouselFormat } from "@/lib/taxonomy";
+import { releaseFromVa } from "@/lib/va-handoff";
 import type { PublishStatus, TrialPost, TrialStatus } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -85,13 +85,16 @@ export async function listPostingWork(): Promise<{
   const db = supabaseAdmin();
 
   const settings = await getWorkspaceSettings();
-  const [{ data: trials }, { data: jobs }] = await Promise.all([
-    db
-      .from("trial_posts")
-      .select("*, video:videos (title, va_notes, cover_path, post_caption)")
-      .in("status", ["planned", "posted", "promoted"])
-      .not("sent_to_va_at", "is", null)
-      .order("scheduled_for", { ascending: true, nullsFirst: false }),
+  // The VA's desk is defined by the video's stage: everything on a video that is
+  // "With the VA", plus variants already posted from earlier hand-offs (the record).
+  const { data: withVa } = await db.from("videos").select("id").eq("status", "with_va");
+  const withVaIds = (withVa ?? []).map((v) => v.id as string);
+  const select = "*, video:videos (title, va_notes, cover_path, post_caption)";
+  const [{ data: current }, { data: history }, { data: jobs }] = await Promise.all([
+    withVaIds.length
+      ? db.from("trial_posts").select(select).in("video_id", withVaIds).neq("status", "archived")
+      : Promise.resolve({ data: [] as never[] }),
+    db.from("trial_posts").select(select).in("status", ["posted", "promoted"]).not("sent_to_va_at", "is", null),
     db
       .from("publish_jobs")
       .select("id, caption, scheduled_for, status, channels, error, video:videos (title)")
@@ -99,6 +102,10 @@ export async function listPostingWork(): Promise<{
       .order("scheduled_for", { ascending: true, nullsFirst: false })
       .limit(30),
   ]);
+  const seen = new Set<string>();
+  const trials = [...(current ?? []), ...(history ?? [])]
+    .filter((t) => (seen.has(t.id as string) ? false : (seen.add(t.id as string), true)))
+    .sort((x, y) => String(x.scheduled_for ?? "9999").localeCompare(String(y.scheduled_for ?? "9999")));
 
   return {
     instagramConnected: integrationStatus(settings).instagram,
@@ -151,7 +158,8 @@ export async function listPostingWork(): Promise<{
       postAs: t.post_as === "main" ? "main" : "trial",
       onMainFeed: isOnMainFeed(t),
       scheduled: t.status === "promoted" && !t.posted_at,
-      notes: t.notes ?? t.video?.va_notes ?? null,
+      // Instructions live on the video, so the client editing them reaches the desk at once.
+      notes: t.video?.va_notes ?? t.notes ?? null,
       coverUrl,
       images,
       durationSeconds,
@@ -252,7 +260,6 @@ async function finishVideoIfDone(videoId: string) {
     .select("id")
     .eq("video_id", videoId)
     .eq("status", "planned")
-    .not("sent_to_va_at", "is", null)
     .limit(1);
   if (open?.length) return false;
   await markVideoPosted(videoId);
@@ -504,42 +511,23 @@ export async function vaSaveLinkAction(trialId: string, permalink: string) {
 
 /**
  * The VA sends a video back to the client's side because something needs
- * changing before it can go out. It lands in Final Review (a carousel: back in
- * Creatives to Review), the variants leave the posting desk with their captions
- * intact, and anything scheduled for it is taken off the schedule. The reason is
- * posted in the video's chat and the owner/admins are told.
+ * changing before it can go out. The video goes from With the VA back to Ready
+ * to Post on the client's board, the variants leave the posting desk with their
+ * captions intact, and anything scheduled for it is taken off the schedule. The
+ * reason is posted in the video's chat and the owner/admins are told.
  */
 export async function vaSendBackAction(videoId: string, reason: string) {
   const me = await requireRole("va", "owner", "admin");
   const note = reason.trim();
   if (!note) return { error: "Say what needs changing, so they know what to look at." };
   const db = supabaseAdmin();
-  const { data: video } = await db.from("videos").select("title, status, formats").eq("id", videoId).maybeSingle();
+  const { data: video } = await db.from("videos").select("title, status").eq("id", videoId).maybeSingle();
   if (!video) return { error: "Video not found." };
-  if (video.status === "posted") return { error: "That one has already gone out." };
+  if (video.status !== "with_va") return { error: "It isn't with the VA any more." };
 
-  // Anything scheduled for it comes off the schedule, so it can't publish while it's being changed.
-  const { data: waiting } = await db
-    .from("trial_posts")
-    .select("id, promoted_job_id, status")
-    .eq("video_id", videoId)
-    .eq("status", "promoted");
-  for (const t of waiting ?? []) {
-    if (t.promoted_job_id) {
-      await db.from("publish_jobs").update({ status: "cancelled" }).eq("id", t.promoted_job_id).eq("status", "scheduled");
-    }
-  }
-  await db
-    .from("trial_posts")
-    .update({ status: "planned", promoted_job_id: null })
-    .eq("video_id", videoId)
-    .eq("status", "promoted")
-    .is("posted_at", null);
-  // Variants not yet posted leave the VA's desk; ones already posted stay as a record.
-  await db.from("trial_posts").update({ sent_to_va_at: null }).eq("video_id", videoId).eq("status", "planned");
-
-  const to = isCarouselFormat(video.formats as string[]) ? "creative_review" : "final_review";
-  const { error } = await db.from("videos").update({ status: to, va_sent_at: null }).eq("id", videoId);
+  // Off the VA's desk, off the schedule, back in Ready to Post.
+  await releaseFromVa(videoId);
+  const { error } = await db.from("videos").update({ status: "ready_to_post" }).eq("id", videoId);
   if (error) return { error: error.message };
 
   const who = (me as { full_name?: string | null; email?: string }).full_name || (me as { email?: string }).email || "The VA";
@@ -553,7 +541,7 @@ export async function vaSendBackAction(videoId: string, reason: string) {
     video_id: videoId,
     actor_id: me.id,
     kind: "status",
-    summary: `Sent back from posting → ${to === "final_review" ? "Final Review" : "Creatives to Review"}: ${note}`,
+    summary: `Sent back from the VA → Ready to Post: ${note}`,
   });
   const { data: managers } = await db.from("profiles").select("id").in("role", ["owner", "admin"]).eq("active", true);
   await notify({
