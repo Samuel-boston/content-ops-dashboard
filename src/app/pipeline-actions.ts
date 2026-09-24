@@ -567,6 +567,11 @@ export async function parkVideoAction(videoId: string, reason?: string) {
     .update({ parked_at: new Date().toISOString(), parked_reason: reason?.trim() || null })
     .eq("id", videoId);
   if (error) return { error: error.message };
+  // Shelved while with the VA: it comes off their desk and waits in Ready to Post.
+  if (before.status === "with_va") {
+    await releaseFromVa(videoId);
+    await supabase.from("videos").update({ status: "ready_to_post" }).eq("id", videoId);
+  }
 
   await supabase.from("video_activity").insert({
     video_id: videoId,

@@ -1,5 +1,6 @@
 import { runDuePublishJobs } from "@/lib/publish-runner";
 import { syncPendingVersions } from "@/lib/stream-sync";
+import { purgeOldDoneTasks } from "@/lib/task-purge";
 
 // A single Reel can take a couple of minutes to be accepted by Instagram.
 export const maxDuration = 300;
@@ -26,5 +27,6 @@ export async function GET(req: Request) {
   const result = await runDuePublishJobs();
   // Also finishes any upload whose page was closed before Cloudflare was done.
   const synced = await syncPendingVersions();
+  await purgeOldDoneTasks();
   return Response.json({ ok: true, ...result, synced });
 }

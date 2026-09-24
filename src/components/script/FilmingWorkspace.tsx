@@ -17,6 +17,7 @@ import { updateVideoAction } from "@/app/actions";
 import { IconChart, IconCheck, IconFile, IconMic, IconTrash } from "@/components/ui/icons";
 import { STATUS_COLOR, STATUS_LABELS } from "@/lib/types";
 import type { GuestLink, Video, VideoAsset } from "@/lib/types";
+import { ParkButton } from "@/components/pipeline/ParkButton";
 
 /**
  * The assembly step between "script done" and "sent to editors" — everything
@@ -95,6 +96,7 @@ export function FilmingWorkspace({
           </Link>
           <span className="text-ink-3">/</span>
           <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{video.title}</h1>
+          <ParkButton videoId={video.id} parked={Boolean(video.parked_at)} compact />
           <Link
             href={`/videos/${video.id}/script`}
             className="rounded-lg border border-line px-2.5 py-1.5 text-xs text-ink-2 hover:bg-hover hover:text-ink"

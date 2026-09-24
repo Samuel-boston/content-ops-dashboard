@@ -93,7 +93,7 @@ export function computePriorities(videos: Sliver[], now = Date.now()): PriorityI
       label: `${approvedNoDate.length} approved with no post date`,
       count: approvedNoDate.length,
       tone: "warn",
-      href: "/publishing",
+      href: "/calendar",
       examples: titles(approvedNoDate),
     });
 

@@ -14,6 +14,7 @@ import { saveIdeaNotesAction } from "@/app/script-actions";
 import { updateVideoAction } from "@/app/actions";
 import { isCarouselFormat } from "@/lib/taxonomy";
 import type { CarouselImage, Profile, ReferenceItem, Video } from "@/lib/types";
+import { ParkButton } from "@/components/pipeline/ParkButton";
 
 /**
  * The idea shelf, opened up.
@@ -73,6 +74,7 @@ export function IdeaWorkspace({
             </Link>
             <span className="text-ink-3">/</span>
             <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{video.title}</h1>
+            {canEdit ? <ParkButton videoId={video.id} parked={Boolean(video.parked_at)} compact /> : null}
           </div>
           <PlanningStageBar
             videoId={video.id}

@@ -14,6 +14,7 @@ import {
 } from "@/app/task-actions";
 import { PRIORITY_LABELS, PRIORITY_ORDER, type Priority } from "@/lib/types";
 import { dayMonth } from "@/lib/format";
+import { DONE_KEEP_HOURS } from "@/lib/task-hours";
 
 const PRIORITY_TONE: Record<Priority, string> = {
   urgent: "var(--color-danger)",
@@ -22,14 +23,16 @@ const PRIORITY_TONE: Record<Priority, string> = {
 };
 
 /**
- * The "Other" board: open tasks in columns by priority, finished ones in a
- * collapsed list underneath. Clicking a card opens the details — what to do
+ * The "Other" board: open tasks in columns by priority, and a Done column for
+ * finished ones — kept for 48 hours in case something needs checking, then
+ * removed automatically. Clicking a card opens the details — what to do
  * and the best way to do it — in a dialog, so the board itself stays scannable.
  */
 export function VaTaskBoard({ tasks, canManage }: { tasks: VaTask[]; canManage: boolean }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [showDone, setShowDone] = useState(false);
+  // Fixed at mount: the "deletes in Xh" labels needn't tick, and reading the clock in render is impure.
+  const [now] = useState(() => Date.now());
 
   const open = tasks.filter((t) => t.status === "todo");
   const done = tasks.filter((t) => t.status === "done");
@@ -50,7 +53,7 @@ export function VaTaskBoard({ tasks, canManage }: { tasks: VaTask[]; canManage: 
         </div>
       ) : null}
 
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {PRIORITY_ORDER.map((p) => {
           const items = open
             .filter((t) => t.priority === p)
@@ -93,36 +96,48 @@ export function VaTaskBoard({ tasks, canManage }: { tasks: VaTask[]; canManage: 
             </section>
           );
         })}
-      </div>
 
-      {done.length > 0 ? (
-        <section>
-          <button
-            type="button"
-            onClick={() => setShowDone((v) => !v)}
-            className="text-xs text-ink-3 hover:text-ink-2"
-          >
-            {showDone ? "Hide" : "Show"} {done.length} finished
-          </button>
-          {showDone ? (
-            <div className="mt-2 overflow-hidden rounded-xl border border-line bg-card">
-              {done.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setOpenId(t.id)}
-                  className="flex w-full items-center gap-2 border-b border-line px-3 py-2 text-left text-sm text-ink-3 last:border-0 hover:bg-hover/40"
-                >
-                  <span className="text-ok">
-                    <IconCheck size={12} />
-                  </span>
-                  <span className="min-w-0 flex-1 truncate line-through">{t.title}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
+        {/* Finished tasks wait here for 48 hours, then delete themselves. */}
+        <section className="flex min-h-[8rem] flex-col rounded-xl border border-line bg-panel p-2">
+          <div className="mb-2 flex items-center gap-2 px-1.5 pt-1">
+            <span className="h-2 w-2 rounded-full bg-ok" />
+            <h3 className="text-sm font-semibold">Done</h3>
+            <span className="ml-auto rounded-md bg-raised px-1.5 py-0.5 text-[11px] tabular-nums text-ink-3">{done.length}</span>
+          </div>
+          <p className="px-1.5 pb-1.5 text-[10px] leading-snug text-ink-3">
+            Removed automatically {DONE_KEEP_HOURS} hours after it&rsquo;s marked done.
+          </p>
+          <div className="flex-1 space-y-1.5">
+            {done.length === 0 ? (
+              <p className="px-2 py-4 text-center text-[11px] text-ink-3">Nothing finished</p>
+            ) : (
+              done
+                .sort((a, b) => (b.done_at ?? "").localeCompare(a.done_at ?? ""))
+                .map((t) => {
+                  const left = t.done_at ? Math.max(0, DONE_KEEP_HOURS - (now - new Date(t.done_at).getTime()) / 3600e3) : DONE_KEEP_HOURS;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setOpenId(t.id)}
+                      className="block w-full space-y-1 rounded-lg border border-line bg-card px-3 py-2.5 text-left opacity-80 transition hover:border-line-strong hover:opacity-100"
+                    >
+                      <span className="flex items-start gap-1.5 text-sm font-medium leading-snug">
+                        <span className="mt-0.5 text-ok">
+                          <IconCheck size={12} />
+                        </span>
+                        <span className="min-w-0 flex-1 line-through decoration-ink-3">{t.title}</span>
+                      </span>
+                      <span className="block text-[11px] text-ink-3">
+                        Deletes in {left >= 1 ? `${Math.floor(left)}h` : "under an hour"}
+                      </span>
+                    </button>
+                  );
+                })
+            )}
+          </div>
         </section>
-      ) : null}
+      </div>
 
       {tasks.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line-strong px-4 py-12 text-center text-sm text-ink-3">

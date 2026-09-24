@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
+import { purgeOldDoneTasks } from "@/lib/task-purge";
 import type { Priority } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -27,6 +28,8 @@ export interface VaTask {
 
 export async function listVaTasks(): Promise<VaTask[]> {
   await requireRole("va", "owner", "admin");
+  // Anything finished more than 48 hours ago goes now — so nobody has to clear the Done column.
+  await purgeOldDoneTasks();
   const { data } = await supabaseAdmin()
     .from("va_tasks")
     .select("id, title, details, link, priority, due_date, status, done_at, created_at")

@@ -40,6 +40,7 @@ import {
   type Video,
   type VideoAsset,
 } from "@/lib/types";
+import { ParkButton } from "@/components/pipeline/ParkButton";
 
 /**
  * The last stop before a video is the editors' — everything that makes the
@@ -181,6 +182,7 @@ export function EditorBriefWorkspace({
           </Link>
           <span className="text-ink-3">/</span>
           <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{video.title}</h1>
+          <ParkButton videoId={video.id} parked={Boolean(video.parked_at)} compact />
           <Link
             href={`/videos/${video.id}/${isCarouselFormat(video.formats) ? "script" : "film"}`}
             className="rounded-lg border border-line px-2.5 py-1.5 text-xs text-ink-2 hover:bg-hover hover:text-ink"

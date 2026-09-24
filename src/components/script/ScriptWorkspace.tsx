@@ -28,6 +28,7 @@ import { approveCarouselScriptAction, requestScriptRevisionsAction } from "@/app
 import { updateVideoAction } from "@/app/actions";
 import { readTime } from "@/lib/format";
 import { PLANNING_STAGES, type CarouselImage, type Profile, type ReferenceItem, type ScriptComment, type Video } from "@/lib/types";
+import { ParkButton } from "@/components/pipeline/ParkButton";
 
 /**
  * The client's writing room. Deliberately one job per pane: the script on the
@@ -150,6 +151,7 @@ export function ScriptWorkspace({
             </Link>
             <span className="text-ink-3">/</span>
             <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{video.title}</h1>
+            {isClient ? <ParkButton videoId={video.id} parked={Boolean(video.parked_at)} compact /> : null}
             {/* Only once there's a cut to review — before that, /videos/[id]
                 just bounces back to this room, which read as a dead button. */}
             {!PLANNING_STAGES.includes(video.status) ? (

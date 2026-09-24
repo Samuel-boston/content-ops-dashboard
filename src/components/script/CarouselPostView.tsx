@@ -18,6 +18,7 @@ import {
 } from "@/app/pipeline-actions";
 import { IconCheck, IconChevronRight, IconSparkles } from "@/components/ui/icons";
 import { STATUS_COLOR, STATUS_LABELS, type CarouselImage, type Profile, type ScriptComment, type Video } from "@/lib/types";
+import { ParkButton } from "@/components/pipeline/ParkButton";
 
 /**
  * The carousel's whole life after the script is approved, in one place.
@@ -70,6 +71,7 @@ export function CarouselPostView({
           </Link>
           <span className="text-ink-3">/</span>
           <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{video.title}</h1>
+          <ParkButton videoId={video.id} parked={Boolean(video.parked_at)} compact />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span

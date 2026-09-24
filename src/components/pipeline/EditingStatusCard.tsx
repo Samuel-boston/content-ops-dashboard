@@ -4,6 +4,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { IconClock } from "@/components/ui/icons";
 import { dayMonth, displayName } from "@/lib/format";
 import type { Profile, Video } from "@/lib/types";
+import { ParkButton } from "@/components/pipeline/ParkButton";
 
 /**
  * What "Editing" opens onto for a manager: who has it and when it's due —
@@ -29,6 +30,7 @@ export function EditingStatusCard({
         </Link>
         <span className="text-ink-3">/</span>
         <h1 className="min-w-0 flex-1 truncate text-lg font-semibold">{video.title}</h1>
+        <ParkButton videoId={video.id} parked={Boolean(video.parked_at)} compact />
       </div>
 
       <div className="rounded-2xl border border-line bg-card p-5 text-center">

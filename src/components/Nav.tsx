@@ -41,7 +41,6 @@ const MANAGER_LINKS_AFTER = [
 const MORE_LINKS = [
   { href: "/archive", label: "Archive" },
   { href: "/parked", label: "Later" },
-  { href: "/publishing", label: "Publishing" },
   { href: "/tasks", label: "VA Tasks" },
 ];
 
