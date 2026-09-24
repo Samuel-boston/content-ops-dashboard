@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useTrackedTransition } from "@/components/ui/Pending";
 import { useRouter } from "next/navigation";
 import type { PlayerHandle } from "@/components/engine/StreamPlayer";
@@ -146,6 +146,50 @@ export function VideoWorkspace({
   const [voiceNonce, setVoiceNonce] = useState(0);
   const [screenNonce, setScreenNonce] = useState(0);
   const [mobilePane, setMobilePane] = useState<"player" | "panel">("player");
+
+  // Width of the player pane on desktop. null = the layout's own default; a
+  // dragged width is remembered in this browser.
+  const splitRef = useRef<HTMLDivElement>(null);
+  const [playerW, setPlayerW] = useState<number | null>(() => {
+    try {
+      const v = Number(window.localStorage.getItem("cod.playerWidth"));
+      return v >= 320 ? v : null;
+    } catch {
+      return null;
+    }
+  });
+  const savePlayerW = useCallback((w: number | null) => {
+    setPlayerW(w);
+    try {
+      if (w) window.localStorage.setItem("cod.playerWidth", String(Math.round(w)));
+      else window.localStorage.removeItem("cod.playerWidth");
+    } catch {
+      /* private mode — the width just won't be remembered */
+    }
+  }, []);
+  const startResize = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const box = splitRef.current;
+      if (!box) return;
+      e.preventDefault();
+      const handle = e.currentTarget;
+      handle.setPointerCapture(e.pointerId);
+      const left = box.getBoundingClientRect().left;
+      const total = box.getBoundingClientRect().width;
+      const move = (ev: PointerEvent) => {
+        setPlayerW(Math.min(Math.max(ev.clientX - left, 320), total - 340));
+      };
+      const up = (ev: PointerEvent) => {
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+        handle.releasePointerCapture(ev.pointerId);
+        savePlayerW(Math.min(Math.max(ev.clientX - left, 320), total - 340));
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+    },
+    [savePlayerW]
+  );
   // Draw-while-talking: the composer records, the draw layer lives on the
   // player, and playback of a saved note drives the replay — so both timings
   // are held here, where those three panes meet.
@@ -452,13 +496,30 @@ export function VideoWorkspace({
       {/* grid-rows-[minmax(0,1fr)] + min-h-0 panes: without both, the row is
           sized by the tallest pane and the player scrolls off. */}
       <div
+        ref={splitRef}
+        suppressHydrationWarning
+        style={playerW ? { gridTemplateColumns: `${playerW}px 8px minmax(0,1fr)` } : undefined}
         className={`hidden h-[calc(100dvh-3.5rem)] lg:grid lg:grid-rows-[minmax(0,1fr)] ${
-          portrait
-            ? "lg:grid-cols-[minmax(340px,440px)_minmax(0,1fr)]"
-            : "lg:grid-cols-[minmax(420px,1fr)_minmax(330px,420px)]"
+          playerW
+            ? ""
+            : portrait
+              ? "lg:grid-cols-[minmax(340px,440px)_8px_minmax(0,1fr)]"
+              : "lg:grid-cols-[minmax(420px,1fr)_8px_minmax(330px,420px)]"
         }`}
       >
-        <div className="min-h-0 min-w-0 overflow-hidden border-r border-line">{player}</div>
+        <div className="min-h-0 min-w-0 overflow-hidden">{player}</div>
+        {/* Drag to resize; double-click to put it back. */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize the player and comments panels"
+          title="Drag to resize — double-click to reset"
+          onPointerDown={startResize}
+          onDoubleClick={() => savePlayerW(null)}
+          className="group relative cursor-col-resize touch-none select-none border-x border-line bg-app transition hover:border-accent/60 hover:bg-accent/10"
+        >
+          <span className="pointer-events-none absolute left-1/2 top-1/2 h-10 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-line-strong group-hover:bg-accent" />
+        </div>
         <div className="min-h-0 min-w-0 overflow-hidden">{panel}</div>
       </div>
 

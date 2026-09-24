@@ -135,8 +135,10 @@ export function PlayerPane({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-panel">
-      {/* Header */}
-      <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 border-b border-line px-3 py-2.5">
+      {/* Header: who/what on top, what to do next on its own tinted row — one
+          block with one bottom border, so it reads as part of the pane. */}
+      <div className="shrink-0 border-b border-line">
+      <div className="flex items-center gap-2 px-3 py-2.5">
         <Link
           href={backHref}
           aria-label="Back to board"
@@ -224,12 +226,16 @@ export function PlayerPane({
           </a>
         ) : null}
 
-        {/* Allowed to shrink and wrap: the stage controls grew past a phone's
-            width, and `shrink-0` meant the inner flex-wrap never got the chance
-            to wrap — the whole page scrolled sideways instead. */}
-        {headerActions ? (
-          <div className="flex min-w-0 max-w-full basis-full justify-end">{headerActions}</div>
-        ) : null}
+      </div>
+
+      {/* Allowed to shrink and wrap: the stage controls grew past a phone's
+          width, and `shrink-0` meant the inner flex-wrap never got the chance
+          to wrap — the whole page scrolled sideways instead. */}
+      {headerActions ? (
+        <div className="flex min-w-0 max-w-full justify-end border-t border-line/60 bg-app px-3 py-2 [&>div]:justify-end">
+          {headerActions}
+        </div>
+      ) : null}
       </div>
 
       {/* Cut tabs (main + hook variants) */}
