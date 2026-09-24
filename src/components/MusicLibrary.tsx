@@ -6,6 +6,7 @@ import { useTrackedTransition } from "@/components/ui/Pending";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { UploadStatus, type UploadState } from "@/components/ui/UploadStatus";
 import {
   IconChevronDown,
   IconLayers,
@@ -26,6 +27,13 @@ import { timecode } from "@/lib/format";
 import { ENERGY_LEVELS, MOODS, type MusicTrack } from "@/lib/types";
 
 const PAGE = 40;
+
+/** Tracks dropped in without a category land here, and stay flagged until someone sorts them. */
+const UNCATEGORISED = "Uncategorised";
+const isUncategorised = (c: string | null | undefined) => !c || /^uncategori[sz]ed$/i.test(c.trim());
+const AUDIO_EXT = /\.(mp3|wav|m4a|aac|flac|ogg|oga|opus|aif|aiff|wma)$/i;
+const isAudio = (f: File) => f.type.startsWith("audio/") || AUDIO_EXT.test(f.name);
+const NEW_CATEGORY = "__new__";
 
 /* ---------------------------------------------------------------- player -- */
 
@@ -133,7 +141,9 @@ function TrackRow({
   onDelete,
   onEdit,
   attachTo,
+  categories,
 }: {
+  categories: string[];
   track: MusicTrack;
   playing: boolean;
   progress: number;
@@ -148,6 +158,16 @@ function TrackRow({
   const toast = useToast();
   const router = useRouter();
   const [, startTransition] = useTrackedTransition();
+  const needsCategory = isUncategorised(track.category);
+
+  function pickCategory(value: string) {
+    if (value === NEW_CATEGORY) {
+      const name = window.prompt("Name the new category");
+      if (name?.trim()) onEdit({ category: name.trim() });
+      return;
+    }
+    if (value) onEdit({ category: value });
+  }
 
   return (
     <div
@@ -158,7 +178,11 @@ function TrackRow({
       }}
       title="Drag onto a video to record that it was used there"
       className={`cursor-grab rounded-xl border px-3 py-2.5 transition active:cursor-grabbing ${
-        playing ? "border-accent bg-accent-ghost" : "border-line bg-card hover:border-line-strong"
+        playing
+          ? "border-accent bg-accent-ghost"
+          : needsCategory
+            ? "border-danger/50 bg-danger/5"
+            : "border-line bg-card hover:border-line-strong"
       }`}
     >
       <div className="flex items-center gap-2.5">
@@ -173,7 +197,17 @@ function TrackRow({
         </button>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{track.title}</p>
+          <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+            {needsCategory ? (
+              <span
+                title="This track needs a category"
+                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-danger text-[10px] font-bold text-white"
+              >
+                !
+              </span>
+            ) : null}
+            <span className="truncate">{track.title}</span>
+          </p>
           <p className="flex flex-wrap items-center gap-x-2 text-[11px] text-ink-3">
             {track.duration_seconds ? <span>{timecode(track.duration_seconds)}</span> : null}
             {track.mood ? <span>{track.mood}</span> : null}
@@ -186,6 +220,25 @@ function TrackRow({
             ) : null}
           </p>
         </div>
+
+        {needsCategory ? (
+          <select
+            value=""
+            onChange={(e) => pickCategory(e.target.value)}
+            aria-label="Choose a category"
+            className="shrink-0 rounded-md border border-danger/60 bg-danger/10 px-2 py-1 text-[11px] font-medium text-danger focus:outline-none"
+          >
+            <option value="">Choose a category…</option>
+            {categories
+              .filter((c) => !isUncategorised(c))
+              .map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            <option value={NEW_CATEGORY}>+ New category…</option>
+          </select>
+        ) : null}
 
         <Waveform
           trackId={track.id}
@@ -208,6 +261,24 @@ function TrackRow({
 
       {open ? (
         <div className="mt-3 space-y-3 border-t border-line pt-3">
+          <label className="block">
+            <span className="mb-1 block text-[10px] uppercase tracking-wider text-ink-3">Category</span>
+            <select
+              value={needsCategory ? "" : track.category}
+              onChange={(e) => pickCategory(e.target.value)}
+              className="w-full rounded-md border border-line bg-raised px-2 py-1 text-xs focus:outline-none sm:w-64"
+            >
+              {needsCategory ? <option value="">Uncategorised — choose one…</option> : null}
+              {categories
+                .filter((c) => !isUncategorised(c))
+                .map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              <option value={NEW_CATEGORY}>+ New category…</option>
+            </select>
+          </label>
           <div className="grid gap-2 sm:grid-cols-3">
             <label className="block">
               <span className="mb-1 block text-[10px] uppercase tracking-wider text-ink-3">
@@ -421,13 +492,19 @@ export function MusicLibrary({
   const [energy, setEnergy] = useState("");
   const [limit, setLimit] = useState(PAGE);
   const [confirmDelete, setConfirmDelete] = useState<MusicTrack | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [upload, setUpload] = useState<UploadState | null>(null);
+  const uploading = upload?.phase === "uploading";
+  // What the next batch of dropped tracks is filed under; empty = Uncategorised, sorted later.
+  const [uploadCategory, setUploadCategory] = useState("");
+  const [dropping, setDropping] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const uncategorised = tracks.filter((t) => isUncategorised(t.category)).length;
+  const realCategories = categories.filter((c) => !isUncategorised(c));
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return tracks.filter((t) => {
-      if (category && t.category !== category) return false;
+      if (category === UNCATEGORISED ? !isUncategorised(t.category) : category && t.category !== category) return false;
       if (mood && t.mood !== mood) return false;
       if (energy && t.energy !== energy) return false;
       if (q && !t.title.toLowerCase().includes(q)) return false;
@@ -435,32 +512,148 @@ export function MusicLibrary({
     });
   }, [tracks, category, query, mood, energy]);
 
-  async function upload(files: FileList | null) {
-    if (!files?.length) return;
-    setUploading(true);
-    try {
-      for (const file of files) {
-        const res = await createMusicUploadUrlAction(file.name);
-        if ("error" in res && res.error) throw new Error(res.error);
-        const put = await fetch(res.signedUrl!, { method: "PUT", body: file });
-        if (!put.ok) throw new Error(`Upload failed for ${file.name}`);
-        await registerMusicTrackAction({
-          title: file.name.replace(/\.[^.]+$/, ""),
-          category: category || "Uncategorised",
-          storagePath: res.path!,
-        });
-      }
-      toast.success("Uploaded.");
-      router.refresh();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setUploading(false);
+  /** Upload any number of tracks at once (dropped or picked), a few in parallel. */
+  async function uploadFiles(list: File[]) {
+    const files = list.filter(isAudio);
+    const skipped = list.length - files.length;
+    if (!files.length) {
+      setUpload({ phase: "error", title: "Music", detail: "Those aren't audio files — drop mp3, wav, m4a and similar." });
+      return;
     }
+    const target = uploadCategory.trim() || UNCATEGORISED;
+    const title = `${files.length} track${files.length === 1 ? "" : "s"} → ${target}`;
+    let done = 0;
+    const failed: string[] = [];
+    const show = () =>
+      setUpload({ phase: "uploading", title, pct: Math.round((done / files.length) * 100), detail: `${done} of ${files.length} uploaded` });
+    show();
+    let next = 0;
+    const worker = async () => {
+      while (next < files.length) {
+        const file = files[next++];
+        try {
+          const res = await createMusicUploadUrlAction(file.name);
+          if ("error" in res && res.error) throw new Error(res.error);
+          const put = await fetch(res.signedUrl!, { method: "PUT", body: file });
+          if (!put.ok) throw new Error(put.status === 413 ? "over the size limit" : `status ${put.status}`);
+          const reg = await registerMusicTrackAction({
+            title: file.name.replace(/\.[^.]+$/, ""),
+            category: target,
+            storagePath: res.path!,
+          });
+          if (reg && "error" in reg && reg.error) throw new Error(reg.error);
+        } catch (e) {
+          failed.push(`${file.name} (${(e as Error).message})`);
+        }
+        done += 1;
+        show();
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, files.length) }, worker));
+    const ok = files.length - failed.length;
+    setUpload({
+      phase: failed.length && !ok ? "error" : "done",
+      title,
+      detail: failed.length ? `${failed.length} failed: ${failed.slice(0, 3).join("; ")}${failed.length > 3 ? "…" : ""}` : `${ok} uploaded.`,
+      doneText:
+        target === UNCATEGORISED
+          ? `${ok} track${ok === 1 ? "" : "s"} added as Uncategorised — choose a category for each one below.`
+          : `${ok} track${ok === 1 ? "" : "s"} added to ${target}.`,
+      note: skipped ? `${skipped} file${skipped === 1 ? " wasn't" : "s weren't"} audio and ${skipped === 1 ? "was" : "were"} skipped.` : undefined,
+    });
+    router.refresh();
   }
 
   return (
     <div className="space-y-4">
+      {/* Mass upload: drop as many tracks as you like. */}
+      <div
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes("Files")) {
+            e.preventDefault();
+            setDropping(true);
+          }
+        }}
+        onDragLeave={() => setDropping(false)}
+        onDrop={(e) => {
+          if (!e.dataTransfer.files?.length) return;
+          e.preventDefault();
+          setDropping(false);
+          if (!uploading) void uploadFiles(Array.from(e.dataTransfer.files));
+        }}
+        className={`rounded-xl border-2 border-dashed p-4 text-center transition ${
+          dropping ? "border-accent bg-accent-ghost" : "border-line-strong"
+        }`}
+      >
+        <p className="text-sm font-medium">Drag and drop your tracks here</p>
+        <p className="mt-0.5 text-[11px] text-ink-3">
+          As many as you like at once — mp3, wav, m4a and similar.{" "}
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => fileInput.current?.click()}
+            className="text-accent-hi underline hover:no-underline disabled:opacity-50"
+          >
+            Or choose files
+          </button>
+        </p>
+        <label className="mt-3 inline-flex flex-wrap items-center justify-center gap-2 text-xs text-ink-2">
+          Put them in
+          <select
+            value={uploadCategory}
+            onChange={(e) => {
+              if (e.target.value === NEW_CATEGORY) {
+                const name = window.prompt("Name the new category");
+                if (name?.trim()) setUploadCategory(name.trim());
+                return;
+              }
+              setUploadCategory(e.target.value);
+            }}
+            className="rounded-md border border-line bg-card px-2 py-1 text-xs focus:outline-none"
+          >
+            <option value="">Uncategorised — I&rsquo;ll sort them after</option>
+            {realCategories.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+            {uploadCategory && !realCategories.includes(uploadCategory) ? <option value={uploadCategory}>{uploadCategory} (new)</option> : null}
+            <option value={NEW_CATEGORY}>+ New category…</option>
+          </select>
+        </label>
+        <input
+          ref={fileInput}
+          type="file"
+          accept="audio/*"
+          multiple
+          hidden
+          onChange={(e) => {
+            void uploadFiles(Array.from(e.target.files ?? []));
+            e.target.value = "";
+          }}
+        />
+      </div>
+      {upload ? <UploadStatus state={upload} /> : null}
+
+      {uncategorised > 0 ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-danger/50 bg-danger/10 px-4 py-3">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-danger text-sm font-bold text-white">!</span>
+          <p className="min-w-0 flex-1 text-sm text-danger">
+            <b>
+              {uncategorised} track{uncategorised === 1 ? " needs" : "s need"} a category.
+            </b>{" "}
+            Until they&rsquo;re sorted they can&rsquo;t be found by category — choose one for each track below.
+          </p>
+          <button
+            type="button"
+            onClick={() => setCategory(UNCATEGORISED)}
+            className="rounded-lg bg-danger px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+          >
+            Show them
+          </button>
+        </div>
+      ) : null}
+
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-48 flex-1">
@@ -481,7 +674,8 @@ export function MusicLibrary({
           className="rounded-lg border border-line bg-card px-2 py-1.5 text-xs focus:outline-none"
         >
           <option value="">All categories</option>
-          {categories.map((c) => (
+          {uncategorised > 0 ? <option value={UNCATEGORISED}>⚠ Uncategorised ({uncategorised})</option> : null}
+          {realCategories.map((c) => (
             <option key={c} value={c}>
               {c}
             </option>
@@ -512,25 +706,6 @@ export function MusicLibrary({
           ))}
         </select>
 
-        <input
-          ref={fileInput}
-          type="file"
-          accept="audio/*"
-          multiple
-          hidden
-          onChange={(e) => {
-            void upload(e.target.files);
-            e.target.value = "";
-          }}
-        />
-        <button
-          type="button"
-          disabled={uploading}
-          onClick={() => fileInput.current?.click()}
-          className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hi disabled:opacity-50"
-        >
-          {uploading ? "Uploading…" : "Upload tracks"}
-        </button>
       </div>
 
       <p className="text-xs text-ink-3">
@@ -563,6 +738,7 @@ export function MusicLibrary({
                 })
               }
               attachTo={attachTo}
+              categories={categories}
             />
           ))}
         </div>

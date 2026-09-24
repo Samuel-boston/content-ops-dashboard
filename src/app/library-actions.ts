@@ -49,7 +49,7 @@ export async function registerMusicTrackAction(input: {
   const supabase = await supabaseServer();
   const { error } = await supabase.from("music_tracks").insert({
     title: input.title.trim() || "Untitled",
-    category: input.category.trim() || "Uncategorized",
+    category: input.category.trim() || "Uncategorised",
     storage_path: input.storagePath,
     duration_seconds: input.durationSeconds ?? null,
     uploaded_by: me.id,

@@ -10,7 +10,7 @@ const TABS = [
   { href: "/library/sop", label: "SOP / Playbook" },
 ];
 
-export function LibraryTabs() {
+export function LibraryTabs({ uncategorisedMusic = 0 }: { uncategorisedMusic?: number }) {
   const pathname = usePathname();
   return (
     <nav className="mt-2 flex gap-1">
@@ -27,6 +27,14 @@ export function LibraryTabs() {
             }`}
           >
             {t.label}
+            {t.href === "/library/music" && uncategorisedMusic > 0 ? (
+              <span
+                title={`${uncategorisedMusic} track${uncategorisedMusic === 1 ? "" : "s"} need a category`}
+                className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white"
+              >
+                !
+              </span>
+            ) : null}
           </Link>
         );
       })}
