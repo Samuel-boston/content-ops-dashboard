@@ -1,4 +1,5 @@
 import { runDuePublishJobs } from "@/lib/publish-runner";
+import { cronAuthorised } from "@/lib/cron-auth";
 import { syncPendingVersions } from "@/lib/stream-sync";
 import { purgeOldDoneTasks } from "@/lib/task-purge";
 
@@ -16,13 +17,7 @@ export const maxDuration = 300;
  * the main job: `?key=$CRON_SECRET`, or Vercel's own signed header.
  */
 export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const secret = process.env.CRON_SECRET;
-  const authorized =
-    !secret ||
-    url.searchParams.get("key") === secret ||
-    req.headers.get("authorization") === `Bearer ${secret}`;
-  if (!authorized) return new Response("unauthorized", { status: 401 });
+  if (!cronAuthorised(req)) return new Response("unauthorized", { status: 401 });
 
   const result = await runDuePublishJobs();
   // Also finishes any upload whose page was closed before Cloudflare was done.

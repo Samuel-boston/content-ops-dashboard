@@ -4,6 +4,7 @@ import { buildDigest, digestHtml, digestTelegram, digestText } from "@/lib/diges
 import { sendEmail } from "@/lib/integrations/email";
 import { runDuePublishJobs } from "@/lib/publish-runner";
 import { runBackupJob } from "@/lib/backup";
+import { cronAuthorised } from "@/lib/cron-auth";
 import { STALLED_AFTER_DAYS, STATUS_LABELS, type VideoStatus } from "@/lib/types";
 
 /**
@@ -22,15 +23,8 @@ import { STALLED_AFTER_DAYS, STATUS_LABELS, type VideoStatus } from "@/lib/types
 export const maxDuration = 300;
 
 export async function GET(req: Request) {
+  if (!cronAuthorised(req)) return new Response("unauthorized", { status: 401 });
   const url = new URL(req.url);
-  const secret = process.env.CRON_SECRET;
-  const authorized =
-    !secret ||
-    url.searchParams.get("key") === secret ||
-    req.headers.get("authorization") === `Bearer ${secret}`;
-  if (!authorized) {
-    return new Response("unauthorized", { status: 401 });
-  }
   const db = supabaseAdmin();
   const now = Date.now();
   const out: Record<string, unknown> = {};
