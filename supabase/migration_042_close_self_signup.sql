@@ -41,3 +41,11 @@ begin
   return new;
 end;
 $$;
+
+-- Supabase's admin API creates the login first and writes app_metadata a moment
+-- later, so the trigger must also run when app_metadata is set — otherwise a
+-- legitimate invite would get no profile.
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert or update of raw_app_meta_data on auth.users
+  for each row execute function public.handle_new_user();
