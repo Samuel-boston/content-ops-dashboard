@@ -16,12 +16,13 @@ The dashboard is live and you can already run the whole pipeline. What's left ar
 | 2 | **Groq** (free AI) | Voice notes → transcripts, sorts ideas from Telegram | 5 min | No |
 | 3 | **Scheduled jobs** (cron-job.org) | Scheduled posts go out on time; finished uploads get picked up | 10 min | No |
 | 4 | **Telegram** | Send an idea from your phone in 10 seconds | 15 min | No |
-| 5 | **Publer** (or Instagram / Meta) | Post and schedule Reels from the dashboard, **including trial reels** | Publer 15 min · Meta 1–2 hrs | Publer: no. Meta: **maybe — see below** |
-| 6 | **Email** (Resend) | "You were mentioned / revisions requested" emails | 20 min | **Yes — DNS** |
-| 7 | **Your own Claude** | Work on scripts and run the board from inside Claude | 10 min each person | No |
-| 8 | **Upload limit** (only if you skipped it on the call) | Cuts bigger than 50 MB | 5 min | No |
+| 5 | **Publer** (or Instagram / Meta) | Post and schedule from the dashboard: Instagram Reels **including trial reels**, YouTube Shorts, TikTok, LinkedIn | Publer 15 min · Meta 1–2 hrs | Publer: no. Meta: **maybe — see below** |
+| 6 | **Slack** | Ask the dashboard from Slack ("add this to ideas", "how many in scripting") and get updates in a channel | 10 min | No |
+| 7 | **Email** (Resend) | "You were mentioned / revisions requested" emails | 20 min | **Yes — DNS** |
+| 8 | **Your own Claude** | Work on scripts and run the board from inside Claude | 10 min each person | No |
+| 9 | **Upload limit** (only if you skipped it on the call) | Cuts bigger than 50 MB | 5 min | No |
 
-You can run the business without 5, 6 and 7 — the VA can always post by hand from the Instagram app and tick Posted. Do 1–4 first. Publer (a paid Business plan) is the quickest way to post from the dashboard: no Meta app, no Meta verification, and it can post trial reels.
+You can run the business without 5 to 8 — the VA can always post by hand from the Instagram app and tick Posted. Do 1–4 first. Publer (a paid Business plan) is the quickest way to post from the dashboard: no Meta app, no Meta verification, and it can post trial reels.
 
 ## What's slow and **not your fault**
 
@@ -55,7 +56,7 @@ Each guide can be done **three ways**. In the dashboard open **avatar menu → S
 
 The prompts contain no passwords or keys. The AI types values only into the boxes in Settings. Save settings after each one and test it.
 
-Recommended order: **Google Drive → Groq → scheduled jobs → Telegram → Publer (or Instagram) → email → your own Claude.** (Cloudflare Stream was done on the call.)
+Recommended order: **Google Drive → Groq → scheduled jobs → Telegram → Publer (or Instagram) → Slack → email → your own Claude.** (Cloudflare Stream was done on the call.)
 
 ---
 
@@ -298,31 +299,37 @@ Every video is a card that moves left to right through stages. Each person only 
 
 ## The stages
 
-**Videos:** Ideation → Scripting → Script Review → Ready to Film → Editor Brief → Ready to Edit → Editing → In Review → Revisions (if changes) → *Awaiting Variants* (only if the script has several hooks) → Final Review → **Ready to Post → With the VA → Posted** (goes to the Archive).
+**Videos:** Ideation → Scripting → Ready to Film → Editor Brief → Ready to Edit → Editing → In Review → Revisions (if changes) → *Awaiting Variants* (only if the script has several hooks) → Final Review → **With the VA** → Posted (goes to the Archive).
 
-**Carousels:** Ideation → Scripting → Script Review → Needs Creatives → Creatives to Review → Ready to Post → With the VA → Posted.
+**Carousels:** Ideation → Scripting → Needs Creatives → Creatives to Review → **With the VA** → Posted. Sending creatives back returns the carousel to Needs Creatives.
 
-**Later:** any video, at any stage, can be shelved with the **Later** button (top of the video) and picked back up from **More → Later**. It leaves every board and count until you bring it back.
+There is no Script Review and no Ready to Post: a script lives in Scripting until the owner or an admin moves it on, and **approving a cut (or Final Review) sends the video straight to the VA's desk** — nothing to click in between.
+
+**Later:** any video, at any stage, can be shelved with the **Later** button (top of the video) and picked back up from **More → Later**. It leaves every board and count until you bring it back. Next to it is a **bin icon** that deletes a video for good, including its heavy files (owner and admins; it asks first).
+
+**The Board** opens on **All**: videos and carousels together, every stage, in one view. **Videos**, **Carousels** and **Filming** narrow it down.
+
+**Every video, at every stage,** has a title, a **Thumbnail** (its own section: attach images from the B-Roll library or upload your own, write a brief, and ChatGPT designs it — or upload a finished one), a script and its video.
 
 ## Who does what
 
 | Role | Sees | Does |
 |---|---|---|
 | **Owner** (you) | Everything, plus Settings | Approves scripts and cuts, sends videos to the VA, manages the team |
-| **Admin** | Everything except Settings | Same as Owner day to day (only the Owner can add Admins) |
-| **Copywriter** | Ideation → Script Review only | Writes scripts and hooks, submits them for review; can use Claude to draft |
+| **Admin** | Everything except Settings (the creative-director seat) | Approves, moves and deletes videos like the Owner; can't change integrations or add Admins |
+| **Copywriter** | Ideation → Ready to Film on the Board | Writes scripts and hooks; taps **Script done** to tell the owner it is ready; can use Claude to draft |
 | **Editor** | Only videos assigned to them, plus the pool to take on | Takes on a video, uploads the cut, submits for review, delivers hook variants, tracks their month and time off |
 | **VA** | Posting board, Archive, Other tasks, Library, Time off | Posts videos, marks them posted, works through "Other" tasks |
 
 ## The everyday flow
 
 1. **Idea.** Add it on the board (or send it to the Telegram bot from your phone — it lands in Ideation). Write the script, or let the copywriter do it.
-2. **Script review.** The copywriter submits; you read it, leave comments on any part, and either approve it (→ Ready to Film) or send it back (→ Script Revisions). Carousels approve into Needs Creatives.
+2. **Scripting.** The copywriter writes and taps **Script done**; you get a notification, read it, comment on any part, and move it on (→ Ready to Film, or → Needs Creatives for a carousel).
 3. **Film → brief.** Upload the raw footage (drag it onto the video), then build the **Editor Brief** — written notes, attachments, music tagged from the library — and send it to editors.
 4. **Editing.** An editor takes it on (giving an ETA), uploads the cut, submits it. The upload box shows two steps: your file uploading (keep the page open) and Cloudflare preparing the video (you can close the page).
 5. **Review.** You watch the cut, drop comments pinned to the exact moment (text, voice, drawing, screen recording), and press **Approve** or **Request revisions**. Editors see the same room, so they see exactly what to change. Anyone in the review can **Download the video**.
 6. **Variants.** If the script had several hooks, the editor delivers one cut per hook. You give each one a destination and caption in the Post tab.
-7. **Ready to Post → With the VA.** Drag the card onto **With the VA**. A box shows every hook variant: choose **Trial reel** or **Main feed** and check its caption (each variant can have its own notes and cover, or share variant 1's caption). Press **Send to the VA**.
+7. **Approve → With the VA.** Approving the cut (or Final Review) puts the video on the VA's desk automatically, every variant set to a trial reel by default. In the **Post** tab you can change a variant to the main feed, edit its caption, or add notes and a cover.
 8. **The VA posts.** They open the card, see every variant on one page with the caption to copy, the cover, the file (or a QR code to send it to their phone), tick each **Posted**, and press **Mark as posted** (or drag to Posted). Something wrong? **Something not quite right?** sends it back to you with a note. You can also **Take it back** any time.
 9. **Archive.** Posted videos move to the **Archive** and the video's files are filed in Google Drive: *Month → Video → Finished video / Raw footage / Script / Caption / Cover / Info*.
 
@@ -338,6 +345,7 @@ Everything is posted as a **trial reel** first. With **Publer** connected the VA
 - **Library** — Footage (b-roll), Music (drag and drop as many tracks as you like; **categorise the ones marked with a red !**), References, and the SOP / Playbook.
 - **Analytics** — performance across videos.
 - **Overview** — what needs your attention today.
+- **Slack** — once connected (Settings → Slack) the team can type `/ops add idea …`, `/ops how many in scripting`, `/ops what's in review` in Slack, and the dashboard announces scripts done, cuts ready for review, approvals and posts in a channel.
 - **Connect AI** (avatar menu) — connect your own Claude so it can list videos, write scripts, and move scripts between Ideation, Scripting and Script Review.
 
 ## Small rules that avoid problems

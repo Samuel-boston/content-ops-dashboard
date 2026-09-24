@@ -7,7 +7,7 @@ The step-by-step instructions for each service are in `04-integration-guides.md`
 ## The prompt
 
 ```
-I have my own content-operations dashboard running and I am signed in to it as the Owner. Now I want to connect its integrations, in this order: Google Drive, Groq, scheduled jobs (cron-job.org), Telegram, Cloudflare Stream (if not done yet), Publer (I have or will get a Publer Business plan; if not, use Instagram / Meta instead), then email (Resend).
+I have my own content-operations dashboard running and I am signed in to it as the Owner. Now I want to connect its integrations, in this order: Google Drive, Groq, scheduled jobs (cron-job.org), Telegram, Cloudflare Stream (if not done yet), Publer (I have or will get a Publer Business plan; if not, use Instagram / Meta instead), Slack, then email (Resend).
 
 The step-by-step guides are in this file: https://github.com/Samuel-boston/content-ops-dashboard/blob/main/docs/04-integration-guides.md
 Open it and read it. Do one integration at a time, following its guide exactly. My dashboard address is: [PASTE MY SITE ADDRESS HERE]
@@ -33,6 +33,7 @@ At the end, give me a list: each integration marked Done, Waiting (and on what) 
 | Telegram | Open @BotFather, make the bot, find the chat ID, register the webhook, paste values | Log in to Telegram (phone login and code); send the first message in the group |
 | Cloudflare Stream | Copy the account ID, create the API token, find the subdomain code, paste the values | Sign up, subscribe with a card |
 | Publer | Add the Instagram account in Publer, create the API key with the workspaces, accounts, posts and media permissions, paste it in Settings → Publer and press Connect | Sign up, choose a Business plan with a card, log in to Instagram when Publer asks to connect the account |
+| Slack | Copy the app manifest from Settings → Slack, create the Slack app from it, install it, paste the bot token and signing secret, pick the channel | Log in to Slack, press Install and Allow |
 | Instagram / Meta (only if not using Publer) | Create the app and system user, set permissions, find the account ID | Log in to Facebook, identity or business verification, approve every permission and token screen |
 | Email (Resend) | Add the domain, create the key, set the Vercel variables, redeploy | Sign up; add the DNS records at his domain provider (or give Claude access), then wait for verification |
 | Each person's own Claude | Nothing: it is per person | Each person generates their own token on the Connect AI page and adds the connector in their own Claude |

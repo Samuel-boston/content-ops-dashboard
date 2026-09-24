@@ -12,12 +12,13 @@ The dashboard is live and you can already run the whole pipeline. What's left ar
 | 2 | **Groq** (free AI) | Voice notes → transcripts, sorts ideas from Telegram | 5 min | No |
 | 3 | **Scheduled jobs** (cron-job.org) | Scheduled posts go out on time; finished uploads get picked up | 10 min | No |
 | 4 | **Telegram** | Send an idea from your phone in 10 seconds | 15 min | No |
-| 5 | **Publer** (or Instagram / Meta) | Post and schedule Reels from the dashboard, **including trial reels** | Publer 15 min · Meta 1–2 hrs | Publer: no. Meta: **maybe — see below** |
-| 6 | **Email** (Resend) | "You were mentioned / revisions requested" emails | 20 min | **Yes — DNS** |
-| 7 | **Your own Claude** | Work on scripts and run the board from inside Claude | 10 min each person | No |
-| 8 | **Upload limit** (only if you skipped it on the call) | Cuts bigger than 50 MB | 5 min | No |
+| 5 | **Publer** (or Instagram / Meta) | Post and schedule from the dashboard: Instagram Reels **including trial reels**, YouTube Shorts, TikTok, LinkedIn | Publer 15 min · Meta 1–2 hrs | Publer: no. Meta: **maybe — see below** |
+| 6 | **Slack** | Ask the dashboard from Slack ("add this to ideas", "how many in scripting") and get updates in a channel | 10 min | No |
+| 7 | **Email** (Resend) | "You were mentioned / revisions requested" emails | 20 min | **Yes — DNS** |
+| 8 | **Your own Claude** | Work on scripts and run the board from inside Claude | 10 min each person | No |
+| 9 | **Upload limit** (only if you skipped it on the call) | Cuts bigger than 50 MB | 5 min | No |
 
-You can run the business without 5, 6 and 7 — the VA can always post by hand from the Instagram app and tick Posted. Do 1–4 first. Publer (a paid Business plan) is the quickest way to post from the dashboard: no Meta app, no Meta verification, and it can post trial reels.
+You can run the business without 5 to 8 — the VA can always post by hand from the Instagram app and tick Posted. Do 1–4 first. Publer (a paid Business plan) is the quickest way to post from the dashboard: no Meta app, no Meta verification, and it can post trial reels.
 
 ## What's slow and **not your fault**
 
