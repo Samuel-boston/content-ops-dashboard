@@ -146,7 +146,7 @@ export function CarouselPostView({
                 <IconChevronRight size={11} />
               </button>
             </span>
-          ) : video.status === "ready_to_post" ? (
+          ) : video.status === "ready_to_post" || video.status === "with_va" ? (
             <span className="ml-auto flex items-center gap-1">
               <StageBack videoId={video.id} status={video.status} carousel />
               <button
@@ -177,12 +177,13 @@ export function CarouselPostView({
       />
 
       {/* Approved: hand it to the VA to post — notes, a cover and a caption. */}
-      {video.status === "ready_to_post" || video.status === "posted" ? (
+      {video.status === "ready_to_post" || video.status === "with_va" || video.status === "posted" ? (
         <div className="max-w-2xl">
           <TrialsPanel
             videoId={video.id}
             vaNotes={video.va_notes}
             vaSentAt={video.va_sent_at}
+            withVa={video.status === "with_va"}
             hasCover={Boolean(video.cover_path)}
           />
         </div>

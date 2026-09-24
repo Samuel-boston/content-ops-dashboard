@@ -220,6 +220,7 @@ const GROUP_ORDER: VideoStatus[] = [
   "revisions",
   "ready_to_film",
   "ready_to_post",
+  "with_va",
   "posted",
 ];
 
@@ -237,6 +238,8 @@ function groupLabel(status: VideoStatus, n: number): { label: string; href: stri
       return { label: plural(n, "video ready to film", "videos ready to film"), href: "/filming" };
     case "ready_to_post":
       return { label: plural(n, "video ready to post", "videos ready to post"), href: "/board" };
+    case "with_va":
+      return { label: plural(n, "video with the VA", "videos with the VA"), href: "/board" };
     case "posted":
       return { label: plural(n, "video posted", "videos posted"), href: "/archive" };
     default:

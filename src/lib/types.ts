@@ -44,6 +44,7 @@ export type VideoStatus =
   | "awaiting_variants"
   | "final_review"
   | "ready_to_post"
+  | "with_va"
   | "posted";
 
 export const STATUS_LABELS: Record<VideoStatus, string> = {
@@ -64,11 +65,12 @@ export const STATUS_LABELS: Record<VideoStatus, string> = {
   awaiting_variants: "Awaiting Variants",
   final_review: "Final Review",
   ready_to_post: "Ready to Post",
+  with_va: "With the VA",
   posted: "Posted",
 };
 
 /** Whose court the ball is in at each stage — drives the "who's blocking" copy. */
-export const STATUS_OWNER: Record<VideoStatus, "client" | "editor" | "done"> = {
+export const STATUS_OWNER: Record<VideoStatus, "client" | "editor" | "va" | "done"> = {
   ideation: "client",
   scripting: "client",
   script_review: "client",
@@ -86,6 +88,7 @@ export const STATUS_OWNER: Record<VideoStatus, "client" | "editor" | "done"> = {
   awaiting_variants: "editor",
   final_review: "client",
   ready_to_post: "client",
+  with_va: "va",
   posted: "done",
 };
 
@@ -107,6 +110,7 @@ export const ACTIVE_STATUSES: VideoStatus[] = [
   "awaiting_variants",
   "final_review",
   "ready_to_post",
+  "with_va",
 ];
 
 /** What an editor's board shows — the stages they can actually act on. */
@@ -199,6 +203,8 @@ export function previousStage(status: VideoStatus, carousel = false): VideoStatu
   // step before Ready to Film is Scripting — never the carousel-only stages
   // that sit between them in the stage order.
   if (status === "ready_to_film") return "scripting";
+  // With the VA is a step out from Ready to Post: taking it back lands there.
+  if (status === "with_va") return "ready_to_post";
   if (status === "awaiting_variants" || status === "ready_to_post") return "in_review";
   if (status === "revisions") return "in_review";
   const i = STATUS_ORDER.indexOf(status);
@@ -230,6 +236,7 @@ export const STATUS_COLOR: Record<VideoStatus, string> = {
   awaiting_variants: "var(--color-stage-variants)",
   final_review: "var(--color-stage-final)",
   ready_to_post: "var(--color-stage-ready-post)",
+  with_va: "var(--color-stage-with-va)",
   posted: "var(--color-stage-posted)",
 };
 
@@ -447,6 +454,7 @@ export const STALLED_AFTER_DAYS: Partial<Record<VideoStatus, number>> = {
   awaiting_variants: 3,
   final_review: 3,
   ready_to_post: 5,
+  with_va: 5,
 };
 
 export function isStalled(video: Pick<Video, "status" | "stage_entered_at">): boolean {

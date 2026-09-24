@@ -97,7 +97,7 @@ export async function sendToVaAction(input: {
   await ensureVariantRows(supabase, me.id, input.videoId);
 
   const [{ data: video }, { data: rows }] = await Promise.all([
-    supabase.from("videos").select("cover_path").eq("id", input.videoId).single(),
+    supabase.from("videos").select("cover_path, status").eq("id", input.videoId).single(),
     supabase.from("trial_posts").select("*").eq("video_id", input.videoId),
   ]);
   if (!video) return { error: "Video not found." };
@@ -127,18 +127,30 @@ export async function sendToVaAction(input: {
     sent += 1;
   }
 
+  // New notes reach variants that were already sent, too.
+  await supabase
+    .from("trial_posts")
+    .update({ notes })
+    .eq("video_id", input.videoId)
+    .eq("status", "planned")
+    .not("sent_to_va_at", "is", null);
+
   const { error: vErr } = await supabase
     .from("videos")
     .update({
       va_notes: notes,
       cover_path: input.coverPath ?? video.cover_path ?? null,
       va_sent_at: now,
+      // It is now the VA's to post: its own stage on the board.
+      ...(video.status === "ready_to_post" ? { status: "with_va" } : {}),
     })
     .eq("id", input.videoId);
   if (vErr) return { error: vErr.message };
 
-  if (sent === 0) {
-    return { error: "Nothing to send — every variant is already with the VA or posted." };
+  // Nothing new to hand over is fine when the video is already with the VA:
+  // the notes and cover above were still updated. Only a video with no variants at all is an error.
+  if (sent === 0 && !((rows ?? []) as TrialPost[]).some((t) => t.status !== "archived")) {
+    return { error: "There's no cut on this video to send yet." };
   }
   revalidateTrials(input.videoId);
   return { ok: true as const, queued: sent };
@@ -168,7 +180,7 @@ export async function sendVariantToVaAction(id: string, videoId: string, fallbac
   const supabase = await supabaseServer();
   const [{ data: t }, { data: v }] = await Promise.all([
     supabase.from("trial_posts").select("*").eq("id", id).single(),
-    supabase.from("videos").select("va_notes").eq("id", videoId).single(),
+    supabase.from("videos").select("va_notes, status").eq("id", videoId).single(),
   ]);
   if (!t) return { error: "Variant not found." };
   const postAs = t.post_as === "none" ? (t.cut_id === null ? "main" : "trial") : t.post_as;
@@ -182,7 +194,10 @@ export async function sendVariantToVaAction(id: string, videoId: string, fallbac
     })
     .eq("id", id);
   if (error) return { error: error.message };
-  await supabase.from("videos").update({ va_sent_at: new Date().toISOString() }).eq("id", videoId);
+  await supabase
+    .from("videos")
+    .update({ va_sent_at: new Date().toISOString(), ...(v?.status === "ready_to_post" ? { status: "with_va" } : {}) })
+    .eq("id", videoId);
   revalidateTrials(videoId);
   return { ok: true as const };
 }
@@ -407,7 +422,59 @@ export async function takeBackVariantAction(id: string, videoId: string) {
     .eq("id", id)
     .eq("status", "planned");
   if (error) return { error: error.message };
+  await releaseIfNothingWithVa(supabase, videoId);
   revalidateTrials(videoId);
   revalidatePath("/posting");
+  return { ok: true as const };
+}
+
+/** With the VA -> Ready to Post again, once nothing is left on their desk. */
+async function releaseIfNothingWithVa(supabase: Db, videoId: string) {
+  const { data: left } = await supabase
+    .from("trial_posts")
+    .select("id")
+    .eq("video_id", videoId)
+    .in("status", ["planned", "promoted"])
+    .not("sent_to_va_at", "is", null)
+    .limit(1);
+  if (left?.length) return;
+  await supabase.from("videos").update({ status: "ready_to_post", va_sent_at: null }).eq("id", videoId).eq("status", "with_va");
+}
+
+/**
+ * Take the whole video back from the VA in one go: every unposted variant leaves
+ * their desk (captions kept), anything scheduled is taken off the schedule, and
+ * the video goes back to Ready to Post.
+ */
+export async function takeBackFromVaAction(videoId: string) {
+  await requireRole("owner", "admin");
+  const supabase = await supabaseServer();
+  const { data: scheduled } = await supabase
+    .from("trial_posts")
+    .select("promoted_job_id")
+    .eq("video_id", videoId)
+    .eq("status", "promoted")
+    .is("posted_at", null);
+  for (const t of scheduled ?? []) {
+    if (t.promoted_job_id) {
+      await supabase.from("publish_jobs").update({ status: "cancelled" }).eq("id", t.promoted_job_id).eq("status", "scheduled");
+    }
+  }
+  await supabase
+    .from("trial_posts")
+    .update({ status: "planned", promoted_job_id: null })
+    .eq("video_id", videoId)
+    .eq("status", "promoted")
+    .is("posted_at", null);
+  const { error } = await supabase
+    .from("trial_posts")
+    .update({ sent_to_va_at: null })
+    .eq("video_id", videoId)
+    .eq("status", "planned");
+  if (error) return { error: error.message };
+  await supabase.from("videos").update({ status: "ready_to_post", va_sent_at: null }).eq("id", videoId).eq("status", "with_va");
+  revalidateTrials(videoId);
+  revalidatePath("/posting");
+  revalidatePath("/board");
   return { ok: true as const };
 }

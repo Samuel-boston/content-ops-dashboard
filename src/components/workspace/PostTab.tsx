@@ -83,6 +83,7 @@ export function PostTab({
         videoId={video.id}
         vaNotes={video.va_notes}
         vaSentAt={video.va_sent_at}
+        withVa={video.status === "with_va"}
         hasCover={Boolean(video.cover_path)}
         fallbackCaption={caption}
         onWatch={onWatch}

@@ -84,7 +84,7 @@ export async function calendarData(fromISO: string, toISO: string): Promise<Cale
       .select(EDITOR_SELECT)
       .is("parked_at", null)
       .is("post_date", null)
-      .in("status", ["ready_to_post", "final_review", "awaiting_variants", "in_review"])
+      .in("status", ["ready_to_post", "with_va", "final_review", "awaiting_variants", "in_review"])
       .order("priority_rank", { ascending: false })
       .order("stage_entered_at"),
   ]);

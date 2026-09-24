@@ -53,6 +53,7 @@ const COLUMNS: VideoStatus[] = [
   "awaiting_variants",
   "in_review",
   "ready_to_post",
+  "with_va",
   "posted",
 ];
 

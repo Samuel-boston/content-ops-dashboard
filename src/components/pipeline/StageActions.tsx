@@ -238,7 +238,7 @@ export function StageActions({
             </>
           ) : null}
 
-          {video.status === "ready_to_post" ? (
+          {video.status === "ready_to_post" || video.status === "with_va" ? (
             <Primary tone="ok" onClick={() => setConfirmPosted(true)}>
               <IconCheck size={13} />
               Mark as posted

@@ -151,6 +151,7 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
       "awaiting_variants",
       "final_review",
       "ready_to_post",
+      "with_va",
       "posted",
     ];
     const hasUpload = cuts.some((c) => c.versions.length > 0);
@@ -222,6 +223,7 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
     "creative_review",
     "creative_revisions",
     "ready_to_post",
+    "with_va",
     "posted",
   ];
   if (isCarouselFormat(video.formats) && CAROUSEL_POST_STATUSES.includes(video.status)) {

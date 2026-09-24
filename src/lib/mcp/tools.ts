@@ -33,7 +33,7 @@ const STAGE_ALIASES: Record<string, VideoStatus[]> = {
   review: ["in_review"],
   revisions: ["revisions"],
   awaiting_variants: ["awaiting_variants"],
-  ready_to_post: ["ready_to_post", "final_review"],
+  ready_to_post: ["ready_to_post", "with_va", "final_review"],
   posted: ["posted"],
 };
 

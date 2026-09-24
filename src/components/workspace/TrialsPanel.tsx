@@ -13,6 +13,7 @@ import {
   saveTrialMetricsAction,
   sendToVaAction,
   sendVariantToVaAction,
+  takeBackFromVaAction,
   takeBackVariantAction,
   updateVariantAction,
 } from "@/app/trial-actions";
@@ -37,6 +38,7 @@ export function TrialsPanel({
   videoId,
   vaNotes = null,
   vaSentAt = null,
+  withVa = false,
   hasCover = false,
   fallbackCaption = "",
   onWatch,
@@ -44,6 +46,8 @@ export function TrialsPanel({
   videoId: string;
   vaNotes?: string | null;
   vaSentAt?: string | null;
+  /** The video is in the "With the VA" stage. */
+  withVa?: boolean;
   hasCover?: boolean;
   /** The Post tab's caption box — used for any variant that hasn't got its own. */
   fallbackCaption?: string;
@@ -178,8 +182,23 @@ export function TrialsPanel({
             }
             className="ml-auto rounded-md bg-accent px-3 py-1.5 text-[11px] font-medium text-white hover:bg-accent-hi disabled:opacity-50"
           >
-            {waiting.length > 1 ? "Send all chosen variants" : vaSentAt ? "Send again / update" : "Send to the VA"}
+            {waiting.length > 1 ? "Send all chosen variants" : withVa ? "Update what the VA sees" : "Send to the VA"}
           </button>
+          {withVa ? (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() =>
+                run(
+                  () => takeBackFromVaAction(videoId),
+                  () => toast.success("Taken back from the VA — it's in Ready to Post again.")
+                )
+              }
+              className="rounded-md border border-line bg-card px-3 py-1.5 text-[11px] text-ink-2 hover:border-warn hover:text-ink disabled:opacity-50"
+            >
+              Take it back from the VA
+            </button>
+          ) : null}
         </div>
       </div>
 

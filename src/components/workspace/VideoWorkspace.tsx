@@ -51,7 +51,7 @@ type Tab = "comments" | "brief" | "files" | "chat" | "post";
 function visibleTabs(status: Video["status"], editor = false): Tab[] {
   // Editors don't post, so they never get the Post tab.
   if (editor) return ["comments", "brief", "files", "chat"];
-  if (status === "ready_to_post" || status === "posted") {
+  if (status === "ready_to_post" || status === "with_va" || status === "posted") {
     return ["post", "comments", "brief", "files", "chat"];
   }
   // Once variants are being handed over, the list of them (and what to do with
@@ -131,6 +131,7 @@ export function VideoWorkspace({
   const [tab, setTab] = useState<Tab>(
     viewer.role !== "editor" &&
       (video.status === "ready_to_post" ||
+        video.status === "with_va" ||
         video.status === "posted" ||
         video.status === "final_review")
       ? "post"
