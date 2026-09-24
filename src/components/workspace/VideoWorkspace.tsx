@@ -68,6 +68,11 @@ const TAB_LABELS: Record<Tab, string> = {
   post: "Post",
 };
 
+// Narrower than this and the player header (title, version, download) no longer
+// fits on one row; the right pane needs room for its four tabs.
+const MIN_PLAYER_W = 440;
+const MIN_PANEL_W = 380;
+
 export function VideoWorkspace({
   video,
   viewer,
@@ -153,7 +158,7 @@ export function VideoWorkspace({
   const [playerW, setPlayerW] = useState<number | null>(() => {
     try {
       const v = Number(window.localStorage.getItem("cod.playerWidth"));
-      return v >= 320 ? v : null;
+      return v >= MIN_PLAYER_W ? v : null;
     } catch {
       return null;
     }
@@ -177,13 +182,13 @@ export function VideoWorkspace({
       const left = box.getBoundingClientRect().left;
       const total = box.getBoundingClientRect().width;
       const move = (ev: PointerEvent) => {
-        setPlayerW(Math.min(Math.max(ev.clientX - left, 320), total - 340));
+        setPlayerW(Math.min(Math.max(ev.clientX - left, MIN_PLAYER_W), total - MIN_PANEL_W));
       };
       const up = (ev: PointerEvent) => {
         handle.removeEventListener("pointermove", move);
         handle.removeEventListener("pointerup", up);
         handle.releasePointerCapture(ev.pointerId);
-        savePlayerW(Math.min(Math.max(ev.clientX - left, 320), total - 340));
+        savePlayerW(Math.min(Math.max(ev.clientX - left, MIN_PLAYER_W), total - MIN_PANEL_W));
       };
       handle.addEventListener("pointermove", move);
       handle.addEventListener("pointerup", up);
@@ -498,7 +503,7 @@ export function VideoWorkspace({
       <div
         ref={splitRef}
         suppressHydrationWarning
-        style={playerW ? { gridTemplateColumns: `${playerW}px 8px minmax(0,1fr)` } : undefined}
+        style={playerW ? { gridTemplateColumns: `min(${playerW}px, calc(100% - ${MIN_PANEL_W + 8}px)) 8px minmax(0,1fr)` } : undefined}
         className={`hidden h-[calc(100dvh-3.5rem)] lg:grid lg:grid-rows-[minmax(0,1fr)] ${
           playerW
             ? ""

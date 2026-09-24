@@ -138,7 +138,7 @@ export function PlayerPane({
       {/* Header: who/what on top, what to do next on its own tinted row — one
           block with one bottom border, so it reads as part of the pane. */}
       <div className="shrink-0 border-b border-line">
-      <div className="flex items-center gap-2 px-3 py-2.5">
+      <div className="@container flex items-center gap-2 px-3 py-2.5">
         <Link
           href={backHref}
           aria-label="Back to board"
@@ -221,8 +221,8 @@ export function PlayerPane({
             className="flex shrink-0 items-center gap-1.5 rounded-md bg-raised px-2 py-1 text-[11px] font-semibold text-ink-2 hover:bg-hover hover:text-ink"
           >
             <IconDownload size={12} />
-            <span className="hidden min-[520px]:inline">Download the video</span>
-            <span className="min-[520px]:hidden">Download</span>
+            <span className="hidden @[500px]:inline">Download the video</span>
+            <span className="@[500px]:hidden">Download</span>
           </a>
         ) : null}
 
