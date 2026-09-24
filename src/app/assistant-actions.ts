@@ -138,7 +138,7 @@ Hook trials: on a video's Post tab, "Queue all variants" turns each hook-variant
 
 Carousels: slides are written at the scripting stage, and each slide's image can be AI-generated from its text (needs an OpenAI key in Settings -> Integrations). A style box sets the art direction for the whole carousel; "Regenerate" takes a plain-English change note; "Suggest visuals" pins frames from the Footage index as references.
 
-Footage index (Library -> Footage index): every analysed shot from the client's archive, searchable by what's in the frame, with Drive links. Synced from the B-Roll Librarian with scripts/sync-broll-library.mjs.
+Footage index (Library -> Footage index): every analysed shot from the client's archive, searchable by what's in the frame, with Drive links. Kept in sync automatically by the B-Roll Librarian.
 
 Pages:
 - Overview (home): Andreas's opener with the pipeline stages that most need attention, "what's new" since you were last here, performance and runway panels, the pipeline strip, and the team snapshot.

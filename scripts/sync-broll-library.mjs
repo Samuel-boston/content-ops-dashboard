@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Manual fallback. The B-Roll Librarian now syncs itself once connected
+// (`broll connect-dashboard`); use this only to push from a local database by hand.
+//
 // Mirror the B-Roll Librarian archive into the dashboard's footage index.
 //
 //   node scripts/sync-broll-library.mjs [--workspace test] [--db /path/to/library.db] [--prune]

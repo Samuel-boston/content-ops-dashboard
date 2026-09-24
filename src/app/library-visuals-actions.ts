@@ -6,7 +6,7 @@ import type { LibraryShot } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Footage index — read side of the B-Roll Librarian mirror (migration 030).
-// Rows arrive via scripts/sync-broll-library.mjs; this file only searches
+// Rows arrive from the B-Roll Librarian (`broll connect-dashboard`); this file only searches
 // them. RLS: any seat can read (the whole team picks visuals); there is no
 // authenticated write path at all.
 // ---------------------------------------------------------------------------

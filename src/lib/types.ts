@@ -916,7 +916,7 @@ export interface TrialPost {
 /**
  * One analysed shot from the client's footage archive: a video's Nth detected
  * shot or a photo. Synced up from the local B-Roll Librarian by
- * scripts/sync-broll-library.mjs; media stays in Drive, the thumbnail frame
+ * the B-Roll Librarian's dashboard sync; media stays in Drive, the thumbnail frame
  * lives in the `library-thumbs` bucket.
  */
 export interface LibraryShot {

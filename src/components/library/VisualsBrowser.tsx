@@ -167,8 +167,9 @@ export function VisualsBrowser({
         <div className="rounded-xl border border-line bg-card px-4 py-14 text-center text-sm text-ink-3">
           {facets.total === 0 ? (
             <>
-              Nothing synced yet. Run <code className="rounded bg-raised px-1.5 py-0.5 text-xs">node scripts/sync-broll-library.mjs</code>{" "}
-              after an indexing session and the whole archive lands here.
+              Nothing synced yet. Connect the B-Roll Librarian once with{" "}
+              <code className="rounded bg-raised px-1.5 py-0.5 text-xs">broll connect-dashboard</code>{" "}
+              and the whole archive lands here, then stays up to date by itself.
             </>
           ) : (
             "No shots match — try fewer words, or drop a filter."
