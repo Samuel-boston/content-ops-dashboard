@@ -37,3 +37,27 @@ export function readPhoneToken(token: string): string | null {
     return null;
   }
 }
+
+/**
+ * A token for one cut version's original file — for places that can't send a
+ * login: the phone page's Download button, and Instagram, which has to fetch
+ * the video from a public address.
+ */
+export function mintFileToken(versionId: string, ttlMs = TTL_MS): string {
+  const payload = b64(Buffer.from(JSON.stringify({ v: versionId, e: Date.now() + ttlMs })));
+  return `${payload}.${sign(payload)}`;
+}
+
+export function readFileToken(token: string): string | null {
+  const [payload, sig] = token.split(".");
+  if (!payload || !sig) return null;
+  const a = Buffer.from(sig);
+  const b = Buffer.from(sign(payload));
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  try {
+    const { v, e } = JSON.parse(Buffer.from(payload, "base64url").toString()) as { v?: string; e: number };
+    return typeof v === "string" && typeof e === "number" && e > Date.now() ? v : null;
+  } catch {
+    return null;
+  }
+}

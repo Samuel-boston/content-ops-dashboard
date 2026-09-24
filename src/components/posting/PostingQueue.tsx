@@ -17,6 +17,7 @@ import {
 } from "@/app/posting-actions";
 import { IconCheck, IconClock } from "@/components/ui/icons";
 import { QR } from "@/components/ui/QR";
+import { PostComposer, type ComposerSubmit } from "@/components/posting/PostComposer";
 import type { Role } from "@/lib/types";
 
 /**
@@ -38,7 +39,8 @@ function TrialCard({
   const router = useRouter();
   const [pending, startTransition] = useTrackedTransition();
   const [permalink, setPermalink] = useState("");
-  const [when, setWhen] = useState("");
+  const [composing, setComposing] = useState(false);
+  const [draftCaption, setDraftCaption] = useState(trial.caption ?? "");
   const [phoneUrl, setPhoneUrl] = useState<string | null>(null);
   const [m, setM] = useState({
     views: trial.views?.toString() ?? "",
@@ -66,6 +68,11 @@ function TrialCard({
       const res = await trialPostingKitAction(trial.id);
       if ("error" in res) return toast.error(res.error);
       if (res.downloadUrl) {
+        if (!res.original) {
+          toast.info(
+            "Heads up: this is Cloudflare's re-encoded copy, so it's smaller than what was uploaded. Ask for the original to be re-uploaded if quality matters."
+          );
+        }
         window.open(res.downloadUrl, "_blank", "noopener");
       } else {
         toast.error("No downloadable file for this cut yet — ask the team.");
@@ -80,12 +87,14 @@ function TrialCard({
     });
   }
 
-  function publish(schedule: boolean) {
-    if (schedule && !when) return toast.error("Pick when it should go out.");
+  function publish(v: ComposerSubmit) {
     startTransition(async () => {
-      // datetime-local has no time zone; convert here, where the browser knows
-      // the VA's, so "3pm" means 3pm for them and not 3pm on the server.
-      const res = await vaPublishAction(trial.id, schedule ? new Date(when).toISOString() : null);
+      const res = await vaPublishAction(trial.id, {
+        whenISO: v.whenISO,
+        caption: v.caption,
+        coverOffsetMs: v.coverOffsetMs,
+        shareToFeed: v.shareToFeed,
+      });
       if (res?.error) toast.error(res.error);
       else {
         toast.success(res.scheduled ? "Scheduled — it'll go out by itself." : "Posted to Instagram ✓");
@@ -262,42 +271,36 @@ function TrialCard({
             </div>
           ) : null}
           {trial.postAs === "main" ? (
-            instagramConnected ? (
-              <div className="space-y-1.5 rounded-lg border border-accent/30 bg-accent-ghost p-2.5">
-                <p className="text-[11px] text-ink-2">
-                  Post it straight to Instagram — the caption above goes in as the caption.
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    onClick={() => publish(false)}
-                    disabled={pending}
-                    className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hi disabled:opacity-50"
-                  >
-                    {pending ? "Posting…" : "Post to Instagram now"}
-                  </button>
-                  <span className="text-[11px] text-ink-3">or</span>
-                  <input
-                    type="datetime-local"
-                    value={when}
-                    onChange={(e) => setWhen(e.target.value)}
-                    className="rounded-md border border-line bg-raised px-2 py-1 text-xs [color-scheme:dark] focus:border-accent focus:outline-none"
+            <div className="rounded-xl border border-accent/30 bg-accent-ghost/40 p-2.5">
+              <button
+                type="button"
+                onClick={() => setComposing((v) => !v)}
+                className="flex w-full items-center justify-between text-left text-xs font-medium text-ink"
+              >
+                <span>Post or schedule this on Instagram…</span>
+                <span className="text-ink-3">{composing ? "Close" : "Open"}</span>
+              </button>
+              {composing ? (
+                <div className="mt-3">
+                  <PostComposer
+                    caption={draftCaption}
+                    onCaptionChange={setDraftCaption}
+                    connected={instagramConnected ? ["instagram"] : []}
+                    emptyHint={
+                      <>
+                        {clientName} connects channels once in Settings → Integrations — after that
+                        they show up here to post and schedule from. Until then, post it by hand and
+                        mark it posted below.
+                      </>
+                    }
+                    isVideo={!trial.images?.length}
+                    durationSeconds={trial.durationSeconds}
+                    pending={pending}
+                    onSubmit={publish}
                   />
-                  <button
-                    onClick={() => publish(true)}
-                    disabled={pending || !when}
-                    className="rounded-lg border border-line px-3 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
-                  >
-                    Schedule
-                  </button>
                 </div>
-              </div>
-            ) : (
-              <p className="rounded-lg bg-raised px-2.5 py-2 text-[11px] leading-relaxed text-ink-3">
-                Instagram isn&rsquo;t connected yet, so this can&rsquo;t post itself. Ask {clientName}{" "}
-                to connect it once in Settings → Integrations — after that you can post and schedule
-                from here. Until then, post it from the app and mark it posted below.
-              </p>
-            )
+              ) : null}
+            </div>
           ) : (
             <p className="text-[11px] leading-relaxed text-ink-3">
               {trial.images?.length ? (

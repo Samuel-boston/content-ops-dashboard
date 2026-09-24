@@ -9,6 +9,8 @@ import {
 } from "@/lib/integrations/instagram";
 import { getDownloadUrl } from "@/lib/integrations/stream";
 import { markVideoPosted } from "@/lib/archive";
+import { mintFileToken } from "@/lib/phone-link";
+import { ORIGINAL_COLUMNS, hasOriginal } from "@/lib/cut-files";
 
 // Deliberately NOT in a "use server" file: everything exported from one of
 // those is callable from the browser as an action, and this one publishes to
@@ -34,7 +36,7 @@ export async function runPublishJob(jobId: string): Promise<{ ok: boolean; error
     if (job.cut_id) {
       const { data: top } = await db
         .from("cut_versions")
-        .select("stream_uid, drive_file_url")
+        .select(`id, stream_uid, drive_file_url, ${ORIGINAL_COLUMNS}`)
         .eq("cut_id", job.cut_id)
         .order("version", { ascending: false })
         .limit(1)
@@ -42,7 +44,13 @@ export async function runPublishJob(jobId: string): Promise<{ ok: boolean; error
       // Stream first: a Drive link is a viewer page, not a file Instagram can
       // fetch. Drive is only the fallback once Stream no longer has the video.
       let videoUrl: string | null = null;
-      if (top?.stream_uid) videoUrl = await getDownloadUrl(top.stream_uid);
+      // The original upload, fetched by Instagram from a signed address on this
+      // site — Stream's download is a re-encode and only the fallback.
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+      if (appUrl && top && hasOriginal(top as never)) {
+        videoUrl = `${appUrl}/api/file/${mintFileToken(top.id as string, 6 * 60 * 60 * 1000)}`;
+      }
+      if (!videoUrl && top?.stream_uid) videoUrl = await getDownloadUrl(top.stream_uid);
       if (!videoUrl) videoUrl = top?.drive_file_url ?? null;
       if (!videoUrl) throw new Error("No downloadable video for the main cut.");
 

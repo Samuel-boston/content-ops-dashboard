@@ -11,13 +11,7 @@ import {
 import { useToast } from "@/components/ui/Toast";
 import type { VideoAsset } from "@/lib/types";
 
-/**
- * Supabase's project-wide per-file cap on the current (Free) plan. Anything
- * larger is rejected by Storage with a 413 — after a long upload — so it's
- * caught up front and pointed at the link box instead. Raising the plan's
- * limit (Settings → Storage in Supabase) means raising this to match.
- */
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+import { MAX_UPLOAD_BYTES } from "@/lib/limits"; // see lib/limits.ts — the plan's per-file cap
 
 const size = (b: number | null) => {
   if (!b) return "";

@@ -7,6 +7,7 @@ import { getDownloadUrl } from "@/lib/integrations/stream";
 import { getWorkspaceSettings, integrationStatus } from "@/lib/workspace";
 import { markVideoPosted } from "@/lib/archive";
 import { mintPhoneToken } from "@/lib/phone-link";
+import { ORIGINAL_COLUMNS, hasOriginal } from "@/lib/cut-files";
 import { runPublishJob } from "@/lib/publish-runner";
 import type { PublishStatus, TrialPost, TrialStatus } from "@/lib/types";
 
@@ -37,6 +38,8 @@ export interface PostingTrialItem {
   coverUrl: string | null;
   /** A carousel has no video file — these are its slide images, in order. */
   images: string[] | null;
+  /** Length of the variant's latest cut, to bound the cover-frame picker. */
+  durationSeconds: number | null;
   status: TrialStatus;
   scheduled_for: string | null;
   posted_at: string | null;
@@ -113,6 +116,17 @@ export async function listPostingWork(): Promise<{
           )
         ).filter((u): u is string => Boolean(u));
       }
+      let durationSeconds: number | null = null;
+      if (t.cut_id) {
+        const { data: ver } = await db
+          .from("cut_versions")
+          .select("duration_seconds")
+          .eq("cut_id", t.cut_id)
+          .order("version", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        durationSeconds = (ver?.duration_seconds as number | null) ?? null;
+      }
       let coverUrl: string | null = null;
       if (t.video?.cover_path) {
         const { data: signed } = await db.storage.from("footage").createSignedUrl(t.video.cover_path, 3600);
@@ -128,6 +142,7 @@ export async function listPostingWork(): Promise<{
       notes: t.notes ?? t.video?.va_notes ?? null,
       coverUrl,
       images,
+      durationSeconds,
       status: t.status,
       scheduled_for: t.scheduled_for,
       posted_at: t.posted_at,
@@ -169,7 +184,8 @@ export async function listPostingWork(): Promise<{
  * short-lived by design.
  */
 export async function trialPostingKitAction(trialId: string): Promise<
-  { ok: true; downloadUrl: string | null; caption: string | null; label: string } | { error: string }
+  | { ok: true; downloadUrl: string | null; caption: string | null; label: string; original: boolean }
+  | { error: string }
 > {
   await requireRole("va", "owner", "admin");
   const db = supabaseAdmin();
@@ -182,17 +198,22 @@ export async function trialPostingKitAction(trialId: string): Promise<
   if (!trial) return { error: "Trial not found." };
 
   let downloadUrl: string | null = null;
+  let original = false;
   if (trial.cut_id) {
-    // Same resolution runPublishJob uses: newest version, Drive copy first,
-    // Stream download as fallback.
+    // The ORIGINAL upload first — Stream's own download is a re-encode, much
+    // smaller and softer than what was uploaded. Stream is only the fallback
+    // for versions uploaded before originals were kept.
     const { data: top } = await db
       .from("cut_versions")
-      .select("stream_uid, drive_file_url")
+      .select(`id, stream_uid, drive_file_url, ${ORIGINAL_COLUMNS}`)
       .eq("cut_id", trial.cut_id)
       .order("version", { ascending: false })
       .limit(1)
       .maybeSingle();
-    downloadUrl = top?.drive_file_url ?? null;
+    if (top && hasOriginal(top as never)) {
+      downloadUrl = `/api/cut-original/${top.id}`;
+      original = true;
+    }
     if (!downloadUrl && top?.stream_uid) {
       try {
         downloadUrl = await getDownloadUrl(top.stream_uid);
@@ -201,7 +222,7 @@ export async function trialPostingKitAction(trialId: string): Promise<
       }
     }
   }
-  return { ok: true, downloadUrl, caption: trial.caption, label: trial.label };
+  return { ok: true, downloadUrl, caption: trial.caption, label: trial.label, original };
 }
 
 /**
@@ -258,7 +279,18 @@ export async function vaMarkTrialPostedAction(trialId: string, permalink?: strin
  * a one-off for the whole workspace rather than something each person does.
  * The caption on the variant goes in as the caption.
  */
-export async function vaPublishAction(trialId: string, whenISO?: string | null) {
+export async function vaPublishAction(
+  trialId: string,
+  opts: {
+    /** ISO instant to go out at; null/omitted = post now. */
+    whenISO?: string | null;
+    /** The caption as edited in the form — saved back onto the variant. */
+    caption?: string | null;
+    coverOffsetMs?: number;
+    shareToFeed?: boolean;
+  } = {}
+) {
+  const whenISO = opts.whenISO ?? null;
   const me = await requireRole("va", "owner", "admin");
   const db = supabaseAdmin();
   const settings = await getWorkspaceSettings();
@@ -269,6 +301,9 @@ export async function vaPublishAction(trialId: string, whenISO?: string | null) 
   if (!t || t.status !== "planned") return { error: "That one isn't waiting to be posted." };
   if (t.post_as !== "main") return { error: "Trial reels can't be posted through Instagram's API — post it from the app." };
 
+  const caption = opts.caption !== undefined ? opts.caption?.trim() || null : (t.caption as string | null);
+  if (opts.caption !== undefined) await db.from("trial_posts").update({ caption }).eq("id", trialId);
+
   const when = whenISO ? new Date(whenISO) : null;
   if (when && Number.isNaN(when.getTime())) return { error: "That date didn't parse." };
   const scheduled = when && when.getTime() > Date.now() + 60_000;
@@ -278,12 +313,12 @@ export async function vaPublishAction(trialId: string, whenISO?: string | null) 
     .insert({
       video_id: t.video_id,
       cut_id: t.cut_id,
-      caption: t.caption ?? null,
+      caption,
       channels: ["instagram"],
       scheduled_for: (scheduled ? when : new Date())!.toISOString(),
       status: "scheduled",
-      cover_offset_ms: 0,
-      share_to_feed: true,
+      cover_offset_ms: Math.max(0, Math.round(opts.coverOffsetMs ?? 0)),
+      share_to_feed: opts.shareToFeed ?? true,
       created_by: me.id,
     })
     .select("id")

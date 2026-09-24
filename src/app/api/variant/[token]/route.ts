@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { readPhoneToken } from "@/lib/phone-link";
+import { mintFileToken, readPhoneToken } from "@/lib/phone-link";
+import { ORIGINAL_COLUMNS, hasOriginal } from "@/lib/cut-files";
 import { getDownloadUrl } from "@/lib/integrations/stream";
 
 /**
@@ -46,12 +47,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   if (t.cut_id) {
     const { data: top } = await db
       .from("cut_versions")
-      .select("stream_uid, drive_file_url")
+      .select(`id, stream_uid, drive_file_url, ${ORIGINAL_COLUMNS}`)
       .eq("cut_id", t.cut_id)
       .order("version", { ascending: false })
       .limit(1)
       .maybeSingle();
-    let url: string | null = top?.drive_file_url ?? null;
+    // The original upload, not Stream's smaller re-encode; Stream only for old versions.
+    let url: string | null = top && hasOriginal(top as never) ? `/api/file/${mintFileToken(top.id as string)}` : null;
     if (!url && top?.stream_uid) {
       try {
         url = await getDownloadUrl(top.stream_uid);

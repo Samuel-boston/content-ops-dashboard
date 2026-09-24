@@ -473,6 +473,11 @@ export interface CutVersion {
   thumbnail_url: string | null;
   playback_url: string | null;
   drive_file_url: string | null;
+  /** The untouched upload (Stream only keeps a re-encoded copy): in Storage until mirrored, then in Drive. */
+  original_path: string | null;
+  original_drive_url: string | null;
+  original_name: string | null;
+  original_bytes: number | null;
   uploaded_by: string | null;
   created_at: string;
 }

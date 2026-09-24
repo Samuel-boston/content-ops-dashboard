@@ -21,18 +21,34 @@ export async function archivePostedToDrive(videoId: string) {
     for (const cut of cuts ?? []) {
       const { data: top } = await db
         .from("cut_versions")
-        .select("id, stream_uid, version")
+        .select("id, stream_uid, version, original_path, original_drive_url, original_name")
         .eq("cut_id", cut.id)
         .order("version", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (!top?.stream_uid) continue;
-      const dl = await getDownloadUrl(top.stream_uid);
-      if (!dl) continue;
-      const link = await uploadFromUrl(dl, `${video?.title ?? "video"} — ${cut.label} v${top.version}.mp4`);
+      if (!top) continue;
+
+      // The archive should be the file that was uploaded, not Stream's smaller
+      // re-encode of it. Original already in Drive: just point at it. Still in
+      // Storage: copy it across. Only versions uploaded before originals were
+      // kept fall back to Stream's download.
+      let link: string | null = top.original_drive_url ?? null;
+      if (!link && top.original_path) {
+        const { data: signed } = await db.storage.from("footage").createSignedUrl(top.original_path, 900);
+        if (signed?.signedUrl) {
+          link = await uploadFromUrl(signed.signedUrl, top.original_name ?? `${video?.title ?? "video"} — ${cut.label} v${top.version}.mp4`);
+          await db.from("cut_versions").update({ original_drive_url: link, original_path: null }).eq("id", top.id);
+          await db.storage.from("footage").remove([top.original_path]);
+        }
+      }
+      if (!link && top.stream_uid) {
+        const dl = await getDownloadUrl(top.stream_uid);
+        if (dl) link = await uploadFromUrl(dl, `${video?.title ?? "video"} — ${cut.label} v${top.version}.mp4`);
+      }
+      if (!link) continue;
       firstLink ??= link;
       await db.from("cut_versions").update({ drive_file_url: link }).eq("id", top.id);
-      await deleteStreamVideo(top.stream_uid);
+      if (top.stream_uid) await deleteStreamVideo(top.stream_uid);
     }
     if (firstLink) await db.from("videos").update({ drive_file_url: firstLink }).eq("id", videoId);
   } catch {

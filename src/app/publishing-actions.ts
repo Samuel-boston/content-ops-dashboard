@@ -61,12 +61,14 @@ export async function schedulePostAction(input: {
   scheduledFor: string | null;
   coverOffsetMs?: number;
   shareToFeed?: boolean;
+  /** Publish immediately instead of queueing (only meaningful with no date). */
+  publishNow?: boolean;
 }) {
   const me = await requireRole("owner", "admin");
   if (!input.channels.length) return { error: "Pick at least one channel." };
 
   const supabase = await supabaseServer();
-  const { error } = await supabase.from("publish_jobs").insert({
+  const { data: job, error } = await supabase.from("publish_jobs").insert({
     video_id: input.videoId,
     cut_id: input.cutId,
     caption: input.caption.trim() || null,
@@ -76,8 +78,17 @@ export async function schedulePostAction(input: {
     share_to_feed: input.shareToFeed ?? true,
     status: "scheduled",
     created_by: me.id,
-  });
+  }).select("id").single();
   if (error) return { error: error.message };
+
+  if (input.publishNow && !input.scheduledFor) {
+    const res = await runPublishJob(job.id as string);
+    revalidatePath("/publishing");
+    revalidatePath("/calendar");
+    revalidatePath(`/videos/${input.videoId}`);
+    if (!res.ok) return { error: `Instagram didn't take it: ${res.error}` };
+    return { ok: true };
+  }
 
   revalidatePath("/publishing");
   revalidatePath("/calendar");

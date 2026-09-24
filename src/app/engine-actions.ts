@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { mirrorCutOriginalToDrive } from "@/lib/cut-files";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getCurrentProfile, requireRole, requireUser } from "@/lib/auth";
@@ -183,6 +185,49 @@ export async function createUploadUrlAction(cutId: string) {
   } catch (e) {
     return { error: (e as Error).message };
   }
+}
+
+/**
+ * A signed upload URL for the ORIGINAL file of a version. Stream re-encodes
+ * what it's given, so the untouched file goes to Storage separately (and on to
+ * Drive) — see migration 037.
+ */
+export async function createOriginalUploadAction(versionId: string, filename: string) {
+  await requireUser();
+  const supabase = await supabaseServer();
+  const { data: v } = await supabase.from("cut_versions").select("id").eq("id", versionId).maybeSingle();
+  if (!v) return { error: "Version not found." };
+  const ext = filename.split(".").pop()?.toLowerCase() || "mp4";
+  const path = `cuts/${versionId}/${crypto.randomUUID()}.${ext}`;
+  const { data, error } = await supabaseAdmin().storage.from("footage").createSignedUploadUrl(path);
+  if (error) return { error: error.message };
+  return { ok: true as const, path, signedUrl: data.signedUrl };
+}
+
+/** Record where the original landed, and start moving it into Drive. */
+export async function registerCutOriginalAction(input: {
+  versionId: string;
+  path: string;
+  name: string;
+  bytes: number;
+}) {
+  await requireUser();
+  const supabase = await supabaseServer();
+  const { data: v } = await supabase
+    .from("cut_versions")
+    .select("id, cut_id")
+    .eq("id", input.versionId)
+    .maybeSingle();
+  if (!v) return { error: "Version not found." };
+  if (!input.path.startsWith(`cuts/${input.versionId}/`)) return { error: "That file doesn't belong to this version." };
+  const { error } = await supabaseAdmin()
+    .from("cut_versions")
+    .update({ original_path: input.path, original_name: input.name, original_bytes: input.bytes })
+    .eq("id", input.versionId);
+  if (error) return { error: error.message };
+  // after(): a bare floating promise is frozen once the response is sent.
+  after(() => mirrorCutOriginalToDrive(input.versionId));
+  return { ok: true as const };
 }
 
 /** Poll Cloudflare and sync a version's status/thumbnail/duration into the DB. */
@@ -559,7 +604,7 @@ export async function postVariantsToDriveAction(videoId: string) {
   for (const cut of hookCuts) {
     const { data: top } = await db
       .from("cut_versions")
-      .select("stream_uid, version, status")
+      .select("stream_uid, version, status, original_path, original_drive_url, original_name")
       .eq("cut_id", cut.id)
       .order("version", { ascending: false })
       .limit(1)
@@ -569,12 +614,23 @@ export async function postVariantsToDriveAction(videoId: string) {
       continue;
     }
     try {
-      const dl = await getDownloadUrl(top.stream_uid);
+      // Original first (see migration 037); Stream's re-encode only for old versions.
+      if (top.original_drive_url) {
+        links.push(top.original_drive_url as string);
+        uploaded += 1;
+        continue;
+      }
+      const { uploadFromUrl } = await import("@/lib/integrations/drive");
+      let src: string | null = null;
+      if (top.original_path) {
+        const { data: signed } = await db.storage.from("footage").createSignedUrl(top.original_path as string, 900);
+        src = signed?.signedUrl ?? null;
+      }
+      const dl = src ?? (await getDownloadUrl(top.stream_uid));
       if (!dl) {
         failed.push(cut.label);
         continue;
       }
-      const { uploadFromUrl } = await import("@/lib/integrations/drive");
       const link = await uploadFromUrl(dl, `${video.title} — ${cut.label} v${top.version}.mp4`);
       links.push(link);
       uploaded += 1;
