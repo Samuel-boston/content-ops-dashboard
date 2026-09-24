@@ -42,6 +42,9 @@ const BACKUP_TABLES = [
   "editor_month_billing",
   "editor_payment_details",
   "editor_time_off",
+  "trial_posts",
+  "va_tasks",
+  "script_comments",
 ] as const;
 
 export interface BackupResult {

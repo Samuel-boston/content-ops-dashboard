@@ -6,6 +6,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth";
 import {
   containerReady,
+  createCarouselContainer,
   createReelContainer,
   publishContainer,
 } from "@/lib/integrations/instagram";
@@ -121,22 +122,56 @@ export async function runPublishJob(jobId: string): Promise<{ ok: boolean; error
   if (!job || job.status === "published" || job.status === "cancelled") return { ok: true };
 
   await db.from("publish_jobs").update({ status: "publishing", error: null }).eq("id", jobId);
+  const tempFiles: string[] = [];
   try {
-    const { data: top } = await db
-      .from("cut_versions")
-      .select("stream_uid, drive_file_url")
-      .eq("cut_id", job.cut_id)
-      .order("version", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    let videoUrl = top?.drive_file_url ?? null;
-    if (!videoUrl && top?.stream_uid) videoUrl = await getDownloadUrl(top.stream_uid);
-    if (!videoUrl) throw new Error("No downloadable video for the main cut.");
+    let creationId: string;
+    if (job.cut_id) {
+      const { data: top } = await db
+        .from("cut_versions")
+        .select("stream_uid, drive_file_url")
+        .eq("cut_id", job.cut_id)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      let videoUrl = top?.drive_file_url ?? null;
+      if (!videoUrl && top?.stream_uid) videoUrl = await getDownloadUrl(top.stream_uid);
+      if (!videoUrl) throw new Error("No downloadable video for the main cut.");
 
-    const creationId = await createReelContainer(videoUrl, job.caption ?? "", {
-      thumbOffsetMs: job.cover_offset_ms ?? 0,
-      shareToFeed: job.share_to_feed ?? true,
-    });
+      creationId = await createReelContainer(videoUrl, job.caption ?? "", {
+        thumbOffsetMs: job.cover_offset_ms ?? 0,
+        shareToFeed: job.share_to_feed ?? true,
+      });
+    } else {
+      // No cut: this is a carousel. Instagram only takes JPEG for feed images,
+      // and the slides are stored as PNG — so each is converted to a temporary
+      // JPEG, handed over by signed link, and cleaned up afterwards.
+      const { default: sharp } = await import("sharp");
+      const { data: slides } = await db
+        .from("carousel_images")
+        .select("storage_path")
+        .eq("video_id", job.video_id)
+        .not("storage_path", "is", null)
+        .order("position");
+      const urls: string[] = [];
+      for (const sl of slides ?? []) {
+        const { data: blob } = await db.storage.from("carousels").download(sl.storage_path as string);
+        if (!blob) throw new Error("A slide image is missing from storage.");
+        const jpeg = await sharp(Buffer.from(await blob.arrayBuffer())).jpeg({ quality: 92 }).toBuffer();
+        const tmp = `_ig/${crypto.randomUUID()}.jpg`;
+        const { error: upErr } = await db.storage.from("carousels").upload(tmp, jpeg, { contentType: "image/jpeg" });
+        if (upErr) throw new Error(upErr.message);
+        tempFiles.push(tmp);
+        const { data: signed } = await db.storage.from("carousels").createSignedUrl(tmp, 3600);
+        if (!signed?.signedUrl) throw new Error("Couldn't prepare a slide for Instagram.");
+        urls.push(signed.signedUrl);
+      }
+      try {
+        creationId = await createCarouselContainer(urls, job.caption ?? "");
+      } catch (e) {
+        await db.storage.from("carousels").remove(tempFiles);
+        throw e;
+      }
+    }
     await db.from("publish_jobs").update({ ig_creation_id: creationId }).eq("id", jobId);
 
     // poll up to ~2.5 min
@@ -148,6 +183,7 @@ export async function runPublishJob(jobId: string): Promise<{ ok: boolean; error
     }
 
     const mediaId = await publishContainer(creationId);
+    if (tempFiles.length) await db.storage.from("carousels").remove(tempFiles);
     await db
       .from("publish_jobs")
       .update({ status: "published", ig_media_id: mediaId, published_at: new Date().toISOString() })
@@ -160,6 +196,7 @@ export async function runPublishJob(jobId: string): Promise<{ ok: boolean; error
     await markVideoPosted(job.video_id);
     return { ok: true };
   } catch (e) {
+    if (tempFiles.length) await db.storage.from("carousels").remove(tempFiles);
     await db
       .from("publish_jobs")
       .update({ status: "failed", error: (e as Error).message })

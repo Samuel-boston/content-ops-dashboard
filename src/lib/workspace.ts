@@ -37,6 +37,7 @@ function emptySettings(): WorkspaceSettings {
     hook_variant_surcharge_cents: 200,
     currency: "USD",
     brand_name: null,
+    client_name: null,
     brand_logo_path: null,
     updated_by: null,
     updated_at: new Date(0).toISOString(),
@@ -114,6 +115,11 @@ export const brandingFor = unstable_cache(
  */
 export const getClientName = unstable_cache(
   async (): Promise<string> => {
+    // The name set in Settings -> Branding wins; the owner's own first name is
+    // only a fallback for a workspace that hasn't set one.
+    const s = await getWorkspaceSettings();
+    const set = s.client_name?.trim();
+    if (set) return set;
     const { data } = await supabaseAdmin()
       .from("profiles")
       .select("full_name")
@@ -126,5 +132,5 @@ export const getClientName = unstable_cache(
     return first || "the client";
   },
   ["client-first-name"],
-  { revalidate: 300 }
+  { revalidate: 300, tags: ["branding"] }
 );

@@ -104,6 +104,21 @@ export async function searchLibraryShots(filter: VisualsFilter): Promise<Library
   return signThumbs(rows);
 }
 
+/**
+ * Specific shots by id, in the order asked for, with fresh thumbnail links —
+ * for the slide designer, which needs to show the photos already pinned to a
+ * slide, not search for them again.
+ */
+export async function getLibraryShotsByIds(ids: string[]): Promise<LibraryShot[]> {
+  await requireUser();
+  if (!ids.length) return [];
+  const supabase = await supabaseServer();
+  const { data } = await supabase.from("library_shots").select("*").in("id", ids.slice(0, 8));
+  const byId = new Map(((data as LibraryShot[]) ?? []).map((r) => [r.id, r]));
+  const ordered = ids.map((id) => byId.get(id)).filter((r): r is LibraryShot => Boolean(r));
+  return signThumbs(ordered);
+}
+
 /** Facet values for the filter chips, computed from what's actually indexed. */
 export async function libraryFacets(): Promise<{ emotions: string[]; categories: string[]; total: number }> {
   await requireUser();

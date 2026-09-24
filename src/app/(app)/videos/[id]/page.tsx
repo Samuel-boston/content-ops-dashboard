@@ -19,6 +19,7 @@ import { VideoWorkspace } from "@/components/workspace/VideoWorkspace";
 import { EditorVideoView } from "@/components/editor/EditorVideoView";
 import { ReadyToEditRecap } from "@/components/pipeline/ReadyToEditRecap";
 import { EditingStatusCard } from "@/components/pipeline/EditingStatusCard";
+import { listScriptComments } from "@/app/script-comment-actions";
 import { StageChat } from "@/components/pipeline/StageChat";
 import { CarouselPostView } from "@/components/script/CarouselPostView";
 import type { CutComment } from "@/lib/types";
@@ -210,7 +211,16 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
     "posted",
   ];
   if (isCarouselFormat(video.formats) && CAROUSEL_POST_STATUSES.includes(video.status)) {
-    return <CarouselPostView video={video} carouselSlides={carouselImages} chat={<StageChat videoId={id} />} />;
+    const slideComments = await listScriptComments(id);
+    return (
+      <CarouselPostView
+        video={video}
+        carouselSlides={carouselImages}
+        chat={<StageChat videoId={id} />}
+        comments={slideComments}
+        viewer={viewer}
+      />
+    );
   }
 
   const customsBy = {

@@ -7,17 +7,16 @@ import { useToast } from "@/components/ui/Toast";
 import {
   createCarouselSlideAction,
   deleteCarouselImageAction,
-  generateCarouselSlideAction,
   moveCarouselImageAction,
   saveCarouselStyleAction,
   setSlideRefsAction,
   updateCarouselCaptionAction,
   setSlideImageFromShotAction,
-  type ReferenceLayout,
 } from "@/app/carousel-actions";
 import { suggestSlideVisualsAction } from "@/app/library-visuals-actions";
 import { ShotCard } from "@/components/library/VisualsBrowser";
 import { IconChevronDown, IconPlus, IconSparkles, IconTrash } from "@/components/ui/icons";
+import { SlideDesigner } from "@/components/script/SlideDesigner";
 import { ScriptComments } from "@/components/script/ScriptComments";
 import type { CarouselImage, LibraryShot, Profile, ScriptComment } from "@/lib/types";
 
@@ -69,9 +68,8 @@ export function CarouselSlides({
 }) {
   const router = useRouter();
   const toast = useToast();
-  const [pending, startTransition] = useTrackedTransition();
+  const [, startTransition] = useTrackedTransition();
   const [adding, setAdding] = useState(false);
-  const [batchRunning, setBatchRunning] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(slides[0]?.id ?? null);
   const [style, setStyle] = useState(carouselStyle ?? "");
 
@@ -80,7 +78,7 @@ export function CarouselSlides({
     startTransition(async () => {
       const res = await saveCarouselStyleAction(videoId, next);
       if (res?.error) toast.error(res.error);
-      else toast.success("Style saved — new generations will use it.");
+      else toast.success("Saved — every slide you design from now on will follow this look.");
     });
   }
 
@@ -91,44 +89,11 @@ export function CarouselSlides({
   const selected =
     slides.find((s) => s.id === selectedId) ?? slides[slides.length - 1] ?? null;
   const selectedIndex = selected ? slides.indexOf(selected) : -1;
-  const missing = slides.filter((s) => (s.caption ?? "").trim() && !s.storage_path);
-
-  function generateAllMissing() {
-    setBatchRunning(true);
-    startTransition(async () => {
-      let made = 0;
-      // Sequential on purpose: each generation is slow and the carousel
-      // should stay one consistent series, not four parallel guesses.
-      for (const s of missing) {
-        const res = await generateCarouselSlideAction(s.id, videoId);
-        if (res?.error) {
-          toast.error(`Slide ${slides.indexOf(s) + 1}: ${res.error}`);
-          break;
-        }
-        made += 1;
-        router.refresh();
-      }
-      setBatchRunning(false);
-      if (made > 0) toast.success(`Generated ${made} slide${made === 1 ? "" : "s"}.`);
-    });
-  }
-
   return (
     <section className="rounded-2xl border border-line bg-card p-4">
       <div className="mb-2 flex items-center gap-2">
         <h2 className="text-sm font-semibold">Slides</h2>
         <span className="text-xs text-ink-3">{slides.length}</span>
-        {missing.length > 0 ? (
-          <button
-            type="button"
-            disabled={pending || batchRunning}
-            onClick={generateAllMissing}
-            className="ml-auto flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
-          >
-            <IconSparkles size={12} />
-            {batchRunning ? "Designing…" : `Generate ${missing.length} missing`}
-          </button>
-        ) : null}
         <button
           type="button"
           disabled={adding}
@@ -141,7 +106,7 @@ export function CarouselSlides({
               else router.refresh();
             });
           }}
-          className={`${missing.length > 0 ? "" : "ml-auto "}flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50`}
+          className="ml-auto flex items-center gap-1 rounded-md border border-line px-2 py-1 text-[11px] text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
         >
           <IconPlus size={12} />
           Add slide
@@ -154,6 +119,13 @@ export function CarouselSlides({
       </p>
 
       {/* Carousel-wide art direction, applied to every generated slide. */}
+      <div className="mb-1.5">
+        <span className="block text-[11px] font-medium text-ink-2">Look for the whole carousel</span>
+        <span className="block text-[10px] leading-snug text-ink-3">
+          A few words on colours, fonts and mood. It&rsquo;s added to the instructions for every slide
+          you design, so the set looks like one series. It does nothing until a slide is designed.
+        </span>
+      </div>
       <div className="mb-1.5 flex flex-wrap items-center gap-1">
         <span className="text-[10px] text-ink-3">Presets:</span>
         {STYLE_PRESETS.map((p) => (
@@ -272,38 +244,15 @@ function SlideFocus({
   const router = useRouter();
   const toast = useToast();
   const [pending, startTransition] = useTrackedTransition();
-  const [note, setNote] = useState("");
-  const [showNote, setShowNote] = useState(false);
+  const [designing, setDesigning] = useState(false);
   const [picker, setPicker] = useState<LibraryShot[] | null>(null);
   const [refs, setRefs] = useState<string[]>(s.ref_shot_ids ?? []);
-  const [generating, setGenerating] = useState(false);
   const [usingShotId, setUsingShotId] = useState<string | null>(null);
-  const [layout, setLayout] = useState<ReferenceLayout | "">("");
   // The line of the slide text the reader has selected — visuals are suggested
   // for exactly that, not for the whole slide.
   const [selection, setSelection] = useState<string | null>(null);
 
   const hasText = Boolean((s.caption ?? "").trim());
-
-  function generate(changeNote?: string) {
-    setGenerating(true);
-    startTransition(async () => {
-      const res = await generateCarouselSlideAction(
-        s.id,
-        videoId,
-        changeNote,
-        layout || undefined
-      );
-      setGenerating(false);
-      if (res?.error) toast.error(res.error);
-      else {
-        setNote("");
-        setShowNote(false);
-        toast.success(`Slide ${i + 1} designed.`);
-        router.refresh();
-      }
-    });
-  }
 
   function openPicker(forText: string) {
     startTransition(async () => {
@@ -463,35 +412,15 @@ function SlideFocus({
           ) : null}
 
           <div className="flex flex-wrap items-center gap-1.5">
-            {!s.storage_path ? (
-              <button
-                type="button"
-                disabled={pending || !hasText}
-                title={hasText ? "Design this slide from its text" : "Write the slide text first"}
-                onClick={() => generate(note.trim() || undefined)}
-                className="flex items-center gap-1 rounded-md bg-accent px-2.5 py-1.5 text-xs font-medium text-white hover:bg-accent-hi disabled:opacity-40"
-              >
-                <IconSparkles size={12} />
-                {generating ? "Designing…" : "Generate Creative"}
-              </button>
-            ) : (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => generate(note.trim() || undefined)}
-                className="flex items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
-              >
-                <IconSparkles size={12} />
-                {generating ? "Designing…" : "Regenerate Creative"}
-              </button>
-            )}
             <button
               type="button"
-              disabled={pending}
-              onClick={() => setShowNote((v) => !v)}
-              className="rounded-md px-2 py-1.5 text-xs text-ink-3 hover:bg-hover hover:text-ink"
+              disabled={pending || !hasText}
+              title={hasText ? "Lay the slide out, check it, then confirm" : "Write the slide text first"}
+              onClick={() => setDesigning(true)}
+              className="flex items-center gap-1 rounded-md bg-accent px-2.5 py-1.5 text-xs font-medium text-white hover:bg-accent-hi disabled:opacity-40"
             >
-              {showNote ? "Hide context" : "+ Add context"}
+              <IconSparkles size={12} />
+              {s.storage_path ? "Redesign slide…" : "Design slide…"}
             </button>
             {refs.length ? (
               <button
@@ -500,7 +429,7 @@ function SlideFocus({
                 onClick={() => openPicker(selection ?? s.caption ?? "")}
                 className="rounded-md border border-line px-2.5 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
               >
-                References ({refs.length})
+                Chosen photos ({refs.length})
               </button>
             ) : null}
             {s.gen_at ? (
@@ -509,48 +438,12 @@ function SlideFocus({
               </span>
             ) : null}
           </div>
-
-          {refs.length >= 2 ? (
-            <div className="flex flex-wrap items-center gap-1">
-              <span className="text-[10px] text-ink-3">Layout:</span>
-              {(
-                [
-                  { key: "top-bottom", label: "Top / bottom" },
-                  { key: "side-by-side", label: "Side by side" },
-                  { key: "diagonal", label: "Diagonal" },
-                ] as { key: ReferenceLayout; label: string }[]
-              ).map((o) => (
-                <button
-                  key={o.key}
-                  type="button"
-                  onClick={() => setLayout((v) => (v === o.key ? "" : o.key))}
-                  aria-pressed={layout === o.key}
-                  className={`rounded-md px-2 py-1 text-[10px] ${
-                    layout === o.key
-                      ? "bg-accent text-white"
-                      : "border border-line text-ink-3 hover:border-accent hover:text-ink"
-                  }`}
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-
-          {showNote ? (
-            <input
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder={
-                s.storage_path
-                  ? 'What should change? — "bigger text, warmer background, drop the icon"'
-                  : 'Optional — "bold red accent, off-white background, editorial serif"'
-              }
-              className="w-full rounded-md border border-line bg-app px-2 py-1.5 text-xs placeholder:text-ink-3 focus:border-accent focus:outline-none"
-            />
-          ) : null}
         </div>
       </div>
+
+      {designing ? (
+        <SlideDesigner slide={s} index={i} videoId={videoId} onClose={() => setDesigning(false)} />
+      ) : null}
 
       {picker ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setPicker(null)}>
@@ -563,8 +456,8 @@ function SlideFocus({
                 <h3 className="text-sm font-semibold">Visuals for slide {i + 1}</h3>
                 <p className="text-xs text-ink-3">
                   From the footage index — free, no AI call. &ldquo;Use as image&rdquo; puts the
-                  real photo straight on the slide. &ldquo;Reference&rdquo; hands it to Generate as
-                  grounding instead.
+                  real photo straight on the slide. &ldquo;Add to design&rdquo; keeps it for the
+                  slide designer, where you arrange it and confirm before anything is generated.
                 </p>
               </div>
               <button
@@ -594,14 +487,14 @@ function SlideFocus({
                         type="button"
                         disabled={pending}
                         onClick={() => toggleRef(shot.id)}
-                        title="Hand this to Generate as grounding for an AI-designed slide"
+                        title="Keep this photo for the slide designer"
                         className={`rounded-md px-2 py-1 text-[10px] font-medium ${
                           refs.includes(shot.id)
                             ? "bg-accent-ghost text-accent-hi"
                             : "border border-line text-ink-2 hover:border-accent hover:text-ink"
                         }`}
                       >
-                        {refs.includes(shot.id) ? "Referenced ✓" : "Reference"}
+                        {refs.includes(shot.id) ? "In the design ✓" : "Add to design"}
                       </button>
                     </div>
                   }

@@ -791,6 +791,8 @@ export interface WorkspaceSettings {
   currency: string;
   /** Shown in the nav. Falls back to "Content Ops" when unset. */
   brand_name: string | null;
+  /** The client's first name, used in copy shown to the team ("Adam is reviewing"). */
+  client_name: string | null;
   /** Object key inside the public `branding` bucket. */
   brand_logo_path: string | null;
   updated_by: string | null;

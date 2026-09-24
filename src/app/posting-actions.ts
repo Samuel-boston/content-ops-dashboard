@@ -6,6 +6,7 @@ import { requireRole } from "@/lib/auth";
 import { getDownloadUrl } from "@/lib/integrations/stream";
 import { getWorkspaceSettings, integrationStatus } from "@/lib/workspace";
 import { markVideoPosted } from "@/lib/archive";
+import { mintPhoneToken } from "@/lib/phone-link";
 import { runPublishJob } from "@/app/publishing-actions";
 import type { PublishStatus, TrialPost, TrialStatus } from "@/lib/types";
 
@@ -267,7 +268,6 @@ export async function vaPublishAction(trialId: string, whenISO?: string | null) 
   const { data: t } = await db.from("trial_posts").select("*").eq("id", trialId).maybeSingle();
   if (!t || t.status !== "planned") return { error: "That one isn't waiting to be posted." };
   if (t.post_as !== "main") return { error: "Trial reels can't be posted through Instagram's API — post it from the app." };
-  if (!t.cut_id) return { error: "This one has no video file to publish." };
 
   const when = whenISO ? new Date(whenISO) : null;
   if (when && Number.isNaN(when.getTime())) return { error: "That date didn't parse." };
@@ -350,4 +350,14 @@ export async function vaSetPostAsAction(trialId: string, postAs: "trial" | "main
   if (error) return { error: error.message };
   revalidatePath("/posting");
   return { ok: true };
+}
+
+/**
+ * A short-lived token for the "send to phone" QR code. The client builds the
+ * URL from it (`/api/variant/<token>`) so the code always points at whichever
+ * domain the dashboard is being used from.
+ */
+export async function variantPhoneTokenAction(trialId: string): Promise<{ token: string }> {
+  await requireRole("va", "owner", "admin");
+  return { token: mintPhoneToken(trialId) };
 }

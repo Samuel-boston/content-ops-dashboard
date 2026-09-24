@@ -28,7 +28,11 @@ export default async function SettingsPage() {
           accounts later is an edit here — not a redeploy.
         </p>
       </div>
-      <BrandingForm brandName={settings.brand_name} logoUrl={branding.logoUrl} />
+      <BrandingForm
+        brandName={settings.brand_name}
+        clientName={settings.client_name}
+        logoUrl={branding.logoUrl}
+      />
       <SettingsForm
         settings={redactSettings(settings)}
         status={integrationStatus(settings)}

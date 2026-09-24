@@ -290,72 +290,99 @@ const DEFAULT_STYLE =
  * ride along either way. The old file is removed only after the new one is
  * safely registered.
  */
-export type ReferenceLayout = "top-bottom" | "side-by-side" | "diagonal";
+export type SlideLayout = "full" | "top-bottom" | "left-right";
 
-const LAYOUT_INSTRUCTIONS: Record<ReferenceLayout, string> = {
-  "top-bottom": "Stack the reference photos: one on top, one on the bottom, split evenly.",
-  "side-by-side": "Place the reference photos side by side, split evenly left and right.",
-  diagonal: "Arrange the reference photos in a diagonal split across the frame.",
+export interface SlidePanel {
+  /** The footage-index photo for this panel; null = no photo, a background is designed instead. */
+  shotId: string | null;
+  /** The text that sits on this panel. */
+  text: string;
+}
+
+const LAYOUT_LINES: Record<SlideLayout, { intro: string; names: string[] }> = {
+  full: { intro: "One single panel filling the whole frame.", names: ["the whole frame"] },
+  "top-bottom": {
+    intro: "Two panels stacked, split evenly: panel 1 is the TOP half, panel 2 is the BOTTOM half.",
+    names: ["the top half", "the bottom half"],
+  },
+  "left-right": {
+    intro: "Two panels side by side, split evenly: panel 1 is the LEFT half, panel 2 is the RIGHT half.",
+    names: ["the left half", "the right half"],
+  },
 };
 
+/**
+ * Design one slide with gpt-image-1 — only ever called from the designer's
+ * Confirm button, after the person has seen which photo goes where and which
+ * text sits on which panel. That structure is what's sent: the photos are
+ * attached in panel order and the prompt names each one ("reference image 1
+ * is panel 1, the top half"), so the model is told what to do with every
+ * image rather than left to guess.
+ */
 export async function generateCarouselSlideAction(
   id: string,
   videoId: string,
-  changeNote?: string,
-  layout?: ReferenceLayout
+  input: { layout: SlideLayout; panels: SlidePanel[]; note?: string }
 ) {
   await requireRole("owner", "admin", "copywriter");
   const supabase = await supabaseServer();
 
+  const layout = input.layout in LAYOUT_LINES ? input.layout : "full";
+  const want = layout === "full" ? 1 : 2;
+  const panels = input.panels.slice(0, want).map((p) => ({ shotId: p.shotId, text: p.text.trim() }));
+  while (panels.length < want) panels.push({ shotId: null, text: "" });
+  if (!panels.some((p) => p.text)) return { error: "Put some text on the slide first — the image is designed around it." };
+
   const [{ data: slide }, { data: video }, { data: siblings }] = await Promise.all([
     supabase.from("carousel_images").select("*").eq("id", id).single(),
     supabase.from("videos").select("title, carousel_style").eq("id", videoId).single(),
-    supabase
-      .from("carousel_images")
-      .select("position, caption")
-      .eq("video_id", videoId)
-      .order("position"),
+    supabase.from("carousel_images").select("position, caption").eq("video_id", videoId).order("position"),
   ]);
   if (!slide) return { error: "Slide not found." };
   if (!video) return { error: "Video not found." };
-  const text = (slide.caption as string | null)?.trim();
-  if (!text) return { error: "Write the slide's text first — the image is designed around it." };
 
   const all = siblings ?? [];
   const idx = all.findIndex((s) => s.position === slide.position);
   const n = idx >= 0 ? idx + 1 : (slide.position as number) + 1;
 
+  // Photos, in panel order. The numbering here is what the prompt refers to.
+  const shotIds = panels.map((p) => p.shotId).filter((s): s is string => Boolean(s));
+  const references: { data: Buffer; mime: string; name: string }[] = [];
+  if (shotIds.length) {
+    const { data: shots } = await supabase.from("library_shots").select("id, thumb_path").in("id", shotIds);
+    const byId = new Map((shots ?? []).map((s) => [s.id as string, s.thumb_path as string | null]));
+    for (const sid of shotIds) {
+      const path = byId.get(sid);
+      if (!path) return { error: "One of the chosen photos is no longer in the footage index — pick another." };
+      const { data: blob } = await supabase.storage.from("library-thumbs").download(path);
+      if (!blob) return { error: "Couldn't load one of the chosen photos — pick another." };
+      references.push({ data: Buffer.from(await blob.arrayBuffer()), mime: "image/jpeg", name: `${sid}.jpg` });
+    }
+  }
+
+  let refNo = 0;
+  const panelLines = panels.map((p, i) => {
+    const where = LAYOUT_LINES[layout].names[i];
+    const photo = p.shotId
+      ? `Photo: reference image ${++refNo} — use exactly this photo, cropped to fill ${where}; do not replace it with a different scene.`
+      : "Photo: none supplied — design a background for this panel that suits the art direction.";
+    const text = p.text
+      ? `Text on this panel, verbatim and correctly spelled, easy to read over the photo:\n"${p.text}"`
+      : "No text on this panel.";
+    return `Panel ${i + 1} (${where}):\n${photo}\n${text}`;
+  });
+
   const prompt = [
     `Design slide ${n} of ${all.length || n} for an Instagram carousel ("${video.title}").`,
     `Art direction: ${(video.carousel_style as string | null)?.trim() || DEFAULT_STYLE}`,
-    `The slide must display this text, verbatim, correctly spelled, as the visual centrepiece:\n"${text}"`,
-    "Compose safe for a 4:5 crop (keep everything important away from the top and bottom edges).",
-    "Keep the look consistent with the rest of the carousel series.",
-    layout ? LAYOUT_INSTRUCTIONS[layout] : null,
-    changeNote?.trim() ? `Adjust from the current version: ${changeNote.trim()}` : null,
+    "Canvas: portrait 2:3. Keep everything important away from the very top and bottom edges so it survives a 4:5 crop.",
+    `Layout: ${LAYOUT_LINES[layout].intro}`,
+    ...panelLines,
+    "Each panel's text belongs only on that panel. Keep the look consistent with the rest of the carousel series.",
+    input.note?.trim() ? `Extra direction: ${input.note.trim()}` : null,
   ]
     .filter(Boolean)
     .join("\n\n");
-
-  // References: the current image (for continuity when regenerating) plus any
-  // footage-index frames pinned to the slide.
-  const references: { data: Buffer; mime: string; name: string }[] = [];
-  if (slide.storage_path && changeNote?.trim()) {
-    const { data: cur } = await supabase.storage.from("carousels").download(slide.storage_path as string);
-    if (cur) references.push({ data: Buffer.from(await cur.arrayBuffer()), mime: "image/png", name: "current-slide.png" });
-  }
-  const refIds = (slide.ref_shot_ids as string[] | null) ?? [];
-  if (refIds.length) {
-    const { data: shots } = await supabase
-      .from("library_shots")
-      .select("id, thumb_path")
-      .in("id", refIds);
-    for (const s of shots ?? []) {
-      if (!s.thumb_path) continue;
-      const { data: blob } = await supabase.storage.from("library-thumbs").download(s.thumb_path as string);
-      if (blob) references.push({ data: Buffer.from(await blob.arrayBuffer()), mime: "image/jpeg", name: `${s.id}.jpg` });
-    }
-  }
 
   let png: Buffer;
   try {
@@ -381,7 +408,10 @@ export async function generateCarouselSlideAction(
       storage_path: newPath,
       size_bytes: png.length,
       uploaded_by: me.id,
-      gen_prompt: changeNote?.trim() || "Generated from the slide text",
+      // What was confirmed becomes the slide's record: its text, and the photos in panel order.
+      caption: panels.map((p) => p.text).filter(Boolean).join("\n"),
+      ref_shot_ids: shotIds.slice(0, 4),
+      gen_prompt: `${layout}${input.note?.trim() ? ` — ${input.note.trim()}` : ""}`,
       gen_at: new Date().toISOString(),
     })
     .eq("id", id);

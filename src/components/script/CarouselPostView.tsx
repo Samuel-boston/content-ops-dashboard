@@ -17,7 +17,7 @@ import {
   submitCarouselCreativesAction,
 } from "@/app/pipeline-actions";
 import { IconCheck, IconChevronRight, IconSparkles } from "@/components/ui/icons";
-import { STATUS_COLOR, STATUS_LABELS, type CarouselImage, type Video } from "@/lib/types";
+import { STATUS_COLOR, STATUS_LABELS, type CarouselImage, type Profile, type ScriptComment, type Video } from "@/lib/types";
 
 /**
  * The carousel's whole life after the script is approved, in one place.
@@ -35,10 +35,15 @@ export function CarouselPostView({
   video,
   carouselSlides,
   chat,
+  comments,
+  viewer,
 }: {
   video: Video;
   carouselSlides: CarouselImage[];
   chat?: React.ReactNode;
+  /** Notes on the slides — the same thread the script stage used, carried into creative review. */
+  comments?: ScriptComment[];
+  viewer?: Pick<Profile, "id" | "role">;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -167,6 +172,8 @@ export function CarouselPostView({
         videoId={video.id}
         slides={carouselSlides}
         carouselStyle={video.carousel_style}
+        comments={comments}
+        viewer={viewer}
       />
 
       {/* Approved: hand it to the VA to post — notes, a cover and a caption. */}

@@ -72,6 +72,7 @@ export async function updateWorkspaceSettingsAction(formData: FormData) {
 export async function saveBrandingAction(input: {
   name: string;
   logoPath?: string | null;
+  clientName?: string;
 }) {
   const me = await requireRole("owner");
   const supabase = await supabaseServer();
@@ -83,6 +84,7 @@ export async function saveBrandingAction(input: {
   };
   // `undefined` means "leave the logo alone"; `null` means "remove it".
   if (input.logoPath !== undefined) patch.brand_logo_path = input.logoPath;
+  if (input.clientName !== undefined) patch.client_name = input.clientName.trim() || null;
 
   const { error } = await supabase.from("workspace_settings").update(patch).eq("id", 1);
   if (error) return { error: error.message };

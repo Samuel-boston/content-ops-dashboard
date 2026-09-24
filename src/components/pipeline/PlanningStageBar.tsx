@@ -3,6 +3,7 @@
 import { useTrackedTransition } from "@/components/ui/Pending";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/components/ui/Toast";
+import { useClientName } from "@/components/ClientName";
 import { setPlanningStageAction } from "@/app/pipeline-actions";
 import { IconCheck } from "@/components/ui/icons";
 import { STATUS_COLOR, STATUS_LABELS, type VideoStatus } from "@/lib/types";
@@ -53,6 +54,7 @@ export function PlanningStageBar({
   lockedStages?: PlanningStage[];
 }) {
   const toast = useToast();
+  const clientName = useClientName();
   const router = useRouter();
   const [pending, startTransition] = useTrackedTransition();
 
@@ -127,7 +129,7 @@ export function PlanningStageBar({
                   isCurrent
                     ? `Currently in ${STATUS_LABELS[stage]}`
                     : lockedStages.includes(stage)
-                      ? `Only the client can move a script to ${STATUS_LABELS[stage]}`
+                      ? `Only ${clientName} can move a script to ${STATUS_LABELS[stage]}`
                       : canEdit
                       ? `Move to ${STATUS_LABELS[stage]}`
                       : STATUS_LABELS[stage]

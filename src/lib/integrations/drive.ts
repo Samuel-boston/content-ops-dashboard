@@ -62,7 +62,7 @@ async function uploadBytes(
     Buffer.from(`\r\n--${boundary}--`),
   ]);
   const res = await fetch(
-    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink",
+    "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink",
     {
       method: "POST",
       headers: {
@@ -96,12 +96,12 @@ async function ensureBackupsFolder(token: string, parentId: string): Promise<str
   const q = encodeURIComponent(
     `name='Backups' and '${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`
   );
-  const list = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`, {
+  const list = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives`, {
     headers: { Authorization: `Bearer ${token}` },
   }).then((r) => r.json());
   if (list.files?.[0]?.id) return list.files[0].id as string;
 
-  const created = await fetch("https://www.googleapis.com/drive/v3/files?fields=id", {
+  const created = await fetch("https://www.googleapis.com/drive/v3/files?fields=id&supportsAllDrives=true", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -132,11 +132,11 @@ export async function uploadBackupJson(name: string, json: string, keepDays = 30
   const q = encodeURIComponent(
     `'${folderId}' in parents and mimeType='application/json' and trashed=false and createdTime < '${cutoff}'`
   );
-  const old = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`, {
+  const old = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives`, {
     headers: { Authorization: `Bearer ${token}` },
   }).then((r) => r.json());
   for (const f of old.files ?? []) {
-    await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}`, {
+    await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?supportsAllDrives=true`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     }).catch(() => {});

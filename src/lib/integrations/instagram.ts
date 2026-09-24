@@ -118,3 +118,49 @@ export async function publishContainer(creationId: string): Promise<string> {
   if (!res?.id) throw new Error(`IG publish failed: ${JSON.stringify(res)}`);
   return res.id;
 }
+
+/**
+ * Create a carousel container from public image URLs (2–10, JPEG). Each image
+ * becomes a "carousel item" container first, then one CAROUSEL container ties
+ * them together in order. Returns the creation id to publish.
+ */
+export async function createCarouselContainer(imageUrls: string[], caption?: string): Promise<string> {
+  if (imageUrls.length < 2) throw new Error("An Instagram carousel needs at least 2 images.");
+  if (imageUrls.length > 10) throw new Error("An Instagram carousel can have at most 10 images.");
+  const ig = await igConfig();
+
+  const children: string[] = [];
+  for (const url of imageUrls) {
+    const res = await fetch(`${GRAPH}/${ig.userId}/media`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_url: url, is_carousel_item: true, access_token: ig.token }),
+    }).then((r) => r.json());
+    if (!res?.id) throw new Error(`IG carousel item failed: ${JSON.stringify(res)}`);
+    children.push(res.id);
+  }
+
+  // Images are normally instant, but the parent can't be built until every
+  // child reports FINISHED.
+  for (const id of children) {
+    for (let i = 0; i < 15; i++) {
+      const state = await containerReady(id);
+      if (state === "ready") break;
+      if (state === "error") throw new Error("Instagram rejected one of the carousel images.");
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+
+  const res = await fetch(`${GRAPH}/${ig.userId}/media`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      media_type: "CAROUSEL",
+      children: children.join(","),
+      caption: caption ?? "",
+      access_token: ig.token,
+    }),
+  }).then((r) => r.json());
+  if (!res?.id) throw new Error(`IG carousel container failed: ${JSON.stringify(res)}`);
+  return res.id;
+}

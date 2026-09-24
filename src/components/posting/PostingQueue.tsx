@@ -8,12 +8,14 @@ import {
   trialPostingKitAction,
   vaMarkTrialPostedAction,
   vaPublishAction,
+  variantPhoneTokenAction,
   vaSaveTrialMetricsAction,
   vaSetPostAsAction,
   type PostingJobItem,
   type PostingTrialItem,
 } from "@/app/posting-actions";
 import { IconCheck, IconClock } from "@/components/ui/icons";
+import { QR } from "@/components/ui/QR";
 import type { Role } from "@/lib/types";
 
 /**
@@ -36,6 +38,7 @@ function TrialCard({
   const [pending, startTransition] = useTrackedTransition();
   const [permalink, setPermalink] = useState("");
   const [when, setWhen] = useState("");
+  const [phoneUrl, setPhoneUrl] = useState<string | null>(null);
   const [m, setM] = useState({
     views: trial.views?.toString() ?? "",
     likes: trial.likes?.toString() ?? "",
@@ -66,6 +69,13 @@ function TrialCard({
       } else {
         toast.error("No downloadable file for this cut yet — ask the team.");
       }
+    });
+  }
+
+  function showPhoneCode() {
+    startTransition(async () => {
+      const { token } = await variantPhoneTokenAction(trial.id);
+      setPhoneUrl(`${window.location.origin}/api/variant/${token}`);
     });
   }
 
@@ -217,6 +227,14 @@ function TrialCard({
               {trial.images?.length ? `Get the images (${trial.images.length})` : "Get the file"}
             </button>
             <button
+              onClick={showPhoneCode}
+              disabled={pending}
+              title="Scan with your phone to download it there, with the caption"
+              className="rounded-lg border border-line px-3 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
+            >
+              Send to my phone (QR)
+            </button>
+            <button
               onClick={copyCaption}
               disabled={pending}
               className="rounded-lg border border-line px-3 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
@@ -224,7 +242,23 @@ function TrialCard({
               Copy caption
             </button>
           </div>
-          {trial.postAs === "main" && !trial.images?.length ? (
+          {phoneUrl ? (
+            <div className="flex items-center gap-3 rounded-lg border border-line bg-raised p-2.5">
+              <QR url={phoneUrl} size={140} />
+              <div className="min-w-0 text-[11px] leading-relaxed text-ink-3">
+                <p className="text-ink-2">Scan with your phone.</p>
+                <p>It opens a page with the download and the caption to paste. The code works for 6 hours.</p>
+                <button
+                  type="button"
+                  onClick={() => setPhoneUrl(null)}
+                  className="mt-1 text-ink-3 underline hover:text-ink-2"
+                >
+                  Hide
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {trial.postAs === "main" ? (
             instagramConnected ? (
               <div className="space-y-1.5 rounded-lg border border-accent/30 bg-accent-ghost p-2.5">
                 <p className="text-[11px] text-ink-2">
@@ -361,7 +395,7 @@ export function PostingQueue({
         <h2 className="text-sm font-semibold text-ink-2">To post</h2>
         {toPost.length === 0 ? (
           <p className="rounded-xl border border-line bg-card px-4 py-8 text-center text-sm text-ink-3">
-            Nothing waiting. A video shows up here once the client presses “Send to VA” on it.
+            Nothing waiting. A video shows up here once {clientName} sends it to you.
           </p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">

@@ -9,7 +9,7 @@ import { createFootageUploadUrlAction, registerAssetAction } from "@/app/asset-a
 import { createGuestLinkAction } from "@/app/guest-actions";
 import { uploadCommentMedia } from "@/lib/upload-client";
 import { TaxonomyMultiSelect } from "@/components/TaxonomyMultiSelect";
-import { CAROUSEL_FORMAT } from "@/lib/taxonomy";
+import { isCarouselFormat } from "@/lib/taxonomy";
 import { VoiceRecorder, type VoiceCapture } from "@/components/workspace/Voice";
 import { QR } from "@/components/ui/QR";
 import { IconCamera, IconFile, IconMic, IconPlus, IconX } from "@/components/ui/icons";
@@ -363,7 +363,7 @@ export function NewVideoDialog({
                 <p className="mt-2 text-[11px] text-ink-3">
                   Required — this decides how the video is scripted and delivered.
                 </p>
-              ) : formats.includes(CAROUSEL_FORMAT) ? (
+              ) : isCarouselFormat(formats) ? (
                 <p className="mt-2 text-[11px] text-accent-hi">
                   Carousel — the script stage will ask for slides, not a hook/body/CTA.
                 </p>

@@ -24,9 +24,7 @@ export const FORMATS = [
   "Green screen",
   "Talking head",
   "Silent film",
-  "Split screen carousel",
-  "Carousel with text",
-  "Side by side talking reel",
+  "Carousels",
   "Whiteboard",
 ] as const;
 
@@ -46,13 +44,15 @@ export const TAXONOMY_LABELS: Record<TaxonomyKind, string> = {
   platform: "Platform",
 };
 
-// "Carousel with text" is a sequence of images, not a video — it's the one
-// format that swaps the review player and the editor's delivery dropzone for
-// an image carousel instead of Cloudflare Stream. "Split screen carousel" is
-// still an edited video (a visual style), so it's deliberately excluded.
-export const CAROUSEL_FORMAT = "Carousel with text";
+// "Carousels" is a sequence of images, not a video — it's the one format that
+// swaps the review player and the editor's delivery dropzone for an image
+// carousel instead of Cloudflare Stream. It replaces the old "Carousel with
+// text" and "Split screen carousel" options; videos saved under the old
+// "Carousel with text" name are still recognised.
+export const CAROUSEL_FORMAT = "Carousels";
+const LEGACY_CAROUSEL_FORMATS = ["Carousel with text"];
 export function isCarouselFormat(formats: readonly string[] | null | undefined): boolean {
-  return (formats ?? []).includes(CAROUSEL_FORMAT);
+  return (formats ?? []).some((f) => f === CAROUSEL_FORMAT || LEGACY_CAROUSEL_FORMATS.includes(f));
 }
 
 /** Union of presets + persisted customs + anything already on the record. */
