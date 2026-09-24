@@ -199,3 +199,23 @@ export async function testDriveConnection(): Promise<string> {
   });
   return "Connected — a test file was written to the folder and removed again.";
 }
+
+/** The Drive file id inside a share/view link (".../file/d/<id>/view", "?id=<id>"). */
+export function driveFileIdFromLink(link: string): string | null {
+  return link.match(/\/d\/([\w-]+)/)?.[1] ?? link.match(/[?&]id=([\w-]+)/)?.[1] ?? null;
+}
+
+/**
+ * Open a Drive file for reading, as the dashboard's own Drive login. The
+ * response body is the file itself, so it can be streamed on to someone who
+ * has no Drive access of their own.
+ */
+export async function openDriveFile(fileId: string): Promise<Response> {
+  const s = await getWorkspaceSettings();
+  if (!s.drive_service_account) throw new NotConfiguredError("Google Drive");
+  const token = await getAccessToken(s.drive_service_account as DriveCredentials);
+  return fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+}

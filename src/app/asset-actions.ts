@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireUser } from "@/lib/auth";
@@ -81,7 +82,13 @@ export async function registerAssetAction(input: {
   // If Drive is configured, mirror it across in the background so raw footage
   // ends up where the infrastructure plan says it should live. Supporting
   // assets aren't source material, so they stay put.
-  if (input.storagePath && kind === "raw") void mirrorFootageToDrive(input.videoId, input.storagePath);
+  // after(): a bare floating promise is frozen once the response is sent on a
+  // serverless host, so the copy to Drive could silently never finish.
+  if (input.storagePath && kind === "raw") {
+    const path = input.storagePath;
+    const label = input.label.trim();
+    after(() => mirrorFootageToDrive(input.videoId, path, label));
+  }
 
   revalidatePath(`/videos/${input.videoId}`);
   return { ok: true as const };
@@ -102,7 +109,7 @@ export async function deleteAssetAction(id: string, videoId: string) {
   return { ok: true as const };
 }
 
-async function mirrorFootageToDrive(videoId: string, storagePath: string) {
+async function mirrorFootageToDrive(videoId: string, storagePath: string, label?: string) {
   try {
     const s = await getWorkspaceSettings();
     if (!s.drive_folder_id || !s.drive_service_account) return;
@@ -110,7 +117,8 @@ async function mirrorFootageToDrive(videoId: string, storagePath: string) {
     const { data: signed } = await db.storage.from("footage").createSignedUrl(storagePath, 900);
     if (!signed?.signedUrl) return;
     const { uploadFromUrl } = await import("@/lib/integrations/drive");
-    const name = storagePath.split("/").pop() ?? "footage.mp4";
+    // Named after the file as it was uploaded, not the random storage key.
+    const name = label || (storagePath.split("/").pop() ?? "footage.mp4");
     const link = await uploadFromUrl(signed.signedUrl, name);
     await db.from("video_assets").update({ drive_url: link }).eq("storage_path", storagePath);
     // Storage copy is redundant once Drive holds it.

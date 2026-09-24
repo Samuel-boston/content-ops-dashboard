@@ -112,20 +112,11 @@ export function VideoFootage({
                   {size(a.size_bytes)}
                 </span>
               ) : null}
-              {a.drive_url ? (
+              {/* One way to get a file, whoever you are: through the dashboard, which
+                  holds the Drive login — editors have no access to the Drive itself. */}
+              {a.drive_url || a.signed_url || a.storage_path ? (
                 <a
-                  href={a.drive_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="shrink-0 text-xs text-ok hover:underline"
-                >
-                  Drive
-                </a>
-              ) : a.signed_url ? (
-                <a
-                  href={a.signed_url}
-                  target="_blank"
-                  rel="noreferrer"
+                  href={`/api/footage/${a.id}`}
                   className="shrink-0 text-xs text-accent-hi hover:underline"
                 >
                   Download
