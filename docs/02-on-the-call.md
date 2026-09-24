@@ -100,9 +100,9 @@ It's quick and it lets you demo the review room. Follow the **Cloudflare Stream*
 
 ## 9. Live walkthrough (20 min) — use `05-how-it-works.md`
 
-1. Create an idea → drag it through Scripting → Script Review → Ready to Film → Editor Brief → Ready to Edit.
+1. Create an idea → move it through Scripting → Ready to Film → Editor Brief → Ready to Edit.
 2. Editor login: take it, upload a cut, submit for review.
-3. Owner: review → approve → **Ready to Post → drag to With the VA** → check each variant's destination and caption → Send.
+3. Owner: review → **Approve** (it goes straight to the VA's desk) → open the **Post** tab and check each variant's destination and caption.
 4. VA login: open it, work through the variants, **Mark as posted**.
 5. Show the **Archive** (calendar view) and the **Calendar**.
 6. Delete the test video.
