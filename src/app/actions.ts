@@ -454,7 +454,10 @@ export async function inviteUserAction(formData: FormData) {
     email,
     password,
     email_confirm: true,
-    user_metadata: { role, full_name },
+    user_metadata: { full_name },
+    // Server-only: the database trusts the role and the "invited" mark from here and nowhere else,
+    // so nobody can create themselves a seat by signing up.
+    app_metadata: { role, invited: true },
   });
   if (error) return { error: error.message };
   revalidatePath("/team");
