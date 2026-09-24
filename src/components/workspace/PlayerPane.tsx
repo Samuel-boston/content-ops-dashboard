@@ -136,7 +136,7 @@ export function PlayerPane({
   return (
     <div className="flex h-full min-h-0 flex-col bg-panel">
       {/* Header */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-2.5">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-2 border-b border-line px-3 py-2.5">
         <Link
           href={backHref}
           aria-label="Back to board"
@@ -154,7 +154,7 @@ export function PlayerPane({
         ) : (
           <span className="h-7 w-10 shrink-0 rounded bg-raised" />
         )}
-        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold">{video.title}</h1>
+        <h1 className="min-w-[6rem] flex-1 truncate text-sm font-semibold">{video.title}</h1>
 
         {/* Version badge doubles as the version picker */}
         {versions.length ? (
@@ -219,7 +219,8 @@ export function PlayerPane({
             className="flex shrink-0 items-center gap-1.5 rounded-md bg-raised px-2 py-1 text-[11px] font-semibold text-ink-2 hover:bg-hover hover:text-ink"
           >
             <IconDownload size={12} />
-            Download the video
+            <span className="hidden min-[520px]:inline">Download the video</span>
+            <span className="min-[520px]:hidden">Download</span>
           </a>
         ) : null}
 
@@ -227,7 +228,7 @@ export function PlayerPane({
             width, and `shrink-0` meant the inner flex-wrap never got the chance
             to wrap — the whole page scrolled sideways instead. */}
         {headerActions ? (
-          <div className="min-w-0 max-w-full basis-full sm:basis-auto">{headerActions}</div>
+          <div className="flex min-w-0 max-w-full basis-full justify-end">{headerActions}</div>
         ) : null}
       </div>
 
