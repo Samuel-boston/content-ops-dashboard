@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTrackedTransition } from "@/components/ui/Pending";
 import { useToast } from "@/components/ui/Toast";
 import { schedulePostAction } from "@/app/publishing-actions";
+import { savePostCaptionAction } from "@/app/trial-actions";
 import { TrialsPanel } from "@/components/workspace/TrialsPanel";
 import { PostComposer } from "@/components/posting/PostComposer";
 import { isCarouselFormat } from "@/lib/taxonomy";
@@ -51,9 +52,17 @@ export function PostTab({
 }) {
   const toast = useToast();
   const [pending, startTransition] = useTrackedTransition();
+  // The saved caption first; the script only as a starting point for a new one.
   const [caption, setCaption] = useState(
-    [video.script_body, video.script_cta].filter(Boolean).join("\n\n")
+    video.post_caption ?? [video.script_body, video.script_cta].filter(Boolean).join("\n\n")
   );
+  // Saved as you type (after a short pause), so it's on the VA's desk without any button to press.
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function changeCaption(v: string) {
+    setCaption(v);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => void savePostCaptionAction(video.id, v), 700);
+  }
 
   const scheduled = jobs.filter((j) => j.status === "scheduled");
 
@@ -90,7 +99,7 @@ export function PostTab({
         <>
           <PostComposer
             caption={caption}
-            onCaptionChange={setCaption}
+            onCaptionChange={changeCaption}
             connected={instagramConfigured ? ["instagram"] : []}
             emptyHint={<>Connect one in Settings → Integrations and it shows up here.</>}
             isVideo={!isCarouselFormat(video.formats)}

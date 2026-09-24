@@ -86,7 +86,7 @@ export async function listPostingWork(): Promise<{
   const [{ data: trials }, { data: jobs }] = await Promise.all([
     db
       .from("trial_posts")
-      .select("*, video:videos (title, va_notes, cover_path)")
+      .select("*, video:videos (title, va_notes, cover_path, post_caption)")
       .in("status", ["planned", "posted", "promoted"])
       .not("sent_to_va_at", "is", null)
       .order("scheduled_for", { ascending: true, nullsFirst: false }),
@@ -101,7 +101,7 @@ export async function listPostingWork(): Promise<{
   return {
     instagramConnected: integrationStatus(settings).instagram,
     trials: await Promise.all(((trials as (TrialPost & {
-      video: { title: string; va_notes: string | null; cover_path: string | null } | null;
+      video: { title: string; va_notes: string | null; cover_path: string | null; post_caption: string | null } | null;
     })[]) ?? []).map(async (t) => {
       let images: string[] | null = null;
       if (t.cut_id === null) {
@@ -143,7 +143,8 @@ export async function listPostingWork(): Promise<{
       videoId: t.video_id,
       videoTitle: t.video?.title ?? "Untitled",
       label: t.label,
-      caption: t.caption,
+      // The variant's own caption, else the video's shared one from the Post tab.
+      caption: t.caption?.trim() ? t.caption : (t.video?.post_caption?.trim() ? t.video.post_caption : null),
       // Everything is posted as a trial unless someone chose the main feed.
       postAs: t.post_as === "main" ? "main" : "trial",
       onMainFeed: isOnMainFeed(t),
@@ -201,7 +202,7 @@ export async function trialPostingKitAction(trialId: string): Promise<
 
   const { data: trial } = await db
     .from("trial_posts")
-    .select("cut_id, caption, label")
+    .select("cut_id, caption, label, video:videos (post_caption)")
     .eq("id", trialId)
     .maybeSingle();
   if (!trial) return { error: "Trial not found." };
@@ -231,7 +232,9 @@ export async function trialPostingKitAction(trialId: string): Promise<
       }
     }
   }
-  return { ok: true, downloadUrl, caption: trial.caption, label: trial.label, original };
+  const shared = (trial.video as unknown as { post_caption: string | null } | null)?.post_caption;
+  const caption = (trial.caption as string | null)?.trim() ? (trial.caption as string) : shared?.trim() ? shared : null;
+  return { ok: true, downloadUrl, caption, label: trial.label, original };
 }
 
 /**

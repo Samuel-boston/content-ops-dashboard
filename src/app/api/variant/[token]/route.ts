@@ -36,12 +36,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
   const db = supabaseAdmin();
   const { data: t } = await db
     .from("trial_posts")
-    .select("video_id, cut_id, label, caption, video:videos (title)")
+    .select("video_id, cut_id, label, caption, video:videos (title, post_caption)")
     .eq("id", trialId)
     .maybeSingle();
   if (!t) return page("<h1>Not found</h1>", 404);
   const title = (t.video as unknown as { title: string } | null)?.title ?? "Video";
-  const caption = (t.caption as string | null)?.trim();
+  const caption =
+    (t.caption as string | null)?.trim() ||
+    (t.video as unknown as { post_caption: string | null } | null)?.post_caption?.trim();
 
   let files = "";
   if (t.cut_id) {

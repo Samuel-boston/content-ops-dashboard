@@ -383,3 +383,16 @@ export async function promoteTrialAction(id: string, videoId: string, whenISO?: 
   }
   return { ok: true };
 }
+
+/** Save the video's shared caption, so it survives a refresh and reaches the VA's desk. */
+export async function savePostCaptionAction(videoId: string, caption: string) {
+  await requireRole("owner", "admin");
+  const supabase = await supabaseServer();
+  const { error } = await supabase
+    .from("videos")
+    .update({ post_caption: caption.trim() ? caption : null })
+    .eq("id", videoId);
+  if (error) return { error: error.message };
+  revalidatePath("/posting");
+  return { ok: true as const };
+}

@@ -328,6 +328,8 @@ export interface Video {
   brief_voice_path: string | null;
   /** Instructions for the VA, written when the video is sent to them to post. */
   va_notes: string | null;
+  /** The video's shared caption (Post tab) — used by any variant without its own. */
+  post_caption: string | null;
   /** Cover image (footage bucket) the VA uses when posting. */
   cover_path: string | null;
   /** When it was sent to the VA — null until then. */
