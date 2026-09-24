@@ -78,11 +78,11 @@ export async function listBoardCards(): Promise<BoardCard[]> {
 
   // A video's own thumbnail (uploaded or designed) beats the frame Stream picked.
   const custom = new Map<string, string>();
-  const withThumb = rows.filter((v) => (v as { thumbnail_path?: string | null }).thumbnail_path);
+  const withThumb = rows.filter((v) => v.thumbnail_path);
   if (withThumb.length) {
     const { data: signed } = await supabaseAdmin()
       .storage.from("thumbnails")
-      .createSignedUrls(withThumb.map((v) => (v as { thumbnail_path: string }).thumbnail_path), 3600);
+      .createSignedUrls(withThumb.map((v) => v.thumbnail_path as string), 3600);
     withThumb.forEach((v, i) => {
       const url = signed?.[i]?.signedUrl;
       if (url) custom.set(v.id, url);

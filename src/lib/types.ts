@@ -313,6 +313,9 @@ export interface Video {
   /** The video's shared caption (Post tab) — used by any variant without its own. */
   post_caption: string | null;
   /** Cover image (footage bucket) the VA uses when posting. */
+  /** The video's own thumbnail (migration 047), in the private `thumbnails` bucket. */
+  thumbnail_path: string | null;
+  thumbnail_prompt: string | null;
   cover_path: string | null;
   /** When it was sent to the VA — null until then. */
   va_sent_at: string | null;
