@@ -11,6 +11,8 @@ import { ORIGINAL_COLUMNS, hasOriginal } from "@/lib/cut-files";
 import { runPublishJob } from "@/lib/publish-runner";
 import { linkMainFeedAnalytics } from "@/lib/analytics-link";
 import { isOnMainFeed, type VariantChoice } from "@/lib/variant-state";
+import { notify } from "@/lib/notify";
+import { isCarouselFormat } from "@/lib/taxonomy";
 import type { PublishStatus, TrialPost, TrialStatus } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -498,6 +500,75 @@ export async function vaSaveLinkAction(trialId: string, permalink: string) {
   revalidatePath("/posting");
   revalidatePath(`/videos/${t.video_id}`);
   return { ok: true as const, linked };
+}
+
+/**
+ * The VA sends a video back to the client's side because something needs
+ * changing before it can go out. It lands in Final Review (a carousel: back in
+ * Creatives to Review), the variants leave the posting desk with their captions
+ * intact, and anything scheduled for it is taken off the schedule. The reason is
+ * posted in the video's chat and the owner/admins are told.
+ */
+export async function vaSendBackAction(videoId: string, reason: string) {
+  const me = await requireRole("va", "owner", "admin");
+  const note = reason.trim();
+  if (!note) return { error: "Say what needs changing, so they know what to look at." };
+  const db = supabaseAdmin();
+  const { data: video } = await db.from("videos").select("title, status, formats").eq("id", videoId).maybeSingle();
+  if (!video) return { error: "Video not found." };
+  if (video.status === "posted") return { error: "That one has already gone out." };
+
+  // Anything scheduled for it comes off the schedule, so it can't publish while it's being changed.
+  const { data: waiting } = await db
+    .from("trial_posts")
+    .select("id, promoted_job_id, status")
+    .eq("video_id", videoId)
+    .eq("status", "promoted");
+  for (const t of waiting ?? []) {
+    if (t.promoted_job_id) {
+      await db.from("publish_jobs").update({ status: "cancelled" }).eq("id", t.promoted_job_id).eq("status", "scheduled");
+    }
+  }
+  await db
+    .from("trial_posts")
+    .update({ status: "planned", promoted_job_id: null })
+    .eq("video_id", videoId)
+    .eq("status", "promoted")
+    .is("posted_at", null);
+  // Variants not yet posted leave the VA's desk; ones already posted stay as a record.
+  await db.from("trial_posts").update({ sent_to_va_at: null }).eq("video_id", videoId).eq("status", "planned");
+
+  const to = isCarouselFormat(video.formats as string[]) ? "creative_review" : "final_review";
+  const { error } = await db.from("videos").update({ status: to, va_sent_at: null }).eq("id", videoId);
+  if (error) return { error: error.message };
+
+  const who = (me as { full_name?: string | null; email?: string }).full_name || (me as { email?: string }).email || "The VA";
+  await db.from("video_messages").insert({
+    video_id: videoId,
+    author_id: me.id,
+    body: `Sent back from the posting desk: ${note}`,
+    mentions: [],
+  });
+  await db.from("video_activity").insert({
+    video_id: videoId,
+    actor_id: me.id,
+    kind: "status",
+    summary: `Sent back from posting → ${to === "final_review" ? "Final Review" : "Creatives to Review"}: ${note}`,
+  });
+  const { data: managers } = await db.from("profiles").select("id").in("role", ["owner", "admin"]).eq("active", true);
+  await notify({
+    userIds: (managers ?? []).map((m) => m.id as string),
+    kind: "revision",
+    title: `${who} sent “${video.title}” back`,
+    body: note,
+    link: `/videos/${videoId}`,
+    videoId,
+  });
+
+  revalidatePath("/posting");
+  revalidatePath("/board");
+  revalidatePath(`/videos/${videoId}`);
+  return { ok: true as const };
 }
 
 /**

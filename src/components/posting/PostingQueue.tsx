@@ -12,6 +12,7 @@ import {
   variantPhoneTokenAction,
   vaSaveTrialMetricsAction,
   vaSaveLinkAction,
+  vaSendBackAction,
   vaSetVariantStateAction,
   type PostingJobItem,
   type PostingTrialItem,
@@ -582,6 +583,11 @@ function VideoDialog({
   instagramConnected: boolean;
   clientName: string;
 }) {
+  const toast = useToast();
+  const router = useRouter();
+  const [pending, startTransition] = useTrackedTransition();
+  const [sendingBack, setSendingBack] = useState(false);
+  const [reason, setReason] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -622,6 +628,64 @@ function VideoDialog({
             ×
           </button>
         </div>
+        {group.trials.some((t) => t.status === "planned" || t.scheduled) ? (
+          <div className="mb-3">
+            {sendingBack ? (
+              <div className="rounded-xl border border-warn/40 bg-warn/5 p-3">
+                <p className="text-xs font-medium text-ink">
+                  Send this back to {clientName}&rsquo;s side — it goes to Final Review.
+                </p>
+                <p className="mt-0.5 text-[11px] text-ink-3">
+                  Unposted variants leave your desk (their captions are kept) and anything scheduled is taken off the
+                  schedule. Say what needs changing — it goes in the video&rsquo;s chat and they&rsquo;re notified.
+                </p>
+                <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  rows={3}
+                  autoFocus
+                  placeholder="e.g. The cover has a typo, and the caption mentions the wrong date."
+                  className="mt-2 w-full resize-y rounded-md border border-line bg-raised px-2 py-1.5 text-sm placeholder:text-ink-3 focus:border-accent focus:outline-none"
+                />
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    disabled={pending || !reason.trim()}
+                    onClick={() =>
+                      startTransition(async () => {
+                        const res = await vaSendBackAction(group.videoId, reason);
+                        if (res?.error) toast.error(res.error);
+                        else {
+                          toast.success("Sent back — it's in Final Review now.");
+                          onClose();
+                          router.refresh();
+                        }
+                      })
+                    }
+                    className="rounded-lg bg-warn px-3 py-1.5 text-xs font-medium text-black hover:opacity-90 disabled:opacity-50"
+                  >
+                    Send it back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSendingBack(false)}
+                    className="rounded-lg border border-line px-3 py-1.5 text-xs text-ink-2 hover:text-ink"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setSendingBack(true)}
+                className="rounded-lg border border-line px-3 py-1.5 text-xs text-ink-2 hover:border-warn hover:text-ink"
+              >
+                Something needs changing — send it back
+              </button>
+            )}
+          </div>
+        ) : null}
         <div className="space-y-2">
           {group.trials.map((t) => (
             <VariantPanel
