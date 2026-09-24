@@ -41,11 +41,15 @@ export async function notify(input: NotifyInput): Promise<void> {
 
   if (input.email !== false) {
     try {
+      // Only people who chose "real-time" get an email per notification.
+      // "Digest" and "Off" (Notifications page) were being ignored here, so
+      // someone who'd switched email off still got one for every message.
       const { data: people } = await db
         .from("profiles")
         .select("email")
         .in("id", uids)
-        .eq("active", true);
+        .eq("active", true)
+        .eq("notify_mode", "realtime");
       await Promise.all(
         (people ?? []).map((p: { email: string }) =>
           sendEmail(p.email, input.title, `${input.body ?? ""}\n\n${input.link ?? ""}`.trim())
