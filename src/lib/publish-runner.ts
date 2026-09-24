@@ -113,6 +113,12 @@ export async function runPublishJob(jobId: string): Promise<{ ok: boolean; error
       { video_id: job.video_id, source: "instagram", external_media_id: mediaId },
       { onConflict: "video_id,source" }
     );
+    // A variant that was waiting on this job is now live on the main feed.
+    await db
+      .from("trial_posts")
+      .update({ status: "posted", post_as: "main", posted_at: new Date().toISOString() })
+      .eq("promoted_job_id", jobId)
+      .eq("status", "promoted");
     // Published: do everything "Mark as posted" does (stamp, calendar date, archive).
     await markVideoPosted(job.video_id);
     return { ok: true };

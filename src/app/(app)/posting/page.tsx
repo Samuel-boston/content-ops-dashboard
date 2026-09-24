@@ -27,7 +27,7 @@ export default async function PostingPage() {
         <h1 className="text-xl font-semibold">Posting</h1>
         <p className="text-sm text-ink-2">
           {trials.filter((t) => t.status === "planned").length} to post ·{" "}
-          {trials.filter((t) => t.status === "posted" && !t.hasMetrics).length} awaiting numbers
+          {trials.filter((t) => t.status === "posted" && !t.onMainFeed && !t.hasMetrics).length} trial numbers to bring back
         </p>
       </div>
       <PostingQueue

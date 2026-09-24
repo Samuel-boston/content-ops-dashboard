@@ -7,7 +7,8 @@ import { ArchiveFilters } from "@/components/ArchiveFilters";
 import { CalendarMonth } from "@/components/CalendarMonth";
 import { Chip } from "@/components/badges";
 import { shiftMonth } from "@/lib/calendar";
-import type { VideoWithEditor } from "@/lib/types";
+import { isOnMainFeed } from "@/lib/variant-state";
+import type { TrialStatus, VideoWithEditor } from "@/lib/types";
 
 function first(v: string | string[] | undefined) {
   return Array.isArray(v) ? v[0] : v;
@@ -50,6 +51,27 @@ export default async function ArchivePage({ searchParams }: PageProps<"/archive"
     month: "long",
     year: "numeric",
   });
+
+  // Where each variant went — trial reels and main-feed posts — so the archive
+  // says "posted as a trial reel" / "on the main feed" without opening the video.
+  const { data: variantRows } = rows.length
+    ? await supabase
+        .from("trial_posts")
+        .select("video_id, status, post_as")
+        .in(
+          "video_id",
+          rows.map((r) => r.id)
+        )
+        .neq("status", "archived")
+    : { data: [] as { video_id: string; status: TrialStatus; post_as: "trial" | "main" | "none" }[] };
+  const variantsByVideo = new Map<string, { trial: number; main: number; waiting: number }>();
+  for (const t of variantRows ?? []) {
+    const c = variantsByVideo.get(t.video_id) ?? { trial: 0, main: 0, waiting: 0 };
+    if (t.status === "planned") c.waiting += 1;
+    else if (isOnMainFeed(t as { status: TrialStatus; post_as: "trial" | "main" | "none" })) c.main += 1;
+    else c.trial += 1;
+    variantsByVideo.set(t.video_id, c);
+  }
 
   const byMonth = new Map<string, VideoWithEditor[]>();
   for (const v of rows) {
@@ -137,6 +159,19 @@ export default async function ArchivePage({ searchParams }: PageProps<"/archive"
                           <Chip key={t}>{t}</Chip>
                         ))}
                       </div>
+                      <span className="hidden flex-wrap gap-1 md:flex">
+                        {(() => {
+                          const c = variantsByVideo.get(v.id);
+                          if (!c) return null;
+                          return (
+                            <>
+                              {c.trial ? <Chip>{c.trial} posted as trial</Chip> : null}
+                              {c.main ? <Chip>{c.main} on main feed</Chip> : null}
+                              {c.waiting ? <Chip>{c.waiting} still to post</Chip> : null}
+                            </>
+                          );
+                        })()}
+                      </span>
                       <span className="text-xs text-ink-3">
                         {v.assigned_editor?.full_name ?? "—"}
                       </span>

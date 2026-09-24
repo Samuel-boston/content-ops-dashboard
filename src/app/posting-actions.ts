@@ -9,6 +9,8 @@ import { markVideoPosted } from "@/lib/archive";
 import { mintPhoneToken } from "@/lib/phone-link";
 import { ORIGINAL_COLUMNS, hasOriginal } from "@/lib/cut-files";
 import { runPublishJob } from "@/lib/publish-runner";
+import { linkMainFeedAnalytics } from "@/lib/analytics-link";
+import { isOnMainFeed, type VariantChoice } from "@/lib/variant-state";
 import type { PublishStatus, TrialPost, TrialStatus } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -32,6 +34,10 @@ export interface PostingTrialItem {
   caption: string | null;
   /** Instagram trial reel, or straight to the main feed. */
   postAs: "trial" | "main";
+  /** Live on the main feed (posted there, or promoted from a trial). */
+  onMainFeed: boolean;
+  /** Set once the variant has been handed to Instagram's scheduler. */
+  scheduled: boolean;
   /** Instructions from whoever sent it over. */
   notes: string | null;
   /** Signed link to the cover image, when one was uploaded. */
@@ -81,7 +87,7 @@ export async function listPostingWork(): Promise<{
     db
       .from("trial_posts")
       .select("*, video:videos (title, va_notes, cover_path)")
-      .in("status", ["planned", "posted"])
+      .in("status", ["planned", "posted", "promoted"])
       .not("sent_to_va_at", "is", null)
       .order("scheduled_for", { ascending: true, nullsFirst: false }),
     db
@@ -138,7 +144,10 @@ export async function listPostingWork(): Promise<{
       videoTitle: t.video?.title ?? "Untitled",
       label: t.label,
       caption: t.caption,
-      postAs: t.post_as === "trial" ? "trial" : "main",
+      // Everything is posted as a trial unless someone chose the main feed.
+      postAs: t.post_as === "main" ? "main" : "trial",
+      onMainFeed: isOnMainFeed(t),
+      scheduled: t.status === "promoted" && !t.posted_at,
       notes: t.notes ?? t.video?.va_notes ?? null,
       coverUrl,
       images,
@@ -268,6 +277,10 @@ export async function vaMarkTrialPostedAction(trialId: string, permalink?: strin
   if (error) return { error: error.message };
   if (!t) return { error: "That one was already marked as posted." };
   const finished = await finishVideoIfDone(t.video_id as string);
+  if (permalink?.trim()) {
+    const { data: row } = await db.from("trial_posts").select("post_as").eq("id", trialId).maybeSingle();
+    if (row?.post_as === "main") await linkMainFeedAnalytics(t.video_id as string, permalink);
+  }
   revalidatePath("/posting");
   return { ok: true as const, finished };
 }
@@ -407,6 +420,81 @@ export async function vaSetPostAsAction(trialId: string, postAs: "trial" | "main
   if (error) return { error: error.message };
   revalidatePath("/posting");
   return { ok: true };
+}
+
+/**
+ * Change where a variant is in its life — the dropdown on every variant, on
+ * the posting desk, in the posted list and in the client's own Post tab.
+ *
+ *   trial        it's (to be) posted as a trial reel
+ *   main         it's to be posted to the main feed
+ *   posted_main  it has been posted to the main feed — the trial that won, or
+ *                one that went straight there. Marks it live and, when there's
+ *                a link, connects the post to its analytics.
+ *   to_post      undo: back to waiting to be posted
+ */
+export async function vaSetVariantStateAction(
+  trialId: string,
+  choice: VariantChoice | "to_post",
+  permalink?: string | null
+) {
+  const me = await requireRole("va", "owner", "admin");
+  const db = supabaseAdmin();
+  const { data: t } = await db.from("trial_posts").select("*").eq("id", trialId).maybeSingle();
+  if (!t) return { error: "Variant not found." };
+  const now = new Date().toISOString();
+  const link = permalink === undefined ? (t.permalink as string | null) : permalink?.trim() || null;
+  let patch: Record<string, unknown>;
+
+  if (choice === "trial") {
+    patch = { post_as: "trial", ...(t.status === "promoted" ? { status: "posted", posted_at: t.posted_at ?? now } : {}) };
+  } else if (choice === "main") {
+    if (t.status !== "planned") return { error: "It's already posted — pick “Posted to main feed” to record where it went." };
+    patch = { post_as: "main" };
+  } else if (choice === "posted_main") {
+    const wasTrial = t.status === "posted" && t.post_as !== "main";
+    patch = {
+      post_as: "main",
+      status: t.status === "promoted" ? "promoted" : "posted",
+      posted_at: t.posted_at ?? now,
+      posted_by: t.posted_by ?? me.id,
+      permalink: link,
+      // The trial that got promoted is the winner by definition.
+      ...(wasTrial || t.status === "promoted" ? { winner: true } : {}),
+    };
+  } else if (choice === "to_post") {
+    patch = { status: "planned", posted_at: null, promoted_job_id: null };
+  } else {
+    return { error: "Unknown option." };
+  }
+
+  const { error } = await db.from("trial_posts").update(patch).eq("id", trialId);
+  if (error) return { error: error.message };
+
+  let linked = false;
+  if (choice === "posted_main") {
+    linked = await linkMainFeedAnalytics(t.video_id as string, link);
+    if (t.status === "planned") await finishVideoIfDone(t.video_id as string);
+  }
+  revalidatePath("/posting");
+  revalidatePath("/archive");
+  revalidatePath(`/videos/${t.video_id}`);
+  return { ok: true as const, linked };
+}
+
+/** Save (or correct) the link to a posted variant — and, on the main feed, connect it to its analytics. */
+export async function vaSaveLinkAction(trialId: string, permalink: string) {
+  await requireRole("va", "owner", "admin");
+  const db = supabaseAdmin();
+  const { data: t } = await db.from("trial_posts").select("video_id, status, post_as").eq("id", trialId).maybeSingle();
+  if (!t) return { error: "Variant not found." };
+  const link = permalink.trim() || null;
+  const { error } = await db.from("trial_posts").update({ permalink: link }).eq("id", trialId);
+  if (error) return { error: error.message };
+  const linked = isOnMainFeed(t as never) ? await linkMainFeedAnalytics(t.video_id as string, link) : false;
+  revalidatePath("/posting");
+  revalidatePath(`/videos/${t.video_id}`);
+  return { ok: true as const, linked };
 }
 
 /**

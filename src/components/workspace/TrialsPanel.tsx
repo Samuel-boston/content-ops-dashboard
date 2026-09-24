@@ -18,6 +18,8 @@ import {
 import { createFootageUploadUrlAction } from "@/app/asset-actions";
 import { IconTrash } from "@/components/ui/icons";
 import { TRIAL_STATUS_LABELS, type TrialPost } from "@/lib/types";
+import { CHOICE_LABELS, variantChoice, variantStateLabel, type VariantChoice } from "@/lib/variant-state";
+import { vaSetVariantStateAction } from "@/app/posting-actions";
 
 /**
  * Variants — every version of this video that could go out (the main cut and
@@ -289,7 +291,7 @@ function TrialRow({
           </span>
         ) : null}
         <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${chip}`}>
-          {t.status === "planned" && t.sent_to_va_at ? "With the VA" : TRIAL_STATUS_LABELS[t.status]}
+          {t.status === "planned" && t.sent_to_va_at ? "With the VA" : t.status === "planned" ? TRIAL_STATUS_LABELS[t.status] : variantStateLabel(t)}
         </span>
         <button
           title="Archive this trial"
@@ -325,6 +327,20 @@ function TrialRow({
               <option value="none">Not selected</option>
               <option value="trial">Trial reel</option>
               <option value="main">Post to main feed</option>
+            </select>
+          ) : t.status === "posted" || t.status === "promoted" ? (
+            // Posted: record where it went. The owner can correct this the same way the VA does.
+            <select
+              value={variantChoice(t)}
+              disabled={pending}
+              onChange={(e) =>
+                run(() => vaSetVariantStateAction(t.id, e.target.value as VariantChoice, permalink || undefined))
+              }
+              aria-label="Where it was posted"
+              className={`${field} min-w-0 flex-1`}
+            >
+              <option value="trial">{CHOICE_LABELS.trial}</option>
+              <option value="posted_main">{CHOICE_LABELS.posted_main}</option>
             </select>
           ) : (
             <span className="rounded-md bg-raised px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-3">

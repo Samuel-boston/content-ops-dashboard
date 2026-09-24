@@ -11,34 +11,41 @@ import {
   vaPublishAction,
   variantPhoneTokenAction,
   vaSaveTrialMetricsAction,
-  vaSetPostAsAction,
+  vaSaveLinkAction,
+  vaSetVariantStateAction,
   type PostingJobItem,
   type PostingTrialItem,
 } from "@/app/posting-actions";
 import { IconCheck, IconClock } from "@/components/ui/icons";
 import { QR } from "@/components/ui/QR";
 import { PostComposer, type ComposerSubmit } from "@/components/posting/PostComposer";
+import { CHOICE_LABELS, variantChoice, variantStateLabel, type VariantChoice } from "@/lib/variant-state";
 import type { Role } from "@/lib/types";
 
 /**
- * One trial = one card with everything needed to post it and nothing else:
+ * One variant inside a video's card: a row you click to open, and inside it
+ * everything needed to post it and nothing else:
  * get the file, copy the caption, post from the IG app as a trial, paste the
  * permalink back. Once live, the card flips to a numbers form — the trial's
  * insights only exist inside the IG app, so someone has to carry them over.
  */
-function TrialCard({
+function VariantPanel({
   trial,
+  open,
+  onToggle,
   instagramConnected,
   clientName,
 }: {
   trial: PostingTrialItem;
+  open: boolean;
+  onToggle: () => void;
   instagramConnected: boolean;
   clientName: string;
 }) {
   const toast = useToast();
   const router = useRouter();
   const [pending, startTransition] = useTrackedTransition();
-  const [permalink, setPermalink] = useState("");
+  const [permalink, setPermalink] = useState(trial.permalink ?? "");
   const [composing, setComposing] = useState(false);
   const [draftCaption, setDraftCaption] = useState(trial.caption ?? "");
   const [phoneUrl, setPhoneUrl] = useState<string | null>(null);
@@ -103,14 +110,6 @@ function TrialCard({
     });
   }
 
-  function setPostAs(postAs: "trial" | "main") {
-    startTransition(async () => {
-      const res = await vaSetPostAsAction(trial.id, postAs);
-      if (res?.error) toast.error(res.error);
-      else router.refresh();
-    });
-  }
-
   function copyCaption() {
     if (!trial.caption) return toast.error("No caption written for this one.");
     navigator.clipboard
@@ -155,44 +154,86 @@ function TrialCard({
   const field =
     "w-full rounded-md border border-line bg-raised px-2 py-1.5 text-sm placeholder:text-ink-3 focus:border-accent focus:outline-none";
 
+  const choice = variantChoice({ status: trial.status, post_as: trial.postAs });
+  const posted = trial.status !== "planned";
+
+  function setChoice(next: VariantChoice) {
+    startTransition(async () => {
+      const res = await vaSetVariantStateAction(trial.id, next, permalink || undefined);
+      if (res?.error) toast.error(res.error);
+      else {
+        if (next === "posted_main") {
+          toast.success(
+            res.linked
+              ? "Recorded as posted to the main feed — connected to its analytics."
+              : "Recorded as posted to the main feed."
+          );
+        }
+        router.refresh();
+      }
+    });
+  }
+
+  function undoPosted() {
+    startTransition(async () => {
+      const res = await vaSetVariantStateAction(trial.id, "to_post");
+      if (res?.error) toast.error(res.error);
+      else router.refresh();
+    });
+  }
+
+  function saveLink() {
+    startTransition(async () => {
+      const res = await vaSaveLinkAction(trial.id, permalink);
+      if (res?.error) toast.error(res.error);
+      else {
+        toast.success(res.linked ? "Link saved — connected to its analytics." : "Link saved.");
+        router.refresh();
+      }
+    });
+  }
+
   return (
-    <div className="rounded-xl border border-line bg-card p-4">
+    <div className={`rounded-xl border bg-card p-3 ${open ? "border-accent/50" : "border-line"}`}>
       <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
+          <span className="text-ink-3">{open ? "▾" : "▸"}</span>
+          <span className="min-w-0 truncate text-sm font-medium">{trial.label}</span>
+          {trial.winner ? <span title="Winning hook">🏆</span> : null}
+        </button>
+        <select
+          value={choice}
+          disabled={pending}
+          onChange={(e) => setChoice(e.target.value as VariantChoice)}
+          aria-label="Post as"
+          className="rounded-md border border-line bg-raised px-2 py-1 text-xs focus:border-accent focus:outline-none"
+        >
+          <option value="trial">{CHOICE_LABELS.trial}</option>
+          {!posted ? <option value="main">{CHOICE_LABELS.main}</option> : null}
+          <option value="posted_main">{CHOICE_LABELS.posted_main}</option>
+        </select>
         <span
           className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
             trial.status === "planned"
               ? due
                 ? "bg-red-500/15 text-red-400"
                 : "bg-amber-500/15 text-amber-400"
-              : "bg-emerald-500/15 text-emerald-400"
+              : trial.onMainFeed
+                ? "bg-sky-500/15 text-sky-400"
+                : "bg-emerald-500/15 text-emerald-400"
           }`}
         >
-          {trial.status === "planned" ? (due ? "Overdue" : "To post") : "✓ Posted"}
+          {trial.status === "planned" ? (due ? "Overdue" : trial.scheduled_for ? "To post" : "To post") : variantStateLabel({ status: trial.status, post_as: trial.postAs })}
         </span>
-        <p className="min-w-0 flex-1 truncate text-sm font-medium">{trial.videoTitle}</p>
-        {trial.winner ? <span title="Winning hook">🏆</span> : null}
       </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-2">
-        <span className="text-xs text-ink-2">
-          Variant: <span className="text-ink">{trial.label}</span>
-        </span>
-        {trial.status === "planned" ? (
-          <select
-            value={trial.postAs}
-            disabled={pending}
-            onChange={(e) => setPostAs(e.target.value as "trial" | "main")}
-            aria-label="Post as"
-            className="rounded-md border border-line bg-raised px-2 py-1 text-xs focus:border-accent focus:outline-none"
-          >
-            <option value="trial">Trial reel</option>
-            <option value="main">Post to main feed</option>
-          </select>
-        ) : (
-          <span className="rounded-md bg-raised px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-3">
-            {trial.postAs === "main" ? "Main feed" : "Trial"}
-          </span>
-        )}
-      </div>
+
+      {open ? (
+      <>
       {trial.notes ? (
         <p className="mt-2 whitespace-pre-wrap rounded-md border border-line bg-raised px-2.5 py-2 text-xs leading-relaxed text-ink-2">
           <span className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wide text-ink-3">
@@ -352,6 +393,27 @@ function TrialCard({
               </label>
             ))}
           </div>
+          <div className="flex gap-2">
+            <input
+              value={permalink}
+              onChange={(e) => setPermalink(e.target.value)}
+              placeholder="Link to the post — https://www.instagram.com/…"
+              className={field}
+            />
+            <button
+              onClick={saveLink}
+              disabled={pending}
+              className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
+            >
+              Save link
+            </button>
+          </div>
+          {trial.onMainFeed ? (
+            <p className="text-[11px] leading-relaxed text-ink-3">
+              Live on the main feed. Its numbers come from Instagram automatically once the link is saved
+              (or when the dashboard posted it) — you only type numbers in for trial reels.
+            </p>
+          ) : null}
           <div className="flex items-center justify-between gap-2">
             {trial.permalink ? (
               <a
@@ -360,21 +422,32 @@ function TrialCard({
                 rel="noreferrer"
                 className="truncate text-[11px] text-accent hover:underline"
               >
-                Open the trial ↗
+                Open the post ↗
               </a>
             ) : (
               <span />
             )}
-            <button
-              onClick={saveMetrics}
-              disabled={pending}
-              className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
-            >
-              Save numbers
-            </button>
+            <span className="flex items-center gap-2">
+              <button
+                onClick={undoPosted}
+                disabled={pending}
+                className="text-[11px] text-ink-3 underline hover:text-ink-2 disabled:opacity-50"
+              >
+                Not posted yet — move back
+              </button>
+              <button
+                onClick={saveMetrics}
+                disabled={pending}
+                className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-2 hover:border-accent hover:text-ink disabled:opacity-50"
+              >
+                Save numbers
+              </button>
+            </span>
           </div>
         </div>
       )}
+      </>
+      ) : null}
     </div>
   );
 }
@@ -425,6 +498,142 @@ function JobRow({ job: j }: { job: PostingJobItem }) {
   );
 }
 
+interface VideoGroup {
+  videoId: string;
+  title: string;
+  coverUrl: string | null;
+  trials: PostingTrialItem[];
+}
+
+function groupByVideo(trials: PostingTrialItem[]): VideoGroup[] {
+  const map = new Map<string, VideoGroup>();
+  for (const t of trials) {
+    const g = map.get(t.videoId) ?? { videoId: t.videoId, title: t.videoTitle, coverUrl: null, trials: [] };
+    g.coverUrl ??= t.coverUrl;
+    g.trials.push(t);
+    map.set(t.videoId, g);
+  }
+  return [...map.values()];
+}
+
+/** The small card on the board: enough to know what it is and what's left, nothing more. */
+function VideoCard({ group, onOpen }: { group: VideoGroup; onOpen: () => void }) {
+  const toPost = group.trials.filter((t) => t.status === "planned").length;
+  const main = group.trials.filter((t) => (t.status === "planned" ? t.postAs === "main" : t.onMainFeed)).length;
+  const trial = group.trials.length - main;
+  const awaiting = group.trials.filter((t) => t.status !== "planned" && !t.onMainFeed && !t.hasMetrics).length;
+  const next = group.trials
+    .filter((t) => t.status === "planned" && t.scheduled_for)
+    .map((t) => t.scheduled_for as string)
+    .sort()[0];
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full items-center gap-3 rounded-xl border border-line bg-card p-3 text-left transition hover:border-accent"
+    >
+      {group.coverUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={group.coverUrl} alt="" className="h-14 w-14 shrink-0 rounded-md object-cover" />
+      ) : (
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-raised text-lg text-ink-3">▶</span>
+      )}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">{group.title}</span>
+        <span className="mt-0.5 block truncate text-[11px] text-ink-3">
+          {group.trials.length} variant{group.trials.length === 1 ? "" : "s"}
+          {trial ? ` · ${trial} trial` : ""}
+          {main ? ` · ${main} main feed` : ""}
+        </span>
+        <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          {toPost > 0 ? (
+            <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-400">
+              {toPost} to post
+            </span>
+          ) : (
+            <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-400">
+              ✓ All posted
+            </span>
+          )}
+          {awaiting > 0 ? (
+            <span className="rounded-md bg-raised px-1.5 py-0.5 text-[10px] text-ink-3">{awaiting} awaiting numbers</span>
+          ) : null}
+          {next ? (
+            <span className="inline-flex items-center gap-1 text-[10px] text-ink-3">
+              <IconClock size={10} />
+              {new Date(next).toLocaleDateString([], { day: "numeric", month: "short" })}
+            </span>
+          ) : null}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+/** Click a card and this opens: every variant of the video, one open at a time. */
+function VideoDialog({
+  group,
+  onClose,
+  instagramConnected,
+  clientName,
+}: {
+  group: VideoGroup;
+  onClose: () => void;
+  instagramConnected: boolean;
+  clientName: string;
+}) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const activeId = openId ?? (group.trials.find((t) => t.status === "planned") ?? group.trials[0])?.id ?? "";
+  return (
+    <div
+      role="dialog"
+      aria-modal
+      aria-label={group.title}
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 px-3 py-6 sm:py-10"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-2xl rounded-2xl border border-line bg-app p-4 shadow-2xl sm:p-5"
+      >
+        <div className="mb-3 flex items-start gap-3">
+          {group.coverUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={group.coverUrl} alt="" className="h-12 w-12 shrink-0 rounded-md object-cover" />
+          ) : null}
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-base font-semibold">{group.title}</h2>
+            <p className="text-[11px] text-ink-3">
+              Everything for this video is in here. Set each variant to a trial reel or the main feed — post the
+              trials first, then record which one went to the main feed.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-md px-2 py-1 text-lg leading-none text-ink-3 hover:bg-hover hover:text-ink"
+          >
+            ×
+          </button>
+        </div>
+        <div className="space-y-2">
+          {group.trials.map((t) => (
+            <VariantPanel
+              key={t.id}
+              trial={t}
+              open={activeId === t.id}
+              onToggle={() => setOpenId(activeId === t.id ? "none" : t.id)}
+              instagramConnected={instagramConnected}
+              clientName={clientName}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PostingQueue({
   trials,
   jobs,
@@ -438,36 +647,65 @@ export function PostingQueue({
   instagramConnected: boolean;
   clientName: string;
 }) {
-  const toPost = trials.filter((t) => t.status === "planned");
-  const live = trials.filter((t) => t.status === "posted");
+  const [tab, setTab] = useState<"to_post" | "posted">("to_post");
+  const [query, setQuery] = useState("");
+  const [openVideo, setOpenVideo] = useState<string | null>(null);
+
+  const groups = groupByVideo(trials);
+  const toPost = groups.filter((g) => g.trials.some((t) => t.status === "planned"));
+  const posted = groups
+    .filter((g) => !g.trials.some((t) => t.status === "planned"))
+    .filter((g) => !query.trim() || g.title.toLowerCase().includes(query.trim().toLowerCase()));
+  const shown = tab === "to_post" ? toPost : posted;
+  const opened = groups.find((g) => g.videoId === openVideo) ?? null;
 
   return (
     <div className="space-y-6">
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-ink-2">To post</h2>
-        {toPost.length === 0 ? (
-          <p className="rounded-xl border border-line bg-card px-4 py-8 text-center text-sm text-ink-3">
-            Nothing waiting. A video shows up here once {clientName} sends it to you.
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {(
+            [
+              ["to_post", `To post · ${toPost.length}`],
+              ["posted", `Posted · ${groups.length - toPost.length}`],
+            ] as const
+          ).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setTab(k)}
+              className={`rounded-lg px-3 py-1.5 text-sm transition ${
+                tab === k ? "bg-raised font-medium text-ink" : "text-ink-3 hover:text-ink-2"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+          {tab === "posted" ? (
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search posted videos…"
+              className="ml-auto w-56 rounded-md border border-line bg-raised px-2 py-1.5 text-sm placeholder:text-ink-3 focus:border-accent focus:outline-none"
+            />
+          ) : null}
+        </div>
+        {tab === "posted" ? (
+          <p className="text-[11px] text-ink-3">
+            Everything that has gone out. Open one to see where each variant was posted, fix its state, add a link, or bring
+            the numbers back.
           </p>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {toPost.map((t) => (
-              <TrialCard key={t.id} trial={t} instagramConnected={instagramConnected} clientName={clientName} />
-            ))}
-          </div>
-        )}
-      </section>
+        ) : null}
 
-      <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-ink-2">Posted — bring the numbers back when you have them</h2>
-        {live.length === 0 ? (
+        {shown.length === 0 ? (
           <p className="rounded-xl border border-line bg-card px-4 py-8 text-center text-sm text-ink-3">
-            Nothing live right now.
+            {tab === "to_post"
+              ? `Nothing waiting. A video shows up here once ${clientName} sends it to you.`
+              : "Nothing posted yet."}
           </p>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {live.map((t) => (
-              <TrialCard key={t.id} trial={t} instagramConnected={instagramConnected} clientName={clientName} />
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {shown.map((g) => (
+              <VideoCard key={g.videoId} group={g} onOpen={() => setOpenVideo(g.videoId)} />
             ))}
           </div>
         )}
@@ -491,6 +729,15 @@ export function PostingQueue({
           </div>
         )}
       </section>
+
+      {opened ? (
+        <VideoDialog
+          group={opened}
+          onClose={() => setOpenVideo(null)}
+          instagramConnected={instagramConnected}
+          clientName={clientName}
+        />
+      ) : null}
     </div>
   );
 }
