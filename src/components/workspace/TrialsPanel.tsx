@@ -55,6 +55,9 @@ export function TrialsPanel({
   const [coverPath, setCoverPath] = useState<string | null>(null);
   const [coverName, setCoverName] = useState<string | null>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
+  // Which variant is open for editing: one at a time, so its caption box can be a proper size.
+  // null = the first one still waiting to be sent; "none" = all collapsed.
+  const [openId, setOpenId] = useState<string | null>(null);
   const coverInput = useRef<HTMLInputElement>(null);
 
   async function uploadCover(file: File) {
@@ -120,6 +123,7 @@ export function TrialsPanel({
     "rounded-md border border-line bg-raised px-2 py-1 text-xs placeholder:text-ink-3 focus:border-accent focus:outline-none";
   const cutKind = (t: TrialPost) => cuts.find((c) => c.id === t.cut_id)?.kind ?? "main";
   const waiting = trials.filter((t) => t.status === "planned" && !t.sent_to_va_at);
+  const activeId = openId ?? (waiting[0] ?? trials[0])?.id ?? "";
 
   return (
     <section className="mb-4 rounded-xl border border-line bg-card p-3">
@@ -195,6 +199,8 @@ export function TrialsPanel({
           {trials.map((t, i) => (
             <TrialRow
               key={t.id}
+              open={activeId === t.id}
+              onToggle={() => setOpenId(activeId === t.id ? "none" : t.id)}
               trial={t}
               index={i}
               isMain={cutKind(t) === "main" || t.cut_id === null}
@@ -213,6 +219,8 @@ export function TrialsPanel({
 }
 
 function TrialRow({
+  open,
+  onToggle,
   trial: t,
   index,
   isMain,
@@ -223,6 +231,8 @@ function TrialRow({
   run,
   field,
 }: {
+  open: boolean;
+  onToggle: () => void;
   trial: TrialPost;
   index: number;
   isMain: boolean;
@@ -254,8 +264,8 @@ function TrialRow({
   const num = (s: string) => (s.trim() === "" ? null : Number(s));
 
   return (
-    <div className="rounded-lg border border-line bg-raised/60 p-2.5">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className={`rounded-lg border bg-raised/60 p-2.5 ${open ? "border-accent/50" : "border-line"}`}>
+      <div className="flex items-center gap-2">
         <button
           title={t.winner ? "Winning hook" : "Mark as the winning hook"}
           onClick={() => run(() => markTrialWinnerAction(t.id, videoId))}
@@ -264,49 +274,74 @@ function TrialRow({
         >
           🏆
         </button>
-        <p className="min-w-0 flex-1 truncate text-xs font-medium">
-          {isMain ? t.label : `Variant ${index + 1} — ${t.label}`}
-        </p>
-        {onWatch && t.cut_id ? (
-          <button
-            type="button"
-            onClick={() => onWatch(t.cut_id as string)}
-            className="rounded-md border border-line px-2 py-1 text-[10px] text-ink-2 hover:border-accent hover:text-ink"
-          >
-            Watch
-          </button>
-        ) : null}
-        {t.status === "planned" && !t.sent_to_va_at ? (
-          <select
-            value={t.post_as ?? "none"}
-            disabled={pending}
-            onChange={(e) =>
-              run(() => updateVariantAction(t.id, videoId, { postAs: e.target.value as "trial" | "main" | "none" }))
-            }
-            aria-label="Post as"
-            className={field}
-          >
-            <option value="none">Not selected</option>
-            <option value="trial">Trial reel</option>
-            <option value="main">Post to main feed</option>
-          </select>
-        ) : (
-          <span className="rounded-md bg-raised px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-3">
-            {t.post_as === "main" ? "Main feed" : t.post_as === "trial" ? "Trial" : "—"}
+        {/* The name is also the open/close control. */}
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className="min-w-0 flex-1 text-left text-sm font-medium hover:text-accent-hi"
+        >
+          <span className="block truncate">{isMain ? t.label : `Variant ${index + 1} — ${t.label}`}</span>
+        </button>
+        {!open ? (
+          <span className="shrink-0 rounded-md bg-raised px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-3">
+            {t.post_as === "main" ? "Main feed" : t.post_as === "trial" ? "Trial" : "Not selected"}
           </span>
-        )}
-        <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${chip}`}>
+        ) : null}
+        <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${chip}`}>
           {t.status === "planned" && t.sent_to_va_at ? "With the VA" : TRIAL_STATUS_LABELS[t.status]}
         </span>
         <button
           title="Archive this trial"
           onClick={() => run(() => archiveTrialAction(t.id, videoId))}
           disabled={pending}
-          className="text-ink-3 hover:text-red-400"
+          className="shrink-0 text-ink-3 hover:text-red-400"
         >
           <IconTrash size={12} />
         </button>
       </div>
+
+      {open ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {onWatch && t.cut_id ? (
+            <button
+              type="button"
+              onClick={() => onWatch(t.cut_id as string)}
+              className="rounded-md border border-line px-2 py-1 text-[11px] text-ink-2 hover:border-accent hover:text-ink"
+            >
+              Watch
+            </button>
+          ) : null}
+          {t.status === "planned" && !t.sent_to_va_at ? (
+            <select
+              value={t.post_as ?? "none"}
+              disabled={pending}
+              onChange={(e) =>
+                run(() => updateVariantAction(t.id, videoId, { postAs: e.target.value as "trial" | "main" | "none" }))
+              }
+              aria-label="Post as"
+              className={`${field} min-w-0 flex-1`}
+            >
+              <option value="none">Not selected</option>
+              <option value="trial">Trial reel</option>
+              <option value="main">Post to main feed</option>
+            </select>
+          ) : (
+            <span className="rounded-md bg-raised px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-ink-3">
+              {t.post_as === "main" ? "Main feed" : t.post_as === "trial" ? "Trial" : "—"}
+            </span>
+          )}
+        </div>
+      ) : t.status === "planned" ? (
+        // Collapsed: one line of the caption, so you can tell which is which.
+        <button
+          type="button"
+          onClick={onToggle}
+          className="mt-1.5 block w-full truncate text-left text-[11px] text-ink-3 hover:text-ink-2"
+        >
+          {t.caption?.trim() || (fallbackCaption ? `Using the shared caption: ${fallbackCaption}` : "No caption yet — click to write one")}
+        </button>
+      ) : null}
 
       {t.views !== null || t.likes !== null ? (
         <p className="mt-1.5 text-[11px] text-ink-2">
@@ -323,19 +358,19 @@ function TrialRow({
       ) : null}
 
       {t.status === "planned" ? (
-        <div className="mt-2 space-y-1.5">
+        <div className={`mt-2 space-y-2 ${open ? "" : "hidden"}`}>
           <textarea
             defaultValue={t.caption ?? ""}
-            rows={2}
+            rows={7}
             disabled={Boolean(t.sent_to_va_at)}
             placeholder={fallbackCaption ? "Caption — using the one from the box below unless you write one here" : "Caption for this variant"}
             onBlur={(e) => {
               if (e.target.value.trim() === (t.caption ?? "").trim()) return;
               run(() => updateVariantAction(t.id, videoId, { caption: e.target.value }));
             }}
-            className={`${field} w-full resize-y disabled:opacity-60`}
+            className={`${field} min-h-32 w-full resize-y text-sm leading-relaxed disabled:opacity-60`}
           />
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {t.sent_to_va_at ? (
               <span className="text-[11px] text-ok">
                 ✓ Sent to the VA{" "}
@@ -345,17 +380,17 @@ function TrialRow({
               <button
                 onClick={() => run(() => sendVariantToVaAction(t.id, videoId, fallbackCaption))}
                 disabled={pending}
-                className="rounded-md bg-accent px-2.5 py-1 text-[11px] font-medium text-white hover:bg-accent-hi disabled:opacity-50"
+                className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hi disabled:opacity-50"
               >
                 Send this one to the VA
               </button>
             )}
-            <span className="ml-auto flex items-center gap-1">
+            <span className="flex w-full items-center gap-1">
               <input
                 value={permalink}
                 onChange={(e) => setPermalink(e.target.value)}
                 placeholder="Posted it yourself? Paste the link…"
-                className={`${field} w-52 min-w-0`}
+                className={`${field} min-w-0 flex-1`}
               />
               <button
                 onClick={() => run(() => markTrialPostedAction(t.id, videoId, permalink))}
