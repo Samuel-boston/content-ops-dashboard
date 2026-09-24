@@ -228,18 +228,11 @@ export function ScriptWorkspace({
                   <StageBack videoId={video.id} status={video.status} />
                   <StageMove
                     videoId={video.id}
-                    to="editor_brief"
-                    label="Filmed — build the brief"
-                    goTo={`/videos/${video.id}/editor-brief`}
+                    to="ready_to_edit"
+                    label="Filmed — send to editors"
+                    goTo={`/videos/${video.id}`}
                   />
                 </div>
-              ) : video.status === "editor_brief" ? (
-                <span className="ml-auto flex items-center gap-1.5 text-xs text-ink-2">
-                  <IconSparkles size={13} />
-                  <Link href={`/videos/${video.id}/editor-brief`} className="hover:text-accent-hi">
-                    Building the editor brief
-                  </Link>
-                </span>
               ) : video.status === "ready_to_edit" ? (
                 <span className="ml-auto flex items-center gap-1.5 text-xs text-ok">
                   <IconCheck size={13} />

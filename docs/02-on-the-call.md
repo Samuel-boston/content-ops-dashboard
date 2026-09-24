@@ -100,7 +100,7 @@ It's quick and it lets you demo the review room. Follow the **Cloudflare Stream*
 
 ## 9. Live walkthrough (20 min) — use `05-how-it-works.md`
 
-1. Create an idea → move it through Scripting → Ready to Film → Editor Brief → Ready to Edit.
+1. Create an idea → move it through Scripting → Ready to Film → Ready to Edit (the editor brief pops up on the way).
 2. Editor login: take it, upload a cut, submit for review.
 3. Owner: review → **Approve** (it goes straight to the VA's desk) → open the **Post** tab and check each variant's destination and caption.
 4. VA login: open it, work through the variants, **Mark as posted**.

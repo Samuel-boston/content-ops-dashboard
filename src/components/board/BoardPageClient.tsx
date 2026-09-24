@@ -27,9 +27,7 @@ const SCOPES: Record<
       "ideation",
       "scripting",
       "needs_creatives",
-      "creative_review",
       "ready_to_film",
-      "editor_brief",
       "ready_to_edit",
       "in_progress",
       "in_review",
@@ -46,7 +44,6 @@ const SCOPES: Record<
       "ideation",
       "scripting",
       "ready_to_film",
-      "editor_brief",
       "ready_to_edit",
       "in_progress",
       "in_review",
@@ -62,7 +59,7 @@ const SCOPES: Record<
     // The images get made outside this dashboard (on the platform itself, no
     // editor involved), reviewed here, and go straight to the VA. No Editor
     // Brief, Ready to Edit, Editing, In Review, Revisions or Final Review.
-    columns: ["ideation", "scripting", "needs_creatives", "creative_review", "with_va"],
+    columns: ["ideation", "scripting", "needs_creatives", "with_va"],
     match: (c) => isCarouselFormat(c.formats),
   },
   longform: {
@@ -72,7 +69,6 @@ const SCOPES: Record<
       "ideation",
       "scripting",
       "ready_to_film",
-      "editor_brief",
       "ready_to_edit",
       "in_progress",
       "in_review",
@@ -84,7 +80,7 @@ const SCOPES: Record<
   },
   filming: {
     label: "Filming",
-    columns: ["ready_to_film", "editor_brief", "ready_to_edit"],
+    columns: ["ready_to_film", "ready_to_edit"],
     match: (c) => !isCarouselFormat(c.formats),
   },
   planning: {

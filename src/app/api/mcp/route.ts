@@ -180,6 +180,40 @@ function buildServer(profile: Profile) {
     }
   );
 
+  server.registerTool(
+    "list_playbook_docs",
+    {
+      title: "List playbook docs",
+      description:
+        "The docs in the dashboard's Library → SOP / Playbook — including the client's offer and ideal client. " +
+        "Read these before researching content so what you find fits who the client sells to.",
+      inputSchema: tools.listPlaybookDocsSchema.shape,
+    },
+    async (args) => {
+      try {
+        return ok(await tools.listPlaybookDocs(profile, args));
+      } catch (e) {
+        return fail((e as Error).message);
+      }
+    }
+  );
+
+  server.registerTool(
+    "get_playbook_doc",
+    {
+      title: "Get playbook doc",
+      description: "Read one playbook doc in full by id (from list_playbook_docs).",
+      inputSchema: tools.getPlaybookDocSchema.shape,
+    },
+    async (args) => {
+      try {
+        return ok(await tools.getPlaybookDoc(profile, args));
+      } catch (e) {
+        return fail((e as Error).message);
+      }
+    }
+  );
+
   return server;
 }
 

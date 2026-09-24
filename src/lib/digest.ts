@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { STATUS_LABELS, type VideoStatus } from "@/lib/types";
 import { buildPerformance, type PerformanceDigest, type PerfPost } from "@/lib/performance";
 import { fmtViews } from "@/lib/perf-stats";
+import { buildResearchBlock, type ResearchBlock } from "@/lib/research";
 
 export interface DigestData {
   weekOf: string;
@@ -16,6 +17,8 @@ export interface DigestData {
   toFilm: number;
   /** What performed: last week, last month, and the individual outliers. */
   performance: PerformanceDigest | null;
+  /** The Monday research prompt (one-click into ChatGPT or Claude) and last week's finds. */
+  research: ResearchBlock | null;
 }
 
 const MONTHS = [
@@ -83,9 +86,11 @@ export async function buildDigest(db: SupabaseClient): Promise<DigestData> {
 
   // Best-effort: a hiccup reading numbers must never stop the digest going out.
   const performance = await buildPerformance(db, now).catch(() => null);
+  const research = await buildResearchBlock(db, now).catch(() => null);
 
   return {
     performance,
+    research,
     weekOf: short(today),
     posted: rows
       .filter((v) => v.status === "posted" && v.posted_at && v.posted_at >= weekAgo)
@@ -146,6 +151,31 @@ function postLine(p: PerfPost, extra = ""): string {
     : esc(p.title);
   const hook = p.hook ? `<br><span style="color:#8a8598">“${esc(p.hook.length > 90 ? p.hook.slice(0, 89) + "…" : p.hook)}”</span>` : "";
   return `${name} <strong style="color:#17141f">${fmtViews(p.views)} views</strong>${extra}${hook}`;
+}
+
+function researchHtml(r: ResearchBlock | null, appUrl: string): string {
+  if (!r) return "";
+  const btn = (href: string, label: string, bg: string) =>
+    `<a href="${esc(href)}" style="display:inline-block;margin:0 8px 8px 0;padding:10px 16px;border-radius:9px;background:${bg};font:600 13px/1 ${FONT};color:#fff;text-decoration:none">${label}</a>`;
+  const finds = r.finds.length
+    ? list(
+        r.finds.map(
+          (f) =>
+            `${f.link ? `<a href="${esc(f.link)}" style="color:#5b3fd6;text-decoration:none">${esc(f.topic)}</a>` : esc(f.topic)} <strong style="color:#17141f">${fmtViews(f.views)} views</strong>${
+              f.hook ? `<br><span style="color:#8a8598">“${esc(f.hook.length > 90 ? f.hook.slice(0, 89) + "…" : f.hook)}”</span>` : ""
+            }`
+        )
+      )
+    : `<p style="margin:0 0 6px;font:400 14px/1.5 ${FONT};color:#8a8598">Nothing new was added last week.</p>`;
+  return (
+    section("New viral finds this week", finds) +
+    section(
+      "This week's research (one click)",
+      `<p style="margin:0 0 10px;font:400 14px/1.5 ${FONT};color:#17141f">Opens a chat with the research prompt already typed in. It reads your offer and ideal client, browses for what is working in your niche, and adds it to <a href="${esc(appUrl)}/library/top-posts" style="color:#5b3fd6;text-decoration:none">Top posts</a>.</p>` +
+        btn(r.chatgptUrl, "Open in ChatGPT", "#10a37f") +
+        btn(r.claudeUrl, "Open in Claude", "#c96442")
+    )
+  );
 }
 
 const pct = (now: number, before: number | null) =>
@@ -252,6 +282,8 @@ ${section(
 
 ${performanceHtml(d.performance, appUrl)}
 
+${researchHtml(d.research, appUrl)}
+
 ${section(
   "In the pipeline",
   `<p style="margin:0;font:400 14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#17141f">
@@ -270,6 +302,19 @@ ${section(
   </p>
 </td></tr>
 </table></body></html>`;
+}
+
+function researchText(r: ResearchBlock | null): string[] {
+  if (!r) return [];
+  return [
+    "NEW VIRAL FINDS THIS WEEK",
+    ...(r.finds.length ? r.finds.map((f) => `- ${f.topic} — ${fmtViews(f.views)} views${f.hook ? ` · “${f.hook.slice(0, 80)}”` : ""}${f.link ? ` ${f.link}` : ""}`) : ["- nothing new"]),
+    "",
+    "THIS WEEK'S RESEARCH (one click, prompt pre-typed):",
+    `ChatGPT: ${r.chatgptUrl}`,
+    `Claude: ${r.claudeUrl}`,
+    "",
+  ];
 }
 
 function performanceText(perf: PerformanceDigest | null): string[] {
@@ -321,6 +366,7 @@ export function digestText(d: DigestData, appUrl: string, name: string): string 
       : ["- nothing"]),
     "",
     ...performanceText(d.performance),
+    ...researchText(d.research),
     `PIPELINE: ${d.ideas} ideas, ${d.scripts} being written, ${d.toFilm} to film`,
     "",
     appUrl,
@@ -365,6 +411,10 @@ export function digestSlack(d: DigestData): string {
         return `${o.direction === "high" ? "🔥" : "⚠️"} ${t} — ${fmtViews(o.views)} views (${o.multiple >= 1 ? o.multiple.toFixed(1) + "×" : Math.round(o.multiple * 100) + "%"} your usual)`;
       })
     );
+  }
+  if (d.research) {
+    lines.push("", "*🔎 This week's research*", `<${d.research.chatgptUrl}|Open in ChatGPT> · <${d.research.claudeUrl}|Open in Claude>`);
+    if (d.research.finds.length) lines.push(`Last week's finds: ${d.research.finds.length} added to Top posts.`);
   }
   return lines.join("\n");
 }

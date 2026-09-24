@@ -406,7 +406,7 @@ export function NewVideoDialog({
               </label>
             </div>
             <p className="text-[11px] text-ink-3">
-              Priority is set later, at the Editor Brief stage — starts as Standard.
+              Priority is set later, in the editor brief — starts as Standard.
             </p>
 
             <div className="space-y-3">

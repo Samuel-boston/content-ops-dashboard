@@ -12,9 +12,7 @@ export type StageKey =
   | "ideation"
   | "scripting"
   | "needs_creatives"
-  | "creative_review"
   | "ready_to_film"
-  | "editor_brief"
   | "ready_to_edit"
   | "in_progress"
   | "in_review"
@@ -36,13 +34,11 @@ export type SlackIntent =
 
 /** Order matters: the specific phrases have to be tried before the generic ones they contain. */
 const STAGE_WORDS: [RegExp, StageKey][] = [
-  [/\b(creatives? to review|creative review)\b/, "creative_review"],
-  [/\b(needs? creatives?|creatives?)\b/, "needs_creatives"],
+  [/\b(needs? creatives?|creatives?|carousels? in progress)\b/, "needs_creatives"],
   [/\bfinal( review)?\b/, "final_review"],
   [/\b(awaiting variants?|variants?)\b/, "awaiting_variants"],
   [/\b(ready to edit|editor pool|the pool)\b/, "ready_to_edit"],
   [/\b(ready to film|filming|to film)\b/, "ready_to_film"],
-  [/\b(editor brief|briefs?)\b/, "editor_brief"],
   [/\b(in progress|being edited|editing)\b/, "in_progress"],
   [/\brevisions?\b/, "revisions"],
   [/\b(in review|to review|review)\b/, "in_review"],
@@ -55,10 +51,8 @@ const STAGE_WORDS: [RegExp, StageKey][] = [
 export const STAGE_LABEL: Record<StageKey, string> = {
   ideation: "Ideation",
   scripting: "Scripting",
-  needs_creatives: "Needs Creatives",
-  creative_review: "Creatives to Review",
+  needs_creatives: "Creatives",
   ready_to_film: "Ready to Film",
-  editor_brief: "Editor Brief",
   ready_to_edit: "Ready to Edit",
   in_progress: "Editing",
   in_review: "In Review",

@@ -119,5 +119,5 @@ export async function handOffToVa(videoId: string, byUserId: string | null): Pro
 export async function stageAfterVa(videoId: string): Promise<VideoStatus> {
   const db = supabaseAdmin();
   const { data } = await db.from("videos").select("formats").eq("id", videoId).maybeSingle();
-  return data && isCarouselFormat(data.formats as string[]) ? "creative_review" : "in_review";
+  return data && isCarouselFormat(data.formats as string[]) ? "needs_creatives" : "in_review";
 }

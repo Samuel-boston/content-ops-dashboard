@@ -49,7 +49,7 @@ function isScriptStaff(p: Profile) {
 const COPYWRITER_VISIBLE: VideoStatus[] = ["ideation", "scripting", "ready_to_film"];
 
 /** The client's private planning half — invisible to editors (RLS parity). */
-const PLANNING: VideoStatus[] = ["ideation", "scripting", "ready_to_film", "editor_brief"];
+const PLANNING: VideoStatus[] = ["ideation", "scripting", "ready_to_film"];
 
 const VIDEO_FIELDS =
   "id, title, status, priority, content_pillars, formats, platforms, brief, " +
@@ -357,4 +357,27 @@ export async function addTopPosts(profile: Profile, args: z.infer<typeof addTopP
     profile.id
   );
   return { ok: true, ...res, link: `${APP_URL}/library/top-posts` };
+}
+
+// ---- Playbook (the client's offer, ideal client, SOPs) ----------------------
+
+export const listPlaybookDocsSchema = z.object({});
+
+/** The playbook docs, titles and short previews. Any seat with a token can read them. */
+export async function listPlaybookDocs(_profile: Profile, _args?: z.infer<typeof listPlaybookDocsSchema>) {
+  const { data, error } = await supabaseAdmin().from("sop_docs").select("id, title, format, body, updated_at").order("position").order("created_at");
+  if (error) throw new Error(error.message);
+  return {
+    docs: (data ?? []).map((d) => ({ id: d.id, title: d.title, format: d.format, updated_at: d.updated_at, preview: String(d.body ?? "").slice(0, 200) })),
+    note: "Read a doc in full with get_playbook_doc. Look for the client's offer and ideal client.",
+  };
+}
+
+export const getPlaybookDocSchema = z.object({ id: z.string().uuid() });
+
+export async function getPlaybookDoc(_profile: Profile, args: { id: string }) {
+  const { data, error } = await supabaseAdmin().from("sop_docs").select("id, title, format, body, updated_at").eq("id", args.id).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return { error: "No playbook doc with that id." };
+  return { doc: data };
 }

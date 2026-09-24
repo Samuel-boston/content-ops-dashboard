@@ -43,7 +43,13 @@ assert.equal(perf.outliers[0].title, "The viral one", "the loudest this-week out
 const empty = await buildPerformance(fake({ video_metrics: [], trial_posts: [], videos: [] }), now);
 assert.equal(empty.hasData, false); assert.equal(empty.outliers.length, 0);
 
-const d: DigestData = { weekOf: "28 Sep", posted: [], postingNext: [], waitingOnYou: [], withEditors: [], runwayDays: 12, ideas: 4, scripts: 2, toFilm: 1, performance: perf };
+const research = {
+  prompt: "Find viral stuff",
+  chatgptUrl: "https://chatgpt.com/?q=Find%20viral%20stuff",
+  claudeUrl: "https://claude.ai/new?q=Find%20viral%20stuff",
+  finds: [{ topic: "Airport anxiety hack", hook: "Do this before you board", views: 640000, link: "https://instagram.com/reel/f1", creator: "@calm", platform: "instagram" }],
+};
+const d: DigestData = { weekOf: "28 Sep", posted: [], postingNext: [], waitingOnYou: [], withEditors: [], runwayDays: 12, ideas: 4, scripts: 2, toFilm: 1, performance: perf, research };
 const html = digestHtml(d, "https://x.vercel.app", "Adam");
 assert.match(html, /Performance/); assert.match(html, /Standouts/); assert.match(html, /The viral one/);
 assert.match(html, /Best of the last 30 days/); assert.match(html, /top-posts/);
@@ -52,6 +58,9 @@ const text = digestText(d, "https://x.vercel.app", "Adam");
 assert.match(text, /PERFORMANCE/); assert.match(text, /Standouts:/); assert.match(text, /The viral one — 9\.8K views/);
 assert.match(digestTelegram(d), /Performance/);
 assert.match(digestSlack(d), /🔥/);
+assert.match(html, /Open in ChatGPT/); assert.match(html, /Open in Claude/); assert.match(html, /New viral finds this week/); assert.match(html, /Airport anxiety hack/);
+assert.match(text, /ChatGPT: https:\/\/chatgpt\.com/); assert.match(digestSlack(d), /Open in ChatGPT/);
+assert.doesNotMatch(digestHtml({ ...d, research: null }, "https://x", "Adam"), /Open in ChatGPT/);
 // a digest with no numbers still renders and says so
 const none = digestHtml({ ...d, performance: empty }, "https://x", "Adam");
 assert.match(none, /No numbers yet/);

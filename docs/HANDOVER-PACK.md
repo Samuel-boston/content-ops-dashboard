@@ -172,7 +172,7 @@ It's quick and it lets you demo the review room. Follow the **Cloudflare Stream*
 
 ## 9. Live walkthrough (20 min) — use `05-how-it-works.md`
 
-1. Create an idea → move it through Scripting → Ready to Film → Editor Brief → Ready to Edit.
+1. Create an idea → move it through Scripting → Ready to Film → Ready to Edit (the editor brief pops up on the way).
 2. Editor login: take it, upload a cut, submit for review.
 3. Owner: review → **Approve** (it goes straight to the VA's desk) → open the **Post** tab and check each variant's destination and caption.
 4. VA login: open it, work through the variants, **Mark as posted**.
@@ -494,9 +494,9 @@ Every video is a card that moves left to right through stages. Each person only 
 
 ## The stages
 
-**Videos:** Ideation → Scripting → Ready to Film → Editor Brief → Ready to Edit → Editing → In Review → Revisions (if changes) → *Awaiting Variants* (only if the script has several hooks) → Final Review → **With the VA** → Posted (goes to the Archive).
+**Videos:** Ideation → Scripting → Ready to Film → Ready to Edit → Editing → In Review → Revisions (if changes) → *Awaiting Variants* (only if the script has several hooks) → Final Review → **With the VA** → Posted (goes to the Archive).
 
-**Carousels:** Ideation → Scripting → Needs Creatives → Creatives to Review → **With the VA** → Posted. Sending creatives back returns the carousel to Needs Creatives.
+**Carousels:** Ideation → Scripting → Creatives → **With the VA** → Posted. When the creatives are done, one button sends it to the VA.
 
 There is no Script Review and no Ready to Post: a script lives in Scripting until the owner or an admin moves it on, and **approving a cut (or Final Review) sends the video straight to the VA's desk** — nothing to click in between.
 
@@ -520,7 +520,7 @@ There is no Script Review and no Ready to Post: a script lives in Scripting unti
 
 1. **Idea.** Add it on the board (or send it to the Telegram bot from your phone — it lands in Ideation). Write the script, or let the copywriter do it.
 2. **Scripting.** The copywriter writes and taps **Script done**; you get a notification, read it, comment on any part, and move it on (→ Ready to Film, or → Needs Creatives for a carousel).
-3. **Film → brief.** Upload the raw footage (drag it onto the video), then build the **Editor Brief** — written notes, attachments, music tagged from the library — and send it to editors.
+3. **Film → editors.** Upload the raw footage (drag it onto the video), then send it on: the **editor brief** is not a stage, it is a menu that pops up whenever a video reaches Ready to Film or Ready to Edit — written notes, attachments, music tagged from the library — and send it to editors.
 4. **Editing.** An editor takes it on (giving an ETA), uploads the cut, submits it. The upload box shows two steps: your file uploading (keep the page open) and Cloudflare preparing the video (you can close the page).
 5. **Review.** You watch the cut, drop comments pinned to the exact moment (text, voice, drawing, screen recording), and press **Approve** or **Request revisions**. Editors see the same room, so they see exactly what to change. Anyone in the review can **Download the video**.
 6. **Variants.** If the script had several hooks, the editor delivers one cut per hook. You give each one a destination and caption in the Post tab.
@@ -540,6 +540,7 @@ Everything is posted as a **trial reel** first. With **Publer** connected the VA
 - **Library** — Footage (b-roll), Music (drag and drop as many tracks as you like; **categorise the ones marked with a red !**), References, and the SOP / Playbook.
 - **Analytics** — performance across videos.
 - **Library → Top posts** — the posts that worked: views, topic, hook and link. Add one by hand, paste a list, or let your own ChatGPT or Claude find good ones and add the ones you approve through the connector. Your own best posts are suggested automatically.
+- **Monday research on autopilot** — put your offer and ideal client in **Library → SOP / Playbook** (a button on Top posts creates the two docs). Every Monday the digest carries a ready-made research prompt with **Open in ChatGPT** / **Open in Claude** buttons; one click starts a chat where the AI reads those docs, browses Instagram and the rest for what is working in your niche, and adds the winners to Top posts. Last week's finds show up in the next digest. You can also set a webhook (Zapier, Make, n8n) that gets the prompt every Monday, and connect ChatGPT (custom GPT Action) or Claude (skill) — all under Library → Top posts.
 - **The Monday digest** (email, Telegram and Slack) now includes performance: the last 7 and 30 days, the best posts, and the individual **standouts** — posts far above (or well below) what a typical post gets.
 - **Overview** — what needs your attention today.
 - **Slack** — once connected (Settings → Slack) the team can type `/ops add idea …`, `/ops how many in scripting`, `/ops what's in review` in Slack, and the dashboard announces scripts done, cuts ready for review, approvals and posts in a channel.

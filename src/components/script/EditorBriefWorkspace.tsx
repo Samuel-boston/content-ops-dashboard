@@ -60,6 +60,8 @@ export function EditorBriefWorkspace({
   briefVoiceUrl,
   carouselSlides,
   chat,
+  embedded = false,
+  onDone,
 }: {
   video: Video;
   assets: VideoAsset[];
@@ -69,6 +71,9 @@ export function EditorBriefWorkspace({
   briefVoiceUrl: string | null;
   carouselSlides: CarouselImage[];
   chat?: React.ReactNode;
+  /** Shown inside the brief menu popup: no page header, just the brief and a Done button. */
+  embedded?: boolean;
+  onDone?: () => void;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -176,6 +181,23 @@ export function EditorBriefWorkspace({
 
   return (
     <div className="mx-auto max-w-6xl space-y-5">
+      {embedded ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{video.title}</h1>
+          {readyChecklist.map((c) => (
+            <span
+              key={c.label}
+              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] ${c.done ? "bg-ok/10 text-ok" : "bg-panel text-ink-3"}`}
+            >
+              {c.done ? <IconCheck size={10} /> : null}
+              {c.label}
+            </span>
+          ))}
+          <button type="button" onClick={onDone} className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-hi">
+            Done
+          </button>
+        </div>
+      ) : (
       <div className="space-y-2.5">
         <div className="flex flex-wrap items-center gap-2">
           <Link href="/board" className="text-sm text-ink-3 hover:text-ink">
@@ -224,6 +246,7 @@ export function EditorBriefWorkspace({
           </span>
         </div>
       </div>
+      )}
 
       {isCarouselFormat(video.formats) ? (
         <CarouselSlides

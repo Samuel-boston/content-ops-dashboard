@@ -128,7 +128,7 @@ const STATUS_VALUES = Object.keys(STATUS_LABELS) as VideoStatus[];
  * a page's purpose materially changes, not on every UI tweak.
  */
 const HOW_TO_KNOWLEDGE = `
-Pipeline, in order a video moves through it: Ideation -> Scripting (copywriter writes, client approves it on) -> Ready to Film -> Editor Brief -> Ready to Edit -> Editing (assigning an editor is what moves it here) -> In Review -> Revisions (if changes are asked for, back to editing) -> Approved (never sits here, routes on instantly) -> Awaiting Variants (only if the script had more than one hook) -> Final Review -> With the VA (approving a cut, or Final Review, hands it straight to the VA; there is no Ready to Post step) -> Posted. Carousels go Ideation -> Scripting -> Needs Creatives -> Creatives to Review -> With the VA -> Posted.
+Pipeline, in order a video moves through it: Ideation -> Scripting (copywriter writes, client approves it on) -> Ready to Film -> Ready to Edit (the editor brief is a menu that pops up when a video reaches Ready to Film or Ready to Edit, not a stage) -> Editing (assigning an editor is what moves it here) -> In Review -> Revisions (if changes are asked for, back to editing) -> Approved (never sits here, routes on instantly) -> Awaiting Variants (only if the script had more than one hook) -> Final Review -> With the VA (approving a cut, or Final Review, hands it straight to the VA; there is no Ready to Post step) -> Posted. Carousels go Ideation -> Scripting -> Creatives -> With the VA -> Posted.
 
 Ideation through Ready to Film are private to the owner/admin (and the copywriter seat, which lives only in those stages) — editors never see them. Everything from Ready to Edit onward is what editors work in.
 
@@ -144,7 +144,7 @@ Pages:
 - Overview (home): Andreas's opener with the pipeline stages that most need attention, "what's new" since you were last here, performance and runway panels, the pipeline strip, and the team snapshot.
 - Ideation: the private idea shelf. Add ideas manually, capture one by voice, or use "Suggest ideas" (AI, grounded either in your best-performing past videos or a prompt you give it) to generate options you can add straight in. Each idea has a brief, references (paste any link), and pillar/format/platform tags. "Script it" moves it to Scripting.
 - Scripting (a stage on the Board): where the brief becomes a script — hooks, body, CTA. "Draft with AI" opens a prompt box first. Select text to Rephrase it. "Suggest 10 hooks" generates hook options. More than one hook in the script means it'll route through Awaiting Variants later. "Send to editors" moves it to Ready to Film.
-- Ready to Film / Editor Brief: gives the script, a teleprompter view, priority, and a place to tag music from the library and add screen-recording references for the editor.
+- Ready to Film / Ready to Edit: gives the script, a teleprompter view, priority, and a place to tag music from the library and add screen-recording references for the editor.
 - Ready to Edit (the board editors see): brief, raw footage link, music, priority — nothing else, on purpose.
 - Review: the client's approval queue — cuts, hook variants, comments (pinned to a timestamp, with voice notes and drawings), Approve or send back to Revisions.
 - Revisions: sent back with open notes; "Summarize" turns scattered comments into a short punch list for the editor.

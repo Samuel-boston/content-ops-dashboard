@@ -45,7 +45,7 @@ assert.equal(k("lunch at 1?").kind, "unknown");
 // slack markup
 assert.equal(cleanSlackText("<@U123ABC> add idea: see <https://x.com/a|this> &amp; that"), "add idea: see https://x.com/a & that");
 assert.deepEqual(k("<@U123ABC> how many in scripting"), { kind: "count", stage: "scripting" });
-assert.equal(stageIn("Creatives to review"), "creative_review");
+assert.equal(stageIn("Creatives"), "needs_creatives");
 assert.equal(stageIn("final review"), "final_review");
 assert.equal(stageIn("in review"), "in_review");
 // signatures

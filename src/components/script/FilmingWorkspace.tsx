@@ -131,9 +131,9 @@ export function FilmingWorkspace({
             <StageBack videoId={video.id} status={video.status} />
             <StageMove
               videoId={video.id}
-              to="editor_brief"
-              label={readyCount === readyChecklist.length ? "Build the editor brief" : `Build the editor brief (${readyCount}/${readyChecklist.length} ready)`}
-              goTo={`/videos/${video.id}/editor-brief`}
+              to="ready_to_edit"
+              label={readyCount === readyChecklist.length ? "Filmed — send to editors" : `Filmed — send to editors (${readyCount}/${readyChecklist.length} ready)`}
+              goTo={`/videos/${video.id}`}
             />
           </span>
         </div>

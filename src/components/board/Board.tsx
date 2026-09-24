@@ -21,6 +21,7 @@ import { TaskCard, TaskCardBody } from "@/components/board/TaskCard";
 import { useToast } from "@/components/ui/Toast";
 import { IconChevronRight, IconPlus, IconX } from "@/components/ui/icons";
 import { moveVideoAction } from "@/app/board-actions";
+import { opensBriefMenu, useBriefMenu } from "@/components/script/BriefMenu";
 import { approveAction, approveCarouselCreativeAction } from "@/app/pipeline-actions";
 import { bulkAssignAction, bulkSetStatusAction } from "@/app/calendar-actions";
 import { displayName } from "@/lib/format";
@@ -163,6 +164,7 @@ export function Board({
   const [, startTransition] = useTrackedTransition();
   // Local copy so a drag lands instantly; the server revalidate reconciles it.
   const [items, setItems] = useState(cards);
+  const briefMenu = useBriefMenu();
   const [dragId, setDragId] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [collapsed, setCollapsed] = useState<Set<VideoStatus>>(new Set());
@@ -259,7 +261,7 @@ export function Board({
     // review stage IS the approval; from anywhere else it isn't a move.
     if (toStatus === "with_va" && card.status !== "with_va") {
       const approve =
-        card.status === "creative_review"
+        card.status === "needs_creatives"
           ? approveCarouselCreativeAction(card.id)
           : card.status === "in_review" || card.status === "final_review"
             ? approveAction(card.id)
@@ -311,6 +313,9 @@ export function Board({
         // RLS or a guard trigger refused the move — put the card back.
         toast.error(res.error);
         setItems(items);
+      } else if (opensBriefMenu(toStatus) && card.status !== toStatus) {
+        // Into Ready to Film or Ready to Edit: the editor brief pops up.
+        briefMenu.open(activeId);
       }
     });
   }

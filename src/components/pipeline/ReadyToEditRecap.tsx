@@ -8,7 +8,7 @@ import type { GuestLink, MusicTrack, ReferenceItem, Video, VideoAsset } from "@/
 import { ParkButton } from "@/components/pipeline/ParkButton";
 
 /**
- * What "Ready to Edit" opens onto for a manager: everything Editor Brief
+ * What "Ready to Edit" opens onto for a manager: everything the editor brief
  * finished, laid out to confirm — not the cuts/comments review workspace,
  * which doesn't exist yet for a video that hasn't been picked up.
  */
@@ -56,7 +56,7 @@ export function ReadyToEditRecap({
       </div>
 
       <p className="text-xs text-ink-3">
-        Waiting for an editor to pick it up. This is everything handed over from Editor Brief —
+        Waiting for an editor to pick it up. This is everything handed over in the editor brief —
         nothing to review yet.
       </p>
 

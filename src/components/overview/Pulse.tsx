@@ -7,7 +7,6 @@ const DEPTH_COLOR = [
   STATUS_COLOR.ideation,
   STATUS_COLOR.scripting,
   STATUS_COLOR.ready_to_film,
-  STATUS_COLOR.editor_brief,
   STATUS_COLOR.ready_to_edit,
 ];
 

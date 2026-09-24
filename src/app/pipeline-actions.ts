@@ -333,7 +333,6 @@ export async function setPlanningStageAction(videoId: string, status: VideoStatu
       "ideation",
       "scripting",
       "ready_to_film",
-      "editor_brief",
       "ready_to_edit",
     ].includes(status)
   ) {
@@ -363,7 +362,7 @@ async function requireCarousel(videoId: string) {
 }
 
 /**
- * Approve a carousel's SCRIPT — the caption text — into Needs Creatives.
+ * Approve a carousel's SCRIPT — the caption text — into Creatives.
  *
  * A carousel never gets filmed or briefed: the script and the creative
  * (the actual slide images) are reviewed as two separate things, same as a
@@ -383,21 +382,7 @@ export async function approveCarouselScriptAction(videoId: string) {
   return { ok: true };
 }
 
-/** The images are made — Needs Creatives -> Creatives to Review. */
-export async function submitCarouselCreativesAction(videoId: string) {
-  await requireRole("owner", "admin");
-  if (!(await requireCarousel(videoId))) return { error: "Not a carousel." };
-  const supabase = await supabaseServer();
-  const { error } = await supabase
-    .from("videos")
-    .update({ status: "creative_review" })
-    .eq("id", videoId);
-  if (error) return { error: error.message };
-  revalidateAll(videoId);
-  return { ok: true };
-}
-
-/** Approve the finished slide images — Creative Review -> With the VA. */
+/** The creatives are done — Creatives -> With the VA. */
 export async function approveCarouselCreativeAction(videoId: string) {
   const me = await requireRole("owner", "admin");
   if (!(await requireCarousel(videoId))) return { error: "Not a carousel." };
@@ -410,20 +395,6 @@ export async function approveCarouselCreativeAction(videoId: string) {
   await handOffToVa(videoId, me.id);
   revalidateAll(videoId);
   revalidatePath("/posting");
-  return { ok: true };
-}
-
-/** Send the creatives back for another pass — Creative Review -> Needs Creatives. */
-export async function requestCarouselRevisionsAction(videoId: string) {
-  await requireRole("owner", "admin");
-  if (!(await requireCarousel(videoId))) return { error: "Not a carousel." };
-  const supabase = await supabaseServer();
-  const { error } = await supabase
-    .from("videos")
-    .update({ status: "needs_creatives" })
-    .eq("id", videoId);
-  if (error) return { error: error.message };
-  revalidateAll(videoId);
   return { ok: true };
 }
 

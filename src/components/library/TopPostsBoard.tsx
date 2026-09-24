@@ -17,6 +17,7 @@ import type { TopPost } from "@/lib/top-posts";
 import type { TopPostInput } from "@/lib/top-posts-parse";
 import { fmtViews } from "@/lib/perf-stats";
 import { parseViews } from "@/lib/top-posts-parse";
+import { ResearchAutomation } from "@/components/library/ResearchAutomation";
 
 const PLATFORM_LABEL: Record<string, string> = {
   instagram: "Instagram",
@@ -26,8 +27,6 @@ const PLATFORM_LABEL: Record<string, string> = {
   x: "X",
   other: "Other",
 };
-
-const AI_PROMPT = `Find the top-performing short-form posts in my niche from the last 90 days: the ones that got far more views than that account usually gets. For each, give me the topic, the exact opening hook, the view count, the link, the platform and the creator. Then show me the list and wait: I will tell you which ones are good. For the ones I approve, add them to my Content Ops dashboard's Top posts list using the add_top_posts tool (if the connector isn't available, give them to me as a table with the columns: Views | Topic | Hook | Link | Platform | Creator).`;
 
 /** The curated list, plus every way of adding to it. */
 export function TopPostsBoard({
@@ -325,24 +324,7 @@ export function TopPostsBoard({
         </div>
       )}
 
-      {canEdit ? (
-        <section className="rounded-xl border border-line bg-card p-3">
-          <h2 className="text-sm font-semibold">Let ChatGPT or Claude find them</h2>
-          <p className="mb-2 text-[11px] text-ink-3">
-            Copy this into ChatGPT or Claude. With the Content Ops connector (Connect AI in the avatar menu) it can add the ones you approve straight to this list.
-          </p>
-          <textarea readOnly value={AI_PROMPT} rows={4} onFocus={(e) => e.currentTarget.select()} className={`${cls} font-mono text-xs`} />
-          <button
-            type="button"
-            onClick={() => {
-              void navigator.clipboard.writeText(AI_PROMPT).then(() => toast.success("Copied."), () => toast.error("Select the text and copy it by hand."));
-            }}
-            className={`${btn} mt-2`}
-          >
-            Copy the prompt
-          </button>
-        </section>
-      ) : null}
+      {canEdit ? <ResearchAutomation /> : null}
     </div>
   );
 }

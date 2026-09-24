@@ -32,9 +32,7 @@ export type VideoStatus =
   | "ideation"
   | "scripting"
   | "needs_creatives"
-  | "creative_review"
   | "ready_to_film"
-  | "editor_brief"
   | "ready_to_edit"
   | "in_progress"
   | "in_review"
@@ -48,10 +46,8 @@ export type VideoStatus =
 export const STATUS_LABELS: Record<VideoStatus, string> = {
   ideation: "Ideation",
   scripting: "Scripting",
-  needs_creatives: "Needs Creatives",
-  creative_review: "Creatives to Review",
+  needs_creatives: "Creatives",
   ready_to_film: "Ready to Film",
-  editor_brief: "Editor Brief",
   ready_to_edit: "Ready to Edit",
   in_progress: "Editing",
   in_review: "In Review",
@@ -68,9 +64,7 @@ export const STATUS_OWNER: Record<VideoStatus, "client" | "editor" | "va" | "don
   ideation: "client",
   scripting: "client",
   needs_creatives: "client",
-  creative_review: "client",
   ready_to_film: "client",
-  editor_brief: "client",
   ready_to_edit: "editor",
   in_progress: "editor",
   in_review: "client",
@@ -87,9 +81,7 @@ export const ACTIVE_STATUSES: VideoStatus[] = [
   "ideation",
   "scripting",
   "needs_creatives",
-  "creative_review",
   "ready_to_film",
-  "editor_brief",
   "ready_to_edit",
   "in_progress",
   "in_review",
@@ -124,7 +116,7 @@ export const EDITOR_SETTABLE_STATUSES: VideoStatus[] = [
 
 /**
  * Client-only stages. Editors can't see these at all (enforced in RLS).
- * needs_creatives/creative_review are carousel-only and deliberately NOT
+ * needs_creatives (shown as "Creatives") is carousel-only and deliberately NOT
  * here — they don't route to the /idea or /script rooms this list feeds,
  * they route to CarouselPostView instead (see videos/[id]/page.tsx).
  */
@@ -132,7 +124,6 @@ export const PLANNING_STAGES: VideoStatus[] = [
   "ideation",
   "scripting",
   "ready_to_film",
-  "editor_brief",
 ];
 
 /**
@@ -166,16 +157,13 @@ export const STATUS_ORDER: VideoStatus[] = [...ACTIVE_STATUSES, "posted"];
  * In Review, which is where the decision was actually made.
  */
 export function previousStage(status: VideoStatus, carousel = false): VideoStatus | null {
-  // A carousel's life after Scripting is entirely its own: Needs Creatives ->
-  // Creatives to Review -> With the VA, no filming, brief, or edit chain.
-  // These two stages only ever exist for carousels, so they count as one even
-  // when the caller didn't say so.
-  const carouselOnly = status === "needs_creatives" || status === "creative_review";
+  // A carousel's life after Scripting is entirely its own: Creatives -> With
+  // the VA, no filming, brief, or edit chain. Creatives only ever exists for
+  // carousels, so it counts as one even when the caller didn't say so.
+  const carouselOnly = status === "needs_creatives";
   if (carousel || carouselOnly) {
     if (status === "needs_creatives") return "scripting";
-    if (status === "creative_review") return "needs_creatives";
-    if (status === "with_va") return "creative_review";
-    if (status === "editor_brief") return "scripting"; // legacy safety net
+    if (status === "with_va") return "needs_creatives";
   }
   // A video's script goes straight from Scripting to Ready to Film, so the
   // step before Ready to Film is Scripting — never the carousel-only stages
@@ -201,9 +189,7 @@ export const STATUS_COLOR: Record<VideoStatus, string> = {
   ideation: "var(--color-stage-ideation)",
   scripting: "var(--color-stage-scripting)",
   needs_creatives: "var(--color-stage-needs-creatives)",
-  creative_review: "var(--color-stage-creative-review)",
   ready_to_film: "var(--color-stage-film)",
-  editor_brief: "var(--color-stage-brief)",
   ready_to_edit: "var(--color-stage-ready)",
   in_progress: "var(--color-stage-progress)",
   in_review: "var(--color-stage-review)",
@@ -420,7 +406,6 @@ export const STALLED_AFTER_DAYS: Partial<Record<VideoStatus, number>> = {
   ideation: 14,
   scripting: 10,
   needs_creatives: 5,
-  creative_review: 3,
   ready_to_film: 7,
   ready_to_edit: 7,
   in_progress: 5,
@@ -794,6 +779,10 @@ export interface WorkspaceSettings {
   slack_channel_id: string | null;
   slack_channel_name: string | null;
   slack_announce: boolean;
+  /** The Monday research routine: a custom prompt (null = the default), an optional outgoing webhook, and whether the AI adds finds without asking. */
+  research_prompt: string | null;
+  research_webhook_url: string | null;
+  research_auto_add: boolean;
   telegram_bot_token: string | null;
   telegram_chat_ids: number[];
   telegram_user_ids: number[];

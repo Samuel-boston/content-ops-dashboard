@@ -80,7 +80,7 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
           ? "script"
           : video.status === "ready_to_film"
             ? "film"
-            : "editor-brief";
+            : "film";
     redirect(`/videos/${id}/${dest}`);
   }
   if (viewer.role === "copywriter" && PLANNING_STAGES.includes(video.status)) {
@@ -214,12 +214,10 @@ export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
   }
 
   // A carousel skips the whole editing chain — approving its script lands it
-  // on Needs Creatives, then Creative Review (the images, not the caption
-  // text), then straight to the VA. This is the only room past Scripting it ever has — the generic
+  // on Creatives (making the images), then straight to the VA. This is the only room past Scripting it ever has — the generic
   // review workspace below assumes a cut exists, which a carousel never has.
   const CAROUSEL_POST_STATUSES: VideoStatus[] = [
     "needs_creatives",
-    "creative_review",
     "with_va",
     "posted",
   ];

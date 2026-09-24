@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui/Toast";
 import { setPlanningStageAction } from "@/app/pipeline-actions";
 import { IconChevronRight } from "@/components/ui/icons";
 import { STATUS_LABELS, type VideoStatus } from "@/lib/types";
+import { opensBriefMenu, useBriefMenu } from "@/components/script/BriefMenu";
 
 /** Push an idea along the client's private planning stages. */
 export function StageMove({
@@ -20,7 +21,6 @@ export function StageMove({
     | "ideation"
     | "scripting"
     | "ready_to_film"
-    | "editor_brief"
     | "ready_to_edit"
   >;
   label?: string;
@@ -34,6 +34,7 @@ export function StageMove({
   const toast = useToast();
   const router = useRouter();
   const [pending, startTransition] = useTrackedTransition();
+  const briefMenu = useBriefMenu();
 
   return (
     <button
@@ -44,9 +45,11 @@ export function StageMove({
           const res = await setPlanningStageAction(videoId, to);
           if (res?.error) toast.error(res.error);
           else if (goTo) {
+            if (opensBriefMenu(to)) briefMenu.open(videoId);
             router.push(goTo);
           } else {
             toast.success(`Moved to ${STATUS_LABELS[to]}.`);
+            if (opensBriefMenu(to)) briefMenu.open(videoId);
             router.refresh();
           }
         })

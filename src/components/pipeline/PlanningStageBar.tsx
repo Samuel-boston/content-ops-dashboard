@@ -7,19 +7,18 @@ import { useClientName } from "@/components/ClientName";
 import { setPlanningStageAction } from "@/app/pipeline-actions";
 import { IconCheck } from "@/components/ui/icons";
 import { STATUS_COLOR, STATUS_LABELS, type VideoStatus } from "@/lib/types";
+import { opensBriefMenu, useBriefMenu } from "@/components/script/BriefMenu";
 
 type PlanningStage =
   | "ideation"
   | "scripting"
   | "ready_to_film"
-  | "editor_brief"
   | "ready_to_edit";
 
 const STAGES: PlanningStage[] = [
   "ideation",
   "scripting",
   "ready_to_film",
-  "editor_brief",
   "ready_to_edit",
 ];
 
@@ -53,11 +52,12 @@ export function PlanningStageBar({
   const clientName = useClientName();
   const router = useRouter();
   const [pending, startTransition] = useTrackedTransition();
+  const briefMenu = useBriefMenu();
 
   // A carousel never gets filmed, briefed, or handed to an editor — once its
   // script is approved it goes on to creatives, outside this stepper entirely.
   const stages = carousel
-    ? STAGES.filter((s) => !["ready_to_film", "editor_brief", "ready_to_edit"].includes(s))
+    ? STAGES.filter((s) => !["ready_to_film", "ready_to_edit"].includes(s))
     : STAGES;
   const currentIndex = stages.indexOf(current as PlanningStage);
   // Past the handover the video is the editors' — show where it got to, but
@@ -71,6 +71,7 @@ export function PlanningStageBar({
       if (res?.error) toast.error(res.error);
       else {
         toast.success(`Moved to ${STATUS_LABELS[to]}.`);
+        if (opensBriefMenu(to)) briefMenu.open(videoId);
         router.refresh();
       }
     });

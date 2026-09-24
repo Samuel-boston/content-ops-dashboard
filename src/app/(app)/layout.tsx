@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth";
+import { BriefMenuProvider } from "@/components/script/BriefMenu";
 import { Nav } from "@/components/Nav";
 import { AndreasFab } from "@/components/andreas/AndreasFab";
 import { AndreasProvider } from "@/components/andreas/AndreasProvider";
@@ -54,7 +55,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           branding={branding}
           stalled={stalled}
         />
-        <MainContainer>{children}</MainContainer>
+        <BriefMenuProvider>
+          <MainContainer>{children}</MainContainer>
+        </BriefMenuProvider>
         {isManager ? <AndreasFab /> : null}
       </div>
       </AndreasProvider>

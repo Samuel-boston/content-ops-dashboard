@@ -182,7 +182,6 @@ export async function runway(): Promise<Runway> {
       { label: "Ideas", count: count("ideation"), href: "/ideation" },
       { label: "Scripting", count: count("scripting"), href: "/board" },
       { label: "To film", count: count("ready_to_film"), href: "/filming" },
-      { label: "Editor brief", count: count("editor_brief"), href: "/editor-brief" },
       { label: "With editors", count: count("ready_to_edit") + count("in_progress"), href: "/board" },
     ],
   };
@@ -213,7 +212,6 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 
 /** Stages that mean "your turn" come first, then the rest in pipeline order. */
 const GROUP_ORDER: VideoStatus[] = [
-  "creative_review",
   "in_review",
   "final_review",
   "revisions",
@@ -224,8 +222,6 @@ const GROUP_ORDER: VideoStatus[] = [
 
 function groupLabel(status: VideoStatus, n: number): { label: string; href: string } {
   switch (status) {
-    case "creative_review":
-      return { label: plural(n, "creative to review", "creatives to review"), href: "/board" };
     case "in_review":
       return { label: plural(n, "video to review", "videos to review"), href: "/review" };
     case "final_review":
