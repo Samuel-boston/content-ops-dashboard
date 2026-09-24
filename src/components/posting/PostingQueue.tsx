@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTrackedTransition } from "@/components/ui/Pending";
 import { useToast } from "@/components/ui/Toast";
@@ -583,6 +583,11 @@ function VideoDialog({
   clientName: string;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   const activeId = openId ?? (group.trials.find((t) => t.status === "planned") ?? group.trials[0])?.id ?? "";
   return (
     <div
