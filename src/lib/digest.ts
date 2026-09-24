@@ -1,6 +1,8 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { STATUS_LABELS, type VideoStatus } from "@/lib/types";
+import { buildPerformance, type PerformanceDigest, type PerfPost } from "@/lib/performance";
+import { fmtViews } from "@/lib/perf-stats";
 
 export interface DigestData {
   weekOf: string;
@@ -12,6 +14,8 @@ export interface DigestData {
   ideas: number;
   scripts: number;
   toFilm: number;
+  /** What performed: last week, last month, and the individual outliers. */
+  performance: PerformanceDigest | null;
 }
 
 const MONTHS = [
@@ -77,7 +81,11 @@ export async function buildDigest(db: SupabaseClient): Promise<DigestData> {
     .sort();
   const lastDate = scheduled.at(-1) ?? null;
 
+  // Best-effort: a hiccup reading numbers must never stop the digest going out.
+  const performance = await buildPerformance(db, now).catch(() => null);
+
   return {
+    performance,
     weekOf: short(today),
     posted: rows
       .filter((v) => v.status === "posted" && v.posted_at && v.posted_at >= weekAgo)
@@ -128,6 +136,64 @@ function list(items: string[]): string {
         `<p style="margin:0 0 6px;font:400 14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#17141f">${i}</p>`
     )
     .join("");
+}
+
+const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
+
+function postLine(p: PerfPost, extra = ""): string {
+  const name = p.link
+    ? `<a href="${esc(p.link)}" style="color:#5b3fd6;text-decoration:none">${esc(p.title)}</a>`
+    : esc(p.title);
+  const hook = p.hook ? `<br><span style="color:#8a8598">“${esc(p.hook.length > 90 ? p.hook.slice(0, 89) + "…" : p.hook)}”</span>` : "";
+  return `${name} <strong style="color:#17141f">${fmtViews(p.views)} views</strong>${extra}${hook}`;
+}
+
+const pct = (now: number, before: number | null) =>
+  before && before > 0 ? Math.round(((now - before) / before) * 100) : null;
+
+function performanceHtml(perf: PerformanceDigest | null, appUrl: string): string {
+  if (!perf) return "";
+  if (!perf.hasData) {
+    return section(
+      "Performance",
+      `<p style="margin:0;font:400 14px/1.5 ${FONT};color:#8a8598">No numbers yet. They appear once trial numbers are typed in or a post is linked to Instagram.</p>`
+    );
+  }
+  const change = pct(perf.week.views, perf.week.prevViews);
+  const trend =
+    change === null
+      ? ""
+      : change >= 0
+        ? ` <span style="color:#0f8a5f">▲ ${change}% on the week before</span>`
+        : ` <span style="color:#c0304a">▼ ${Math.abs(change)}% on the week before</span>`;
+  const summary = `<p style="margin:0 0 10px;font:400 14px/1.5 ${FONT};color:#17141f">
+      <strong>Last 7 days:</strong> ${perf.week.posts} post${perf.week.posts === 1 ? "" : "s"}, ${fmtViews(perf.week.views)} views${trend}<br>
+      <strong>Last 30 days:</strong> ${perf.month.posts} post${perf.month.posts === 1 ? "" : "s"}, ${fmtViews(perf.month.views)} views${
+        perf.typicalViews ? `<br><span style="color:#8a8598">A typical post gets about ${fmtViews(perf.typicalViews)} views.</span>` : ""
+      }</p>`;
+
+  const outliers = perf.outliers.length
+    ? section(
+        "Standouts",
+        list(
+          perf.outliers.map((o) =>
+            postLine(
+              o,
+              ` <span style="color:${o.direction === "high" ? "#0f8a5f" : "#c0304a"}">${o.direction === "high" ? "🔥" : "⚠️"} ${
+                o.multiple >= 1 ? `${o.multiple.toFixed(1)}×` : `${Math.round(o.multiple * 100)}%`
+              } your usual${o.thisWeek ? "" : " · earlier this month"}</span>`
+            )
+          )
+        )
+      )
+    : "";
+
+  return (
+    section(`Performance`, summary + list(perf.topWeek.map((p) => postLine(p))).replace("Nothing this week.", "No numbers on this week's posts yet.")) +
+    outliers +
+    section("Best of the last 30 days", list(perf.topMonth.map((p) => postLine(p)))) +
+    `<tr><td style="padding:0 0 18px"><a href="${esc(appUrl)}/library/top-posts" style="font:400 13px/1 ${FONT};color:#5b3fd6;text-decoration:none">See and add to the top posts list →</a></td></tr>`
+  );
 }
 
 /**
@@ -184,6 +250,8 @@ ${section(
   )
 )}
 
+${performanceHtml(d.performance, appUrl)}
+
 ${section(
   "In the pipeline",
   `<p style="margin:0;font:400 14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#17141f">
@@ -202,6 +270,26 @@ ${section(
   </p>
 </td></tr>
 </table></body></html>`;
+}
+
+function performanceText(perf: PerformanceDigest | null): string[] {
+  if (!perf) return [];
+  if (!perf.hasData) return ["PERFORMANCE", "- no numbers yet", ""];
+  const line = (p: PerfPost, extra = "") => `- ${p.title} — ${fmtViews(p.views)} views${extra}${p.hook ? ` · “${p.hook.slice(0, 80)}”` : ""}${p.link ? ` ${p.link}` : ""}`;
+  return [
+    "PERFORMANCE",
+    `Last 7 days: ${perf.week.posts} posts, ${fmtViews(perf.week.views)} views${(() => {
+      const c = pct(perf.week.views, perf.week.prevViews);
+      return c === null ? "" : ` (${c >= 0 ? "+" : ""}${c}% on the week before)`;
+    })()}`,
+    `Last 30 days: ${perf.month.posts} posts, ${fmtViews(perf.month.views)} views${perf.typicalViews ? ` · typical post ${fmtViews(perf.typicalViews)}` : ""}`,
+    ...(perf.outliers.length
+      ? ["Standouts:", ...perf.outliers.map((o) => line(o, ` — ${o.multiple >= 1 ? o.multiple.toFixed(1) + "x" : Math.round(o.multiple * 100) + "%"} your usual`))]
+      : []),
+    ...(perf.topWeek.length ? ["Top this week:", ...perf.topWeek.map((p) => line(p))] : []),
+    ...(perf.topMonth.length ? ["Best of the last 30 days:", ...perf.topMonth.map((p) => line(p))] : []),
+    "",
+  ];
 }
 
 /** Plain-text fallback. Some clients only ever show this. */
@@ -232,10 +320,52 @@ export function digestText(d: DigestData, appUrl: string, name: string): string 
           .map((w) => `- ${w.title} — ${w.editor}${w.eta ? `, due ${short(w.eta)}` : ""}`)
       : ["- nothing"]),
     "",
+    ...performanceText(d.performance),
     `PIPELINE: ${d.ideas} ideas, ${d.scripts} being written, ${d.toFilm} to film`,
     "",
     appUrl,
   ];
+  return lines.join("\n");
+}
+
+function telegramPerformance(perf: PerformanceDigest | null): string[] {
+  if (!perf || !perf.hasData) return [];
+  const escT = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const c = pct(perf.week.views, perf.week.prevViews);
+  return [
+    "",
+    `<b>📈 Performance</b>`,
+    `7 days: ${perf.week.posts} posts · ${fmtViews(perf.week.views)} views${c === null ? "" : ` (${c >= 0 ? "▲" : "▼"}${Math.abs(c)}%)`}`,
+    `30 days: ${perf.month.posts} posts · ${fmtViews(perf.month.views)} views`,
+    ...perf.outliers.slice(0, 3).map(
+      (o) => `${o.direction === "high" ? "🔥" : "⚠️"} ${escT(o.title)} — ${fmtViews(o.views)} (${o.multiple >= 1 ? o.multiple.toFixed(1) + "×" : Math.round(o.multiple * 100) + "%"} usual)`
+    ),
+  ];
+}
+
+/** The Slack version: the same week, in Slack's own markup. */
+export function digestSlack(d: DigestData): string {
+  const clean = (s: string) => s.replace(/[<>|&]/g, "");
+  const perf = d.performance;
+  const lines = [
+    `*📊 Your week* — week of ${d.weekOf}`,
+    d.runwayDays === null ? "⚠️ Nothing is scheduled." : `${d.runwayDays} days of posts scheduled.`,
+    `*Waiting on you:* ${d.waitingOnYou.length} · *Went out:* ${d.posted.length} · *Posting next 7 days:* ${d.postingNext.length}`,
+    `*Pipeline:* ${d.ideas} ideas · ${d.scripts} scripting · ${d.toFilm} to film`,
+  ];
+  if (perf?.hasData) {
+    const c = pct(perf.week.views, perf.week.prevViews);
+    lines.push(
+      "",
+      "*📈 Performance*",
+      `Last 7 days: ${perf.week.posts} posts · ${fmtViews(perf.week.views)} views${c === null ? "" : ` (${c >= 0 ? "▲" : "▼"} ${Math.abs(c)}%)`}`,
+      `Last 30 days: ${perf.month.posts} posts · ${fmtViews(perf.month.views)} views`,
+      ...perf.outliers.slice(0, 4).map((o) => {
+        const t = o.link ? `<${o.link}|${clean(o.title)}>` : clean(o.title);
+        return `${o.direction === "high" ? "🔥" : "⚠️"} ${t} — ${fmtViews(o.views)} views (${o.multiple >= 1 ? o.multiple.toFixed(1) + "×" : Math.round(o.multiple * 100) + "%"} your usual)`;
+      })
+    );
+  }
   return lines.join("\n");
 }
 
@@ -254,6 +384,7 @@ export function digestTelegram(d: DigestData): string {
     "",
     `<b>Went out</b>: ${d.posted.length} · <b>Posting next 7 days</b>: ${d.postingNext.length}`,
     `<b>Pipeline</b>: ${d.ideas} ideas · ${d.scripts} scripting · ${d.toFilm} to film`,
+    ...telegramPerformance(d.performance),
   ];
   return lines.join("\n");
 }

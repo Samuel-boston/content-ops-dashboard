@@ -133,7 +133,7 @@ export function VariantDetail({
         shareToFeed: v.shareToFeed,
       });
       if (res?.error) return toast.error(res.error);
-      done(res.scheduled ? "Scheduled for the feed — it'll go out by itself." : "Posted to the feed on Instagram ✓");
+      done(res.scheduled ? "Scheduled for the feed — it'll go out by itself." : "Posted ✓");
     });
   }
 
@@ -300,8 +300,8 @@ export function VariantDetail({
           hint={
             state === "to_trial" ? (
               <>
-                Post it from the Instagram app as a <b>trial reel</b> (Share to: Trial) — the API can&rsquo;t do trials —
-                then mark it posted. Or, if it&rsquo;s going straight to the feed, use the Instagram form below.
+                Post it as a <b>trial reel</b> with <b>Post via Publer</b> from the posting desk, or by hand from the Instagram
+                app (Share to: Trial) and mark it posted. Going straight to the feed? Use Post via Publer below.
               </>
             ) : state === "trial_posted" ? (
               <>It&rsquo;s live as a trial. If it did well, post this same cut to the main feed here.</>
@@ -317,7 +317,7 @@ export function VariantDetail({
                 onClick={() => setComposing((v) => !v)}
                 className="flex w-full items-center justify-between text-left text-xs font-medium text-ink"
               >
-                <span>Post or schedule to the feed on Instagram…</span>
+                <span>Post via Publer…</span>
                 <span className="text-ink-3">{composing ? "Close" : "Open"}</span>
               </button>
               {composing ? (

@@ -1,7 +1,7 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { notify } from "@/lib/notify";
-import { isCarouselFormat } from "@/lib/taxonomy";
+import { isCarouselFormat, isLongFormFormat } from "@/lib/taxonomy";
 import type { VideoStatus } from "@/lib/types";
 
 /**
@@ -71,7 +71,8 @@ export async function ensureVariantRows(videoId: string, createdBy: string | nul
     const have = new Set(live.map((t) => t.cut_id as string | null));
     for (const c of cuts ?? []) {
       if (!have.has(c.id)) {
-        rows.push({ video_id: videoId, cut_id: c.id, label: c.label, status: "planned", post_as: "trial", created_by: createdBy });
+        // A long video goes to YouTube as a regular video: never a trial reel.
+        rows.push({ video_id: videoId, cut_id: c.id, label: c.label, status: "planned", post_as: isLongFormFormat(video?.formats as string[]) ? "main" : "trial", created_by: createdBy });
       }
     }
   }
@@ -89,8 +90,10 @@ export async function handOffToVa(videoId: string, byUserId: string | null): Pro
   await ensureVariantRows(videoId, byUserId);
   const now = new Date().toISOString();
   const { data: rows } = await db.from("trial_posts").select("id, cut_id, post_as, sent_to_va_at, status").eq("video_id", videoId);
+  const { data: fmt } = await db.from("videos").select("formats").eq("id", videoId).maybeSingle();
+  const longForm = isLongFormFormat(fmt?.formats as string[]);
   for (const t of (rows ?? []).filter((r) => r.status === "planned")) {
-    const postAs = t.post_as === "none" ? (t.cut_id === null ? "main" : "trial") : t.post_as;
+    const postAs = longForm ? "main" : t.post_as === "none" ? (t.cut_id === null ? "main" : "trial") : t.post_as;
     await db.from("trial_posts").update({ post_as: postAs, sent_to_va_at: t.sent_to_va_at ?? now }).eq("id", t.id);
   }
   await db.from("videos").update({ va_sent_at: now }).eq("id", videoId).is("va_sent_at", null);

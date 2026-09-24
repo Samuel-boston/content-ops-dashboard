@@ -13,6 +13,7 @@ import { linkMainFeedAnalytics } from "@/lib/analytics-link";
 import { effectiveCaption } from "@/lib/caption";
 import { isOnMainFeed, variantState, type VariantState } from "@/lib/variant-state";
 import { notify } from "@/lib/notify";
+import { isLongFormFormat } from "@/lib/taxonomy";
 import { ensureVariantRows, releaseFromVa, stageAfterVa } from "@/lib/va-handoff";
 import type { PublishChannel, PublishStatus, TrialPost, TrialStatus } from "@/lib/types";
 
@@ -41,6 +42,8 @@ export interface PostingTrialItem {
   state: VariantState;
   /** Instagram trial reel, or straight to the main feed. */
   postAs: "trial" | "main";
+  /** A long video (YouTube): posted as a regular video, never a trial reel. */
+  longForm: boolean;
   /** Instructions for the whole video. */
   notes: string | null;
   /** Instructions for this variant in particular. */
@@ -89,7 +92,7 @@ export interface PostingFeedMetrics {
   permalink: string | null;
 }
 
-type VideoJoin = { title: string; status: string; va_notes: string | null; cover_path: string | null; post_caption: string | null } | null;
+type VideoJoin = { title: string; status: string; va_notes: string | null; cover_path: string | null; post_caption: string | null; formats?: string[] | null } | null;
 type DB = ReturnType<typeof supabaseAdmin>;
 
 /** Turn trial rows (with their video joined) into what the screens show. */
@@ -154,7 +157,8 @@ async function buildItems(db: DB, rows: (TrialPost & { video: VideoJoin })[], jo
               ? t.video.post_caption
               : null,
         state: variantState(t),
-        postAs: t.post_as === "main" ? "main" : "trial",
+        postAs: isLongFormFormat(t.video?.formats) || t.post_as === "main" ? "main" : "trial",
+        longForm: isLongFormFormat(t.video?.formats),
         notes: t.video?.va_notes ?? null,
         variantNotes: t.notes ?? null,
         coverUrl,
@@ -215,7 +219,7 @@ async function jobsFor(db: DB, videoIds: string[] | null): Promise<PostingJobIte
   }));
 }
 
-const TRIAL_SELECT = "*, video:videos (title, status, va_notes, cover_path, post_caption)";
+const TRIAL_SELECT = "*, video:videos (title, status, va_notes, cover_path, post_caption, formats)";
 
 /**
  * The posting board: every video that is with the VA, with all of its variants
@@ -438,7 +442,13 @@ export async function vaPublishAction(
   const db = supabaseAdmin();
   const settings = await getWorkspaceSettings();
   const connected = integrationStatus(settings);
-  const wantChannels = opts.asTrial ? ["instagram"] : (opts.channels?.length ? opts.channels : ["instagram"]);
+  const { data: owner } = await db.from("trial_posts").select("video_id").eq("id", trialId).maybeSingle();
+  const { data: vfmt } = owner
+    ? await db.from("videos").select("formats").eq("id", owner.video_id as string).maybeSingle()
+    : { data: null };
+  const longForm = isLongFormFormat(vfmt?.formats as string[] | null);
+  if (longForm && opts.asTrial) return { error: "A long video goes to YouTube as a regular video — it can't be a trial reel." };
+  const wantChannels = opts.asTrial ? ["instagram"] : (opts.channels?.length ? opts.channels : [longForm ? "youtube" : "instagram"]);
   const unreachable = wantChannels.filter((c) => !connected.channels.includes(c as PublishChannel));
   if (!opts.asTrial && unreachable.length) {
     return { error: `${unreachable.map((c) => c[0].toUpperCase() + c.slice(1)).join(" and ")} isn't connected. Connect it in Settings → Integrations, or post by hand and mark it posted.` };
@@ -447,7 +457,7 @@ export async function vaPublishAction(
     return {
       error: opts.asTrial
         ? "Trial reels are posted through Publer, which isn't connected yet. Connect it in Settings → Integrations, or post it by hand and tick Posted."
-        : "Nothing is connected to post with yet. Connect Publer or Instagram in Settings → Integrations, or post by hand and mark it posted.",
+        : "Nothing is connected to post with yet. Connect Publer in Settings → Integrations, or post by hand and mark it posted.",
     };
   }
   const { data: t } = await db.from("trial_posts").select("*").eq("id", trialId).maybeSingle();

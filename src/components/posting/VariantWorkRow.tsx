@@ -25,7 +25,7 @@ const btn = "rounded-md border border-line px-2.5 py-1 text-[11px] text-ink-2 ho
  * One hook variant while the VA is working through a video: everything they need,
  * small, in one row — where it goes (trial reel or main feed), whether it's
  * posted, the caption to copy, the cover, the file, and (for the feed) posting
- * through Instagram. Nothing to click into.
+ * through Publer. Nothing to click into.
  */
 export function VariantWorkRow({
   trial,
@@ -141,6 +141,9 @@ export function VariantWorkRow({
           </span>
         ) : (
           <>
+            {trial.longForm ? (
+              <span className="rounded-md bg-raised px-2.5 py-1 text-[11px] text-ink-2">YouTube video</span>
+            ) : (
             <div className="flex overflow-hidden rounded-md border border-line text-[11px]" role="group" aria-label="Where it goes">
               {(["trial", "main"] as const).map((d) => (
                 <button
@@ -154,6 +157,7 @@ export function VariantWorkRow({
                 </button>
               ))}
             </div>
+            )}
             <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-ink-2">
               <input
                 type="checkbox"
@@ -216,7 +220,7 @@ export function VariantWorkRow({
               ? "Close form"
               : dest === "trial"
                 ? "Post trial reel via Publer…"
-                : `Post via ${publerConnected ? "Publer" : "Instagram"}…`}
+                : "Post via Publer…"}
           </button>
         ) : null}
       </div>
@@ -244,6 +248,7 @@ export function VariantWorkRow({
                 : channels ?? (instagramConnected ? ["instagram"] : [])
             }
             nowOnly={dest === "trial"}
+            defaultChannels={trial.longForm ? ["youtube"] : undefined}
             coverEnabled={!publerConnected}
             emptyHint={
               <>

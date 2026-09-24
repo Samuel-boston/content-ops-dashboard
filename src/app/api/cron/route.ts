@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { notify, notifyTelegram } from "@/lib/notify";
-import { buildDigest, digestHtml, digestTelegram, digestText } from "@/lib/digest";
+import { buildDigest, digestHtml, digestSlack, digestTelegram, digestText } from "@/lib/digest";
+import { announceSlack } from "@/lib/integrations/slack";
 import { sendEmail } from "@/lib/integrations/email";
 import { runDuePublishJobs } from "@/lib/publish-runner";
 import { cronAuthorised } from "@/lib/cron-auth";
@@ -240,6 +241,7 @@ async function sendClientDigest(db: ReturnType<typeof supabaseAdmin>) {
   }
 
   await notifyTelegram(digestTelegram(data));
+  await announceSlack(digestSlack(data));
   await db.from("automation_events").insert({
     kind: "client_digest",
     detail: { sent, failures, waiting: data.waitingOnYou.length, runwayDays: data.runwayDays },

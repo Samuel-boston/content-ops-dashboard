@@ -114,7 +114,7 @@ export function VideoWorkDialog({
         ) : null}
         {failed.map((j) => (
           <p key={j.id} className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-400">
-            ⚠ An Instagram post failed{j.error ? `: ${j.error}` : "."}
+            ⚠ A post failed{j.error ? `: ${j.error}` : "."}
           </p>
         ))}
 

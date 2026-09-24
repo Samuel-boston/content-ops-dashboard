@@ -30,7 +30,7 @@ export const FORMATS = [
 
 // Instagram is the only one wired to analytics/publishing for now; the others
 // are selectable today, ready to connect later.
-export const PLATFORMS = ["IG Story", "Instagram", "TikTok"] as const;
+export const PLATFORMS = ["IG Story", "Instagram", "TikTok", "YouTube"] as const;
 
 export const TAXONOMY_PRESETS: Record<TaxonomyKind, readonly string[]> = {
   content_pillar: CONTENT_PILLARS,
@@ -53,6 +53,14 @@ export const CAROUSEL_FORMAT = "Carousels";
 const LEGACY_CAROUSEL_FORMATS = ["Carousel with text"];
 export function isCarouselFormat(formats: readonly string[] | null | undefined): boolean {
   return (formats ?? []).some((f) => f === CAROUSEL_FORMAT || LEGACY_CAROUSEL_FORMATS.includes(f));
+}
+
+// "Long video" is the YouTube format: same pipeline as any video, but it is posted
+// to YouTube as a regular video (not a Short, and never a trial reel), and it has
+// its own tab on the Board.
+export const LONG_FORM_FORMAT = "Long video";
+export function isLongFormFormat(formats: readonly string[] | null | undefined): boolean {
+  return (formats ?? []).includes(LONG_FORM_FORMAT);
 }
 
 /** Union of presets + persisted customs + anything already on the record. */

@@ -9,6 +9,7 @@ import {
 } from "@/lib/integrations/instagram";
 import { getDownloadUrl } from "@/lib/integrations/stream";
 import { getWorkspaceSettings } from "@/lib/workspace";
+import { isLongFormFormat } from "@/lib/taxonomy";
 import { postVideoViaPubler, publerSettings } from "@/lib/integrations/publer";
 import { markVideoPosted } from "@/lib/archive";
 import { mintFileToken } from "@/lib/phone-link";
@@ -78,11 +79,12 @@ export async function runPublishJob(jobId: string): Promise<{ ok: boolean; error
               : `No ${missing.join(" or ")} account is connected in Publer. Connect it in Settings → Publer.`
           );
         }
-        const { data: vid } = await db.from("videos").select("title").eq("id", job.video_id).maybeSingle();
+        const { data: vid } = await db.from("videos").select("title, formats").eq("id", job.video_id).maybeSingle();
         const sent = await postVideoViaPubler({
           videoUrl,
           caption: job.caption ?? "",
           title: (vid?.title as string | undefined) ?? undefined,
+          youtubeKind: isLongFormFormat(vid?.formats as string[] | null) ? "video" : "short",
           networks: [...wanted],
           asTrial: Boolean(job.as_trial),
           shareToFeed: job.share_to_feed ?? true,

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth";
 import { runPublishJob } from "@/lib/publish-runner";
-import { isCarouselFormat } from "@/lib/taxonomy";
+import { isCarouselFormat, isLongFormFormat } from "@/lib/taxonomy";
 import { ensureVariantRows, releaseFromVa, stageAfterVa } from "@/lib/va-handoff";
 import type { TrialPost } from "@/lib/types";
 
@@ -79,7 +79,7 @@ export async function sendToVaAction(input: {
   const supabase = await supabaseServer();
   const { data: video } = await supabase
     .from("videos")
-    .select("cover_path, status")
+    .select("cover_path, status, formats")
     .eq("id", input.videoId)
     .single();
   if (!video) return { error: "Video not found." };
@@ -97,7 +97,7 @@ export async function sendToVaAction(input: {
   const now = new Date().toISOString();
   const results = await Promise.all(
     live.map((t) => {
-      const postAs = t.post_as === "none" ? (t.cut_id === null ? "main" : "trial") : t.post_as;
+      const postAs = isLongFormFormat(video.formats as string[]) ? "main" : t.post_as === "none" ? (t.cut_id === null ? "main" : "trial") : t.post_as;
       return supabase
         .from("trial_posts")
         .update({ post_as: postAs, sent_to_va_at: t.sent_to_va_at ?? now })

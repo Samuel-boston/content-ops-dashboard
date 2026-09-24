@@ -5,24 +5,24 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { BoardShell } from "@/components/board/BoardShell";
 import { NewVideoDialog } from "@/components/CreateVideoButton";
 import { VideoQuickView } from "@/components/board/VideoQuickView";
-import { isCarouselFormat } from "@/lib/taxonomy";
+import { isCarouselFormat, isLongFormFormat } from "@/lib/taxonomy";
 import type { BoardCard, Profile, Series, VideoStatus } from "@/lib/types";
 
-export type BoardScope = "all" | "videos" | "carousels" | "filming" | "planning";
+export type BoardScope = "all" | "videos" | "carousels" | "filming" | "longform" | "planning";
 
 /**
  * The default view is everything at once — videos and carousels side by side
- * in one board, scripting included. The other tabs narrow it: a video's whole
- * life, a carousel's much shorter one (no filming, no raw footage), or just the
- * handoff between "filmed" and "with the editors". The copywriter only ever
- * gets Planning: ideas in, scripts out.
+ * in one board, scripting included. The other tabs narrow it: a carousel's much
+ * shorter life (no filming, no raw footage), just the handoff between "filmed"
+ * and "with the editors", or the long-form (YouTube) videos on their own. The
+ * copywriter only ever gets Planning: ideas in, scripts out.
  */
 const SCOPES: Record<
   BoardScope,
   { label: string; columns: VideoStatus[]; match: (c: BoardCard) => boolean }
 > = {
   all: {
-    label: "All",
+    label: "All videos",
     columns: [
       "ideation",
       "scripting",
@@ -65,6 +65,23 @@ const SCOPES: Record<
     columns: ["ideation", "scripting", "needs_creatives", "creative_review", "with_va"],
     match: (c) => isCarouselFormat(c.formats),
   },
+  longform: {
+    label: "Long-form",
+    // YouTube videos: the full video pipeline, posted to YouTube as a regular video.
+    columns: [
+      "ideation",
+      "scripting",
+      "ready_to_film",
+      "editor_brief",
+      "ready_to_edit",
+      "in_progress",
+      "in_review",
+      "revisions",
+      "final_review",
+      "with_va",
+    ],
+    match: (c) => isLongFormFormat(c.formats),
+  },
   filming: {
     label: "Filming",
     columns: ["ready_to_film", "editor_brief", "ready_to_edit"],
@@ -76,7 +93,7 @@ const SCOPES: Record<
     match: () => true,
   },
 };
-const SCOPE_ORDER: BoardScope[] = ["all", "videos", "carousels", "filming"];
+const SCOPE_ORDER: BoardScope[] = ["all", "carousels", "filming", "longform"];
 
 /** Thin client wrapper so the board's "New video" button can open the dialog. */
 export function BoardPageClient({

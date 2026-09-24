@@ -39,6 +39,8 @@ export async function postVideoViaPubler(input: {
   filename?: string;
   caption: string;
   title?: string;
+  /** YouTube: a Short (default) or a regular long video. */
+  youtubeKind?: "short" | "video";
   networks: VideoNetwork[];
   asTrial: boolean;
   shareToFeed?: boolean;
@@ -76,6 +78,7 @@ export async function postVideoViaPubler(input: {
       media,
       caption: input.caption,
       title: input.title,
+      youtubeKind: input.youtubeKind,
       trial: network === "instagram" && input.asTrial ? p.trialMode : undefined,
       shareToFeed: input.shareToFeed,
       scheduledAt: input.scheduledAt,

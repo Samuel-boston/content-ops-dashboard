@@ -247,7 +247,7 @@ export function TrialsPanel({
       <p className="mb-3 text-[11px] leading-relaxed text-ink-3">
         Set each variant to a trial reel or the main feed and write its caption. With Publer connected, trial reels and
         main-feed posts are both published straight from the VA&rsquo;s desk; without it, trials are posted by
-        hand from the Instagram app and a main-feed post needs Instagram connected.
+        hand from the Instagram app and a main-feed post needs Publer (or Instagram) connected.
       </p>
 
       {best ? (
@@ -609,13 +609,13 @@ function TrialRow({
           {promoting ? (
             <div className="mt-2 rounded-xl border border-accent/30 bg-accent-ghost/40 p-2.5">
               <p className="mb-2 text-[11px] text-ink-3">
-                Check the caption, pick post now or a time, then post. Nothing goes to Instagram until you press the button.
+                Check the caption, pick post now or a time, then post. Nothing is posted until you press the button.
               </p>
               <PostComposer
                 caption={draft}
                 onCaptionChange={setDraft}
                 connected={instagramConnected ? ["instagram"] : []}
-                emptyHint={<>Connect Instagram in Settings → Integrations and it shows up here.</>}
+                emptyHint={<>Connect Publer in Settings → Integrations and it shows up here.</>}
                 isVideo={t.cut_id !== null}
                 pending={pending}
                 onSubmit={(v) =>

@@ -86,7 +86,7 @@ export async function schedulePostAction(input: {
     revalidatePath("/publishing");
     revalidatePath("/calendar");
     revalidatePath(`/videos/${input.videoId}`);
-    if (!res.ok) return { error: `Instagram didn't take it: ${res.error}` };
+    if (!res.ok) return { error: `It didn't go through: ${res.error}` };
     return { ok: true };
   }
 

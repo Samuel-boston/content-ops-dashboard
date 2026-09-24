@@ -7,7 +7,7 @@ import { schedulePostAction } from "@/app/publishing-actions";
 import { savePostCaptionAction } from "@/app/trial-actions";
 import { TrialsPanel } from "@/components/workspace/TrialsPanel";
 import { PostComposer } from "@/components/posting/PostComposer";
-import { isCarouselFormat } from "@/lib/taxonomy";
+import { isCarouselFormat, isLongFormFormat } from "@/lib/taxonomy";
 import { CHANNEL_LABELS, type PublishChannel } from "@/lib/types";
 import type { PublishJob, Video } from "@/lib/types";
 
@@ -109,6 +109,7 @@ export function PostTab({
             onCaptionChange={changeCaption}
             connected={channels ?? (instagramConfigured ? ["instagram"] : [])}
             coverEnabled={!publerConnected}
+            defaultChannels={isLongFormFormat(video.formats) ? ["youtube"] : undefined}
             emptyHint={<>Connect one in Settings → Integrations and it shows up here.</>}
             isVideo={!isCarouselFormat(video.formats)}
             durationSeconds={durationSeconds}

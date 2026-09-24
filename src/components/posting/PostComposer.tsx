@@ -49,6 +49,7 @@ export function PostComposer({
   pending,
   nowOnly = false,
   coverEnabled = true,
+  defaultChannels,
   onSubmit,
 }: {
   caption: string;
@@ -67,9 +68,13 @@ export function PostComposer({
   nowOnly?: boolean;
   /** Whether the route in use honours a chosen cover frame (Publer picks its own). */
   coverEnabled?: boolean;
+  /** Channels ticked to start with (default: every connected one). A long video starts on YouTube only. */
+  defaultChannels?: PublishChannel[];
   onSubmit: (v: ComposerSubmit) => void;
 }) {
-  const [channels, setChannels] = useState<PublishChannel[]>(connected);
+  const [channels, setChannels] = useState<PublishChannel[]>(
+    defaultChannels?.length ? defaultChannels.filter((c) => connected.includes(c)) : connected
+  );
   const [when, setWhen] = useState("");
   const [coverSeconds, setCoverSeconds] = useState(0);
   const [shareToFeed, setShareToFeed] = useState(true);
