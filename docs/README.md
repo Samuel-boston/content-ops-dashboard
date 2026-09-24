@@ -4,7 +4,7 @@ Read in this order. **Files 1–2 are for Nathan** (before and during the call).
 
 | # | File | Who | When |
 |---|---|---|---|
-| 1 | `01-before-the-call.md` | Nathan | Before the call (dry run + make his copy) |
+| 1 | `01-before-the-call.md` | Nathan | Before the call (make his copy) |
 | 2 | `02-on-the-call.md` | Nathan + Adam | The call itself (about 90 minutes) |
 | 3 | `03-after-the-call.md` | Adam | After the call — the checklist, with what's slow and not his fault |
 | 4 | `04-integration-guides.md` | Adam | Step-by-step for each integration (also inside the dashboard: Settings → Set up your integrations) |
