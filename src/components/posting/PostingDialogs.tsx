@@ -76,11 +76,19 @@ export function VideoWorkDialog({
   const router = useRouter();
   const [pending, startTransition] = useTrackedTransition();
   const [confirmPosted, setConfirmPosted] = useState(false);
+  // "Keep working" is remembered against the current set of statuses, so the prompt
+  // comes back the next time something changes — but not on every re-render.
+  const [dismissedFor, setDismissedFor] = useState<string | null>(null);
   const [sendingBack, setSendingBack] = useState(false);
   const [reason, setReason] = useState("");
   const first = trials[0];
   const videoId = first.videoId;
   const left = trials.filter((t) => isToPost(t.state)).length;
+  const scheduledLeft = trials.filter((t) => t.state === "scheduled_feed").length;
+  const statusKey = trials.map((t) => `${t.id}:${t.state}`).join("|");
+  const allPosted = left === 0;
+  // The moment the last variant is marked posted, ask whether to close the video out.
+  const confirmOpen = confirmPosted || (allPosted && dismissedFor !== statusKey);
   const failed = jobs.filter((j) => j.videoId === videoId && j.status === "failed");
 
   return (
@@ -111,7 +119,7 @@ export function VideoWorkDialog({
           <div className="rounded-xl border border-warn/40 bg-warn/5 p-3">
             <p className="text-xs font-medium text-ink">Send this back to {clientName}&rsquo;s side — it goes back to Ready to Post.</p>
             <p className="mt-0.5 text-[11px] text-ink-3">
-              It leaves this board (captions are kept) and anything scheduled is taken off the schedule. Say what's not right — it goes
+              It leaves this board (captions are kept) and anything scheduled is taken off the schedule. Say what&rsquo;s not right — it goes
               in the video&rsquo;s chat and they&rsquo;re notified.
             </p>
             <textarea
@@ -168,23 +176,29 @@ export function VideoWorkDialog({
       </div>
 
       <ConfirmDialog
-        open={confirmPosted}
-        title="Mark as posted?"
+        open={confirmOpen}
+        title={allPosted ? "Everything's posted" : "Mark as posted?"}
         body={
-          left > 0
-            ? `${left} variant${left === 1 ? " is" : "s are"} still marked to post — they'll be counted as posted. Marking as posted moves this into the archive, where you can add performance and post the best trial to the feed.`
-            : "Marking as posted moves this into the archive, where you can add performance and post the best trial to the feed."
+          allPosted
+            ? `Every variant in this video is marked as posted${
+                scheduledLeft ? ` (${scheduledLeft} scheduled for the feed will still go out by itself)` : ""
+              }. Confirming moves it into the archive, where you can add trial numbers and post the best one to the feed. Are you sure?`
+            : `${left} variant${left === 1 ? " is" : "s are"} still marked to post — they'll be counted as posted. Marking as posted moves this into the archive, where you can add trial numbers and post the best one to the feed. Are you sure?`
         }
-        confirmLabel="Proceed"
-        cancelLabel="Go back"
-        onCancel={() => setConfirmPosted(false)}
+        confirmLabel="Confirm"
+        cancelLabel="Keep working"
+        onCancel={() => {
+          setConfirmPosted(false);
+          setDismissedFor(statusKey);
+        }}
         onConfirm={() => {
           setConfirmPosted(false);
+          setDismissedFor(statusKey);
           startTransition(async () => {
             const res = await vaMarkVideoPostedAction(videoId);
             if (res?.error) toast.error(res.error);
             else {
-              toast.success("Posted — it's in the archive.");
+              toast.success("Posted — it's in the Archive tab.");
               onClose();
               router.refresh();
             }

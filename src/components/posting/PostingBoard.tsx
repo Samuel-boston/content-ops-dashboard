@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { DndContext, DragOverlay, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent, type DragStartEvent } from "@dnd-kit/core";
 import { useTrackedTransition } from "@/components/ui/Pending";
 import { useToast } from "@/components/ui/Toast";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -37,50 +37,48 @@ function groupUp(trials: PostingTrialItem[]): VideoGroup[] {
   }));
 }
 
-function Card({ g, draggable, onOpen }: { g: VideoGroup; draggable: boolean; onOpen: () => void }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: g.videoId, disabled: !draggable });
+/** What a card looks like — shared by the card on the board and the copy that floats while it's dragged. */
+function CardFace({ g, draggable }: { g: VideoGroup; draggable: boolean }) {
   const total = g.trials.length;
   const posted = g.trials.filter((t) => !isToPost(t.state)).length;
-  const best = g.trials
-    .filter((t) => t.state === "trial_posted" && t.views !== null)
-    .sort((a, b) => (b.views ?? 0) - (a.views ?? 0))[0];
-  const onFeed = g.trials.filter((t) => t.state === "feed_posted").length;
+  return (
+    <div className="flex gap-3">
+      {g.coverUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={g.coverUrl} alt="" draggable={false} className="h-14 w-14 shrink-0 rounded-md object-cover" />
+      ) : (
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-raised text-lg text-ink-3">▶</span>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{g.title}</p>
+        <p className="mt-0.5 text-[11px] text-ink-3">
+          {total} variant{total === 1 ? "" : "s"}
+          {draggable ? ` · ${posted} of ${total} posted` : ""}
+        </p>
+        {draggable ? (
+          <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-hover">
+            <div className="h-full rounded-full bg-emerald-500 transition-[width] duration-300" style={{ width: `${total ? (posted / total) * 100 : 0}%` }} />
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function Card({ g, leaving, onOpen }: { g: VideoGroup; leaving: boolean; onOpen: () => void }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: g.videoId });
   return (
     <div
       ref={setNodeRef}
       {...attributes}
       {...listeners}
       onClick={onOpen}
-      style={{ transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined }}
-      className={`rounded-xl border border-line bg-card p-3 text-left transition hover:border-accent ${
-        draggable ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"
-      } ${isDragging ? "relative z-20 opacity-90 shadow-2xl" : ""}`}
+      // While it's being dragged, this stays put as a faint placeholder; the moving copy is the overlay.
+      className={`cursor-grab touch-none select-none rounded-xl border border-line bg-card p-3 text-left transition-all duration-300 hover:border-accent active:cursor-grabbing ${
+        isDragging ? "opacity-30" : ""
+      } ${leaving ? "pointer-events-none scale-95 opacity-0" : ""}`}
     >
-      <div className="flex gap-3">
-        {g.coverUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={g.coverUrl} alt="" className="h-14 w-14 shrink-0 rounded-md object-cover" />
-        ) : (
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-raised text-lg text-ink-3">▶</span>
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{g.title}</p>
-          <p className="mt-0.5 text-[11px] text-ink-3">
-            {total} variant{total === 1 ? "" : "s"}
-            {draggable ? ` · ${posted} of ${total} posted` : ""}
-          </p>
-          {draggable ? (
-            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-hover">
-              <div className="h-full rounded-full bg-emerald-500" style={{ width: `${total ? (posted / total) * 100 : 0}%` }} />
-            </div>
-          ) : (
-            <p className="mt-1 truncate text-[11px] text-ink-3">
-              {onFeed ? `${onFeed} on the feed` : "Trials only"}
-              {best ? ` · 🏆 ${best.label}: ${best.views?.toLocaleString()} views` : ""}
-            </p>
-          )}
-        </div>
-      </div>
+      <CardFace g={g} draggable />
     </div>
   );
 }
@@ -90,8 +88,8 @@ function DropZone() {
   return (
     <div
       ref={setNodeRef}
-      className={`flex min-h-24 flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition ${
-        isOver ? "border-emerald-400 bg-emerald-500/10" : "border-line"
+      className={`flex min-h-28 flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition-all duration-200 ${
+        isOver ? "scale-[1.02] border-emerald-400 bg-emerald-500/10" : "border-line"
       }`}
     >
       <p className="text-sm font-medium">✓ Posted</p>
@@ -103,9 +101,9 @@ function DropZone() {
 }
 
 function Column({
-  id, label, color, blurb, groups, draggable, onOpen,
+  id, label, color, blurb, groups, leaving, onOpen,
 }: {
-  id: string; label: string; color: string; blurb: string; groups: VideoGroup[]; draggable: boolean; onOpen: (id: string) => void;
+  id: string; label: string; color: string; blurb: string; groups: VideoGroup[]; leaving: Set<string>; onOpen: (id: string) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
@@ -121,7 +119,7 @@ function Column({
       </div>
       {groups.length === 0 ? <p className="px-2 py-6 text-center text-xs text-ink-3">Nothing here.</p> : null}
       {groups.map((g) => (
-        <Card key={g.videoId} g={g} draggable={draggable} onOpen={() => onOpen(g.videoId)} />
+        <Card key={g.videoId} g={g} leaving={leaving.has(g.videoId)} onOpen={() => onOpen(g.videoId)} />
       ))}
     </div>
   );
@@ -150,15 +148,19 @@ export function PostingBoard({
   const [confirmPosted, setConfirmPosted] = useState<VideoGroup | null>(null);
   // Videos just marked posted: gone from the board at once, without waiting for the refresh.
   const [gone, setGone] = useState<Set<string>>(new Set());
+  const [removed, setRemoved] = useState<Set<string>>(new Set());
+  const [dragId, setDragId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const groups = useMemo(() => groupUp(trials), [trials]);
   const q = query.trim().toLowerCase();
   const match = (title: string) => !q || title.toLowerCase().includes(q);
-  const toPost = groups.filter((g) => match(g.title) && !gone.has(g.videoId));
+  const toPost = groups.filter((g) => match(g.title) && !removed.has(g.videoId));
+  const dragging = groups.find((g) => g.videoId === dragId) ?? null;
   const opened = groups.find((g) => g.videoId === openVideo) ?? null;
 
   function onDragEnd(e: DragEndEvent) {
+    setDragId(null);
     if (!e.over) return;
     const g = groups.find((x) => x.videoId === String(e.active.id));
     if (!g) return;
@@ -197,13 +199,26 @@ export function PostingBoard({
             Open a video to work through all its hook variants in one place. When it&rsquo;s all posted, drag it to <b>Posted</b> — it
             leaves this board and is in the Archive tab.
           </p>
-          <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+          <DndContext
+            sensors={sensors}
+            onDragStart={(e: DragStartEvent) => setDragId(String(e.active.id))}
+            onDragCancel={() => setDragId(null)}
+            onDragEnd={onDragEnd}
+          >
             <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-              <Column id="to_post" label="To post" color="#f59e0b" blurb="With the VA — open a video to work through all its variants." groups={toPost} draggable onOpen={setOpenVideo} />
+              <Column id="to_post" label="To post" color="#f59e0b" blurb="With the VA — open a video to work through all its variants." groups={toPost} leaving={gone} onOpen={setOpenVideo} />
               <div className="md:pt-2">
                 <DropZone />
               </div>
             </div>
+            {/* The card that follows the pointer: lifted, slightly tilted, and it settles back if dropped nowhere. */}
+            <DragOverlay dropAnimation={{ duration: 220, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" }}>
+              {dragging ? (
+                <div className="w-[min(28rem,80vw)] rotate-1 cursor-grabbing rounded-xl border border-accent bg-card p-3 shadow-2xl ring-1 ring-accent/40">
+                  <CardFace g={dragging} draggable />
+                </div>
+              ) : null}
+            </DragOverlay>
           </DndContext>
         </>
       ) : (
@@ -259,24 +274,28 @@ export function PostingBoard({
       <ConfirmDialog
         open={Boolean(confirmPosted)}
         title="Mark as posted?"
-        body="Marking as posted moves this into the archive, where you can add performance and post the best trial to the feed."
-        confirmLabel="Proceed"
-        cancelLabel="Go back"
+        body="Marking as posted moves this into the archive, where you can add performance and post the best trial to the feed. Are you sure?"
+        confirmLabel="Confirm"
+        cancelLabel="Keep working"
         onCancel={() => setConfirmPosted(null)}
         onConfirm={() => {
           const g = confirmPosted;
           setConfirmPosted(null);
           if (!g) return;
           setGone((prev) => new Set(prev).add(g.videoId));
+          // Fade it out first, then take it off the board.
+          setTimeout(() => setRemoved((prev) => new Set(prev).add(g.videoId)), 320);
           startTransition(async () => {
             const res = await vaMarkVideoPostedAction(g.videoId);
             if (res?.error) {
               toast.error(res.error);
-              setGone((prev) => {
-                const next = new Set(prev);
-                next.delete(g.videoId);
-                return next;
-              });
+              for (const set of [setGone, setRemoved]) {
+                set((prev) => {
+                  const next = new Set(prev);
+                  next.delete(g.videoId);
+                  return next;
+                });
+              }
             } else {
               toast.success("Posted — it's in the Archive tab.");
               router.refresh();
