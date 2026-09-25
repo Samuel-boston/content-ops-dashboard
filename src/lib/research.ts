@@ -2,6 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getWorkspaceSettings } from "@/lib/workspace";
 import { buildResearchPrompt, promptLinks } from "@/lib/research-prompt";
+import { assertPublicHttpsUrl } from "@/lib/safe-url";
 
 const appUrl = () => (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
 
@@ -60,7 +61,9 @@ export async function sendResearchWebhook(block: ResearchBlock): Promise<{ ok: b
   const url = settings.research_webhook_url?.trim();
   if (!url) return null;
   try {
+    await assertPublicHttpsUrl(url);
     const res = await fetch(url, {
+      redirect: "manual",
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({

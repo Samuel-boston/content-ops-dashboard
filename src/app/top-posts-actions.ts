@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { requireRole, requireUser } from "@/lib/auth";
-import { insertTopPosts, type TopPost } from "@/lib/top-posts";
+import { cleanLink, insertTopPosts, type TopPost } from "@/lib/top-posts";
 import { parsePastedPosts, parseViews, platformOf, type TopPostInput } from "@/lib/top-posts-parse";
 import { collectPosts } from "@/lib/performance";
 
@@ -46,20 +46,21 @@ export async function addTopPostsAction(rows: TopPostInput[]) {
 
 export async function updateTopPostAction(id: string, patch: Partial<TopPostInput>) {
   await requireRole("owner", "admin");
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return { error: "Unknown post." };
   const update: Record<string, unknown> = {};
   if (patch.topic !== undefined) {
     if (!patch.topic.trim()) return { error: "A post needs a topic." };
-    update.topic = patch.topic.trim();
+    update.topic = patch.topic.trim().slice(0, 300);
   }
-  if (patch.hook !== undefined) update.hook = patch.hook?.trim() || null;
+  if (patch.hook !== undefined) update.hook = patch.hook?.trim().slice(0, 500) || null;
   if (patch.views !== undefined) update.views = parseViews(patch.views);
   if (patch.link !== undefined) {
-    update.link = patch.link?.trim() || null;
-    if (!patch.platform) update.platform = platformOf(patch.link ?? null);
+    update.link = cleanLink(patch.link);
+    if (!patch.platform) update.platform = platformOf(update.link as string | null);
   }
-  if (patch.platform !== undefined && patch.platform) update.platform = patch.platform.trim().toLowerCase();
-  if (patch.creator !== undefined) update.creator = patch.creator?.trim() || null;
-  if (patch.notes !== undefined) update.notes = patch.notes?.trim() || null;
+  if (patch.platform !== undefined && patch.platform) update.platform = patch.platform.trim().toLowerCase().slice(0, 30);
+  if (patch.creator !== undefined) update.creator = patch.creator?.trim().slice(0, 120) || null;
+  if (patch.notes !== undefined) update.notes = patch.notes?.trim().slice(0, 1000) || null;
   const { error } = await supabaseAdmin().from("top_posts").update(update).eq("id", id);
   if (error) return { error: error.message };
   revalidatePath("/library/top-posts");
@@ -102,8 +103,11 @@ export async function suggestOwnTopPostsAction(): Promise<SuggestedPost[]> {
 export async function addSuggestedPostAction(s: SuggestedPost) {
   const me = await requireRole("owner", "admin");
   try {
+    // Only the video is taken from the browser; the numbers and link are looked up again here.
+    const real = (await suggestOwnTopPostsAction()).find((x) => x.videoId === s.videoId);
+    if (!real) return { error: "That one is already on the list, or no longer has numbers." };
     const res = await insertTopPosts(
-      [{ topic: s.topic, hook: s.hook, views: s.views, link: s.link, platform: platformOf(s.link) ?? "instagram", posted_on: s.postedAt.slice(0, 10), source: "own", video_id: s.videoId }],
+      [{ topic: real.topic, hook: real.hook, views: real.views, link: real.link, platform: platformOf(real.link) ?? "instagram", posted_on: real.postedAt.slice(0, 10), source: "own", video_id: real.videoId }],
       me.id
     );
     revalidatePath("/library/top-posts");

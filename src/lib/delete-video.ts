@@ -65,6 +65,15 @@ export async function purgeVideo(videoId: string): Promise<{ title: string; file
   for (const t of thumbRefs.data ?? []) add(thumbs, t.storage_path);
   for (const t of trials.data ?? []) add(footage, (t as { cover_path?: string | null }).cover_path);
 
+  // The database row goes first: if that fails nothing has been touched, and a video
+  // that still exists never has its files pulled out from under it.
+  // Reference items point at the video with "on delete set null", so they'd be
+  // left behind as orphans. They go with it.
+  await db.from("reference_items").delete().eq("video_id", videoId);
+
+  const { error } = await db.from("videos").delete().eq("id", videoId);
+  if (error) throw new Error(error.message);
+
   // Cloudflare Stream first: it is the part that keeps costing money.
   let streams = 0;
   for (const uid of streamUids) {
@@ -90,11 +99,5 @@ export async function purgeVideo(videoId: string): Promise<{ title: string; file
   await remove("comment-media", media);
   await remove("thumbnails", thumbs);
 
-  // Reference items point at the video with "on delete set null", so they'd be
-  // left behind as orphans. They go with it.
-  await db.from("reference_items").delete().eq("video_id", videoId);
-
-  const { error } = await db.from("videos").delete().eq("id", videoId);
-  if (error) throw new Error(error.message);
   return { title: video.title as string, files, streams };
 }

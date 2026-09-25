@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth";
 import { runPublishJob } from "@/lib/publish-runner";
-import { isCarouselFormat, isLongFormFormat } from "@/lib/taxonomy";
+import { isLongFormFormat } from "@/lib/taxonomy";
 import { ensureVariantRows, releaseFromVa, stageAfterVa } from "@/lib/va-handoff";
 import type { TrialPost } from "@/lib/types";
 

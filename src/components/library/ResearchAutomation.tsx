@@ -120,16 +120,19 @@ export function ResearchAutomation() {
         <button type="button" onClick={() => copy(prompt)} className={btn}>
           Copy the prompt
         </button>
-        <button type="button" disabled={pending} onClick={() => save(false)} className={btn}>
-          {pending ? "Saving…" : "Save"}
-        </button>
-        {s.custom ? (
+        {s.isOwner ? (
+          <button type="button" disabled={pending} onClick={() => save(false)} className={btn}>
+            {pending ? "Saving…" : "Save"}
+          </button>
+        ) : null}
+        {s.isOwner && s.custom ? (
           <button type="button" disabled={pending} onClick={() => save(true)} className={btn}>
             Back to the default
           </button>
         ) : null}
       </div>
 
+      {s.isOwner ? (
       <div className="space-y-1.5 border-t border-line pt-3">
         <label className="block text-xs text-ink-2">
           Weekly webhook (optional)
@@ -145,6 +148,7 @@ export function ResearchAutomation() {
           {msg ? <span className="self-center text-xs text-ink-2">{msg}</span> : null}
         </div>
       </div>
+      ) : null}
 
       <details className="border-t border-line pt-3 text-xs text-ink-2">
         <summary className="cursor-pointer font-medium">Connect ChatGPT or Claude so it can read the docs and add posts</summary>

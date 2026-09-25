@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Renders the digest with a fake database. NODE_OPTIONS=--conditions=react-server npx tsx scripts/test-digest-performance.mts
 import assert from "node:assert/strict";
 import { buildPerformance } from "../src/lib/performance.ts";

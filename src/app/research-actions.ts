@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { supabaseServer } from "@/lib/supabase/server";
+import { assertPublicHttpsUrl } from "@/lib/safe-url";
 import { currentResearchPrompt, sendResearchWebhook, buildResearchBlock } from "@/lib/research";
 
 export interface ResearchSetup {
@@ -17,10 +18,13 @@ export interface ResearchSetup {
   appUrl: string;
   hasOfferDoc: boolean;
   hasClientDoc: boolean;
+  /** Only the owner can see or change the webhook (it works like a password). */
+  isOwner: boolean;
 }
 
 export async function getResearchSetupAction(): Promise<ResearchSetup> {
-  await requireRole("owner", "admin");
+  const me = await requireRole("owner", "admin");
+  const isOwner = me.role === "owner";
   const db = supabaseAdmin();
   const [cur, { data: s }] = await Promise.all([
     currentResearchPrompt(db),
@@ -31,7 +35,8 @@ export async function getResearchSetupAction(): Promise<ResearchSetup> {
     prompt: cur.prompt,
     custom: cur.custom,
     autoAdd: cur.autoAdd,
-    webhookUrl: (s?.research_webhook_url as string | null) ?? "",
+    webhookUrl: isOwner ? ((s?.research_webhook_url as string | null) ?? "") : "",
+    isOwner,
     docTitles: cur.docTitles,
     chatgptUrl: cur.chatgpt,
     claudeUrl: cur.claude,
@@ -44,7 +49,13 @@ export async function getResearchSetupAction(): Promise<ResearchSetup> {
 export async function saveResearchSettingsAction(input: { prompt: string | null; autoAdd: boolean; webhookUrl: string }) {
   const me = await requireRole("owner");
   const url = input.webhookUrl.trim();
-  if (url && !/^https:\/\//i.test(url)) return { error: "The webhook address must start with https://." };
+  if (url) {
+    try {
+      await assertPublicHttpsUrl(url);
+    } catch (e) {
+      return { error: (e as Error).message };
+    }
+  }
   const supabase = await supabaseServer();
   const { error } = await supabase
     .from("workspace_settings")

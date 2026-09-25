@@ -1,4 +1,5 @@
 import "server-only";
+import { timingSafeEqual } from "node:crypto";
 
 /**
  * Who may run the scheduled jobs. Either credential works — the `?key=` an outside
@@ -9,5 +10,11 @@ import "server-only";
 export function cronAuthorised(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
-  return new URL(req.url).searchParams.get("key") === secret || req.headers.get("authorization") === `Bearer ${secret}`;
+  const same = (given: string | null) => {
+    if (!given) return false;
+    const a = Buffer.from(given);
+    const b = Buffer.from(secret);
+    return a.length === b.length && timingSafeEqual(a, b);
+  };
+  return same(new URL(req.url).searchParams.get("key")) || same((req.headers.get("authorization") ?? "").replace(/^Bearer /, "") || null);
 }

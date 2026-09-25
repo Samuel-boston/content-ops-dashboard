@@ -20,7 +20,6 @@ import {
   IconChevronRight,
   IconGrip,
   IconPlus,
-  IconSparkles,
   IconX,
 } from "@/components/ui/icons";
 import { saveScriptAction } from "@/app/script-actions";

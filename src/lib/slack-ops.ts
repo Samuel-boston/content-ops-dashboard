@@ -7,7 +7,11 @@ import { slackUserEmail } from "@/lib/integrations/slack";
 import { HELP_TEXT, STAGE_LABEL, parseIntent, type SlackIntent, type StageKey } from "@/lib/slack-intent";
 
 const APP_URL = () => (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
-const link = (id: string, title: string) => `<${APP_URL()}/videos/${id}|${title.replace(/[<>|]/g, "")}>`;
+const link = (id: string, title: string) => `<${APP_URL()}/videos/${id}|${title.replace(/[<>|&]/g, "")}>`;
+/** Slack treats & < > as markup, and <!channel> pings everyone: never echo raw user text. */
+const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/** A link is only used when it is a plain http(s) address with nothing that could break out of Slack's <url|text>. */
+const safeLink = (u: string | null | undefined) => (u && /^https?:\/\/[^\s<>|]+$/i.test(u) ? u : null);
 
 interface Actor {
   id: string;
@@ -36,18 +40,23 @@ export async function actorForSlackUser(slackUserId: string): Promise<Actor | nu
   const { data } = await supabaseAdmin()
     .from("profiles")
     .select("id, role, full_name, email, active")
-    .ilike("email", email)
+    .ilike("email", email.replace(/[\\%_]/g, "\\$&"))
     .maybeSingle();
   if (!data || !data.active) return null;
   return { id: data.id as string, role: data.role as string, name: (data.full_name as string) || (data.email as string) };
 }
 
-async function counts(stages: StageKey[]): Promise<Map<StageKey, number>> {
-  const { data } = await supabaseAdmin()
+/** An editor only ever sees their own videos and the open pool, the same as in the dashboard. */
+function scoped<T extends { or: (f: string) => T }>(q: T, actor: Actor): T {
+  return actor.role === "editor" ? q.or(`assigned_editor_id.eq.${actor.id},status.eq.ready_to_edit`) : q;
+}
+
+async function counts(stages: StageKey[], actor: Actor): Promise<Map<StageKey, number>> {
+  const { data } = await scoped(supabaseAdmin()
     .from("videos")
     .select("status")
     .is("parked_at", null)
-    .in("status", stages);
+    .in("status", stages), actor);
   const out = new Map<StageKey, number>();
   for (const r of data ?? []) out.set(r.status as StageKey, (out.get(r.status as StageKey) ?? 0) + 1);
   return out;
@@ -55,14 +64,14 @@ async function counts(stages: StageKey[]): Promise<Map<StageKey, number>> {
 
 const plural = (n: number, one: string, many = one + "s") => `${n} ${n === 1 ? one : many}`;
 
-async function titlesIn(stage: StageKey, limit = 15) {
-  const { data } = await supabaseAdmin()
+async function titlesIn(stage: StageKey, actor: Actor, limit = 15) {
+  const { data } = await scoped(supabaseAdmin()
     .from("videos")
     .select("id, title, formats")
     .is("parked_at", null)
     .eq("status", stage)
     .order("stage_entered_at", { ascending: true })
-    .limit(limit + 1);
+    .limit(limit + 1), actor);
   return data ?? [];
 }
 
@@ -108,10 +117,10 @@ async function run(intent: SlackIntent, actor: Actor): Promise<string> {
     case "count": {
       if (intent.stage) {
         if (!visible.includes(intent.stage)) return `${STAGE_LABEL[intent.stage]} isn't something your seat can see.`;
-        const n = (await counts([intent.stage])).get(intent.stage) ?? 0;
+        const n = (await counts([intent.stage], actor)).get(intent.stage) ?? 0;
         return `*${plural(n, "video")}* in ${STAGE_LABEL[intent.stage]}.`;
       }
-      const c = await counts(visible);
+      const c = await counts(visible, actor);
       const lines = visible
         .filter((s) => s !== "posted")
         .map((s) => `• ${STAGE_LABEL[s]}: *${c.get(s) ?? 0}*`);
@@ -121,7 +130,7 @@ async function run(intent: SlackIntent, actor: Actor): Promise<string> {
     case "list": {
       const stage = intent.stage as StageKey;
       if (!visible.includes(stage)) return `${STAGE_LABEL[stage]} isn't something your seat can see.`;
-      const rows = await titlesIn(stage);
+      const rows = await titlesIn(stage, actor);
       if (!rows.length) return `Nothing in ${STAGE_LABEL[stage]} right now.`;
       const shown = rows.slice(0, 15).map((r) => `• ${link(r.id as string, r.title as string)}`);
       const more = rows.length > 15 ? `\n…and more — open the board to see all of them.` : "";
@@ -136,20 +145,22 @@ async function run(intent: SlackIntent, actor: Actor): Promise<string> {
         .limit(5);
       if (!data?.length) return "The Top posts list is empty. Add some in Library → Top posts.";
       const fmt = (n: number | null) => (n === null ? "?" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n));
-      return `*Top posts*\n` + data.map((r) => `• *${fmt(r.views as number | null)}* ${r.link ? `<${r.link}|${String(r.topic).replace(/[<>|]/g, "")}>` : String(r.topic).replace(/[<>|]/g, "")}${r.hook ? ` — “${String(r.hook).replace(/[<>|]/g, "")}”` : ""}`).join("\n");
+      const t = (x: unknown) => esc(String(x)).replace(/\|/g, "");
+      return `*Top posts*\n` + data.map((r) => { const l = safeLink(r.link as string | null); return `• *${fmt(r.views as number | null)}* ${l ? `<${l}|${t(r.topic)}>` : t(r.topic)}${r.hook ? ` — “${t(r.hook)}”` : ""}`; }).join("\n");
     }
 
     case "find": {
       const q = intent.query.replace(/[%,()]/g, " ").trim();
       if (!q) return "Find what? Try `find burnout`.";
-      const { data } = await db
+      const { data } = await scoped(db
         .from("videos")
         .select("id, title, status")
         .ilike("title", `%${q}%`)
         .in("status", visible)
+        .is("parked_at", null)
         .order("updated_at", { ascending: false })
-        .limit(8);
-      if (!data?.length) return `Nothing matches “${intent.query}”.`;
+        .limit(8), actor);
+      if (!data?.length) return `Nothing matches “${esc(intent.query)}”.`;
       return data
         .map((r) => `• ${link(r.id as string, r.title as string)} — ${STAGE_LABEL[r.status as StageKey] ?? r.status}`)
         .join("\n");
@@ -168,8 +179,8 @@ async function run(intent: SlackIntent, actor: Actor): Promise<string> {
         .in("status", ["ideation", "scripting", "ready_to_film"])
         .is("parked_at", null)
         .limit(4);
-      if (!data?.length) return `I couldn't find a planning-stage video called “${intent.query}”.`;
-      if (data.length > 1) return `More than one matches “${intent.query}”:\n${data.map((r) => `• ${r.title}`).join("\n")}\nBe a bit more specific.`;
+      if (!data?.length) return `I couldn't find a planning-stage video called “${esc(intent.query)}”.`;
+      if (data.length > 1) return `More than one matches “${esc(intent.query)}”:\n${data.map((r) => `• ${esc(String(r.title))}`).join("\n")}\nBe a bit more specific.`;
       const v = data[0];
       if (v.status === intent.stage) return `${link(v.id as string, v.title as string)} is already in ${STAGE_LABEL[intent.stage]}.`;
       const { error } = await db.from("videos").update({ status: intent.stage }).eq("id", v.id);

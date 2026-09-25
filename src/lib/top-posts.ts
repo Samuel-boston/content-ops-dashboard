@@ -18,6 +18,18 @@ export interface TopPost {
   created_at: string;
 }
 
+/** Only plain web addresses are stored: a saved link ends up as an href, so nothing like javascript: gets through. */
+export function cleanLink(l: string | null | undefined): string | null {
+  const t = l?.trim();
+  if (!t) return null;
+  try {
+    const u = new URL(t);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 const normLink = (l: string | null | undefined) => (l ? l.trim().replace(/\/+$/, "").toLowerCase() : null);
 
 /**
@@ -37,7 +49,7 @@ export async function insertTopPosts(
   const fresh: Record<string, unknown>[] = [];
   let skipped = 0;
   for (const r of rows.slice(0, 200)) {
-    const link = normLink(r.link);
+    const link = normLink(cleanLink(r.link));
     if ((link && haveLinks.has(link)) || (r.video_id && haveVideos.has(r.video_id))) {
       skipped++;
       continue;
@@ -48,7 +60,7 @@ export async function insertTopPosts(
       topic: r.topic.slice(0, 300),
       hook: r.hook?.slice(0, 500) ?? null,
       views: r.views ?? null,
-      link: r.link?.trim() ?? null,
+      link: cleanLink(r.link),
       platform: r.platform ?? null,
       creator: r.creator?.slice(0, 120) ?? null,
       format: r.format?.slice(0, 60) ?? null,

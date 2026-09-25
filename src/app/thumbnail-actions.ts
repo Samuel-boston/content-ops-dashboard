@@ -128,6 +128,15 @@ function checkImage(file: File | null): string | null {
   return null;
 }
 
+/** The browser's word for a file's type isn't proof: check the bytes really are that kind of image. */
+async function sniffsAsImage(file: File): Promise<boolean> {
+  const b = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const jpeg = b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+  const png = b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47;
+  const webp = b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50;
+  return file.type === "image/jpeg" ? jpeg : file.type === "image/png" ? png : file.type === "image/webp" ? webp : false;
+}
+
 /** Upload your own image as a reference for the design. */
 export async function uploadThumbnailRefAction(videoId: string, formData: FormData) {
   const me = await requireRole(...WRITERS);
@@ -136,10 +145,11 @@ export async function uploadThumbnailRefAction(videoId: string, formData: FormDa
   if (!files.length) return { error: "Choose an image first." };
   const db = supabaseAdmin();
   const { data: existing } = await db.from("video_thumbnail_refs").select("position").eq("video_id", videoId);
+  if ((existing?.length ?? 0) + files.length > 8) return { error: "A thumbnail can have up to 8 images. Remove one first." };
   let pos = Math.max(-1, ...(existing ?? []).map((r) => r.position as number)) + 1;
   let added = 0;
   for (const file of files.slice(0, 8)) {
-    const bad = checkImage(file);
+    const bad = checkImage(file) ?? ((await sniffsAsImage(file)) ? null : "That doesn't look like a real image.");
     if (bad) return { error: `${file.name}: ${bad}` };
     const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
     const path = `${videoId}/refs/${crypto.randomUUID()}.${ext}`;
@@ -175,7 +185,7 @@ export async function saveThumbnailPromptAction(videoId: string, prompt: string)
   if (!(await visibleVideo(videoId))) return { error: "Video not found." };
   const { error } = await supabaseAdmin()
     .from("videos")
-    .update({ thumbnail_prompt: prompt.trim() || null })
+    .update({ thumbnail_prompt: prompt.trim().slice(0, 2000) || null })
     .eq("id", videoId);
   if (error) return { error: error.message };
   return { ok: true as const };
@@ -206,7 +216,7 @@ export async function uploadFinalThumbnailAction(videoId: string, formData: Form
   await requireRole(...WRITERS);
   if (!(await visibleVideo(videoId))) return { error: "Video not found." };
   const file = formData.get("file");
-  const bad = checkImage(file instanceof File ? file : null);
+  const bad = checkImage(file instanceof File ? file : null) ?? ((await sniffsAsImage(file as File)) ? null : "That doesn't look like a real image.");
   if (bad) return { error: bad };
   const f = file as File;
   return setThumbnail(videoId, Buffer.from(await f.arrayBuffer()), f.type);
@@ -266,7 +276,7 @@ export async function generateThumbnailAction(
       ? `Use the ${references.length} attached reference image${references.length === 1 ? "" : "s"} as the source material: build the design around them and keep any person recognisable. Do not invent a different person.`
       : "No reference images were attached: design from the brief alone.",
     "Make it bold and readable at a small size: one clear focal point, strong contrast, generous negative space. Use at most four words of on-image text, and only if the brief asks for text or the title would otherwise be unclear. Spell every word correctly.",
-    opts.note?.trim() ? `Extra direction for this attempt: ${opts.note.trim()}` : null,
+    opts.note?.trim() ? `Extra direction for this attempt: ${opts.note.trim().slice(0, 300)}` : null,
   ]
     .filter(Boolean)
     .join("\n\n");

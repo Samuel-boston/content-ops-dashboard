@@ -27,7 +27,8 @@ export async function POST(req: Request) {
   const text = form.get("text") ?? "";
   const userId = form.get("user_id") ?? "";
   const responseUrl = form.get("response_url");
-  if (!userId || !responseUrl) return new Response("bad request", { status: 400 });
+  // Answers only ever go back to Slack itself.
+  if (!userId || !responseUrl || !/^https:\/\/hooks\.slack\.com\//.test(responseUrl)) return new Response("bad request", { status: 400 });
 
   after(async () => {
     const reply = await handleSlackText(text, userId);

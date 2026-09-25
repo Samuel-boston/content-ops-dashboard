@@ -621,11 +621,12 @@ export async function deleteVideoAction(videoId: string) {
     const { purgeVideo } = await import("@/lib/delete-video");
     const done = await purgeVideo(videoId);
     // The video (and its activity feed) is gone, so keep the record where it survives.
-    const supabase = await supabaseServer();
-    await supabase.from("automation_events").insert({
+    const { supabaseAdmin } = await import("@/lib/supabase/admin");
+    const { error: auditErr } = await supabaseAdmin().from("automation_events").insert({
       kind: "video_deleted",
       detail: { title: done.title, by: me.id, files: done.files, streams: done.streams },
     });
+    if (auditErr) console.error("video_deleted audit row failed:", auditErr.message);
     revalidateAll(videoId);
     revalidatePath("/parked");
     revalidatePath("/archive");

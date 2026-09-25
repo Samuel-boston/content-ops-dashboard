@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Exercises src/lib/publer-client.ts against a fake Publer API.
 //   npx tsx scripts/test-publer.mts
 import http from "node:http";
