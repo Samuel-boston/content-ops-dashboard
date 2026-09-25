@@ -502,7 +502,7 @@ There is no Script Review and no Ready to Post: a script lives in Scripting unti
 
 **Later:** any video, at any stage, can be shelved with the **Later** button (top of the video) and picked back up from **More → Later**. It leaves every board and count until you bring it back. Next to it is a **bin icon** that deletes a video for good, including its heavy files (owner and admins; it asks first).
 
-**The Board** opens on **All videos**: videos and carousels together, every stage, in one view. **Carousels**, **Filming** and **Long-form** narrow it down. Long-form is for YouTube: give a video the format **Long video** and it appears there; the VA posts it to YouTube as a regular video (not a Short, never a trial reel).
+**The Board** opens on **All Content**: videos and carousels together, every stage, in one view. **Carousels**, **Filming** and **Long-form** narrow it down. Long-form is for YouTube: give a video the format **Long video** and it appears there; the VA posts it to YouTube as a regular video (not a Short, never a trial reel).
 
 **Every video, at every stage,** has a title, a **Thumbnail** (its own section: attach images from the B-Roll library or upload your own, write a brief, and ChatGPT designs it — or upload a finished one), a script and its video.
 

@@ -22,7 +22,7 @@ const SCOPES: Record<
   { label: string; columns: VideoStatus[]; match: (c: BoardCard) => boolean }
 > = {
   all: {
-    label: "All videos",
+    label: "All Content",
     columns: [
       "ideation",
       "scripting",
