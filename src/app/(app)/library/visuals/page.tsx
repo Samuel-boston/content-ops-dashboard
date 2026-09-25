@@ -5,6 +5,8 @@ import { NO_CATEGORY, folderName } from "@/lib/broll";
 import { VisualsBrowser, ShotCard } from "@/components/library/VisualsBrowser";
 import { BrollSuggester } from "@/components/library/BrollSuggester";
 
+export const maxDuration = 60;
+
 type View = "browse" | "search" | "suggest";
 
 const VIEWS: { id: View; label: string; hint: string }[] = [
@@ -43,21 +45,21 @@ export default async function VisualsPage({ searchParams }: PageProps<"/library/
         ))}
       </nav>
 
-      {view === "search" ? <SearchView params={{ q, media: str("media"), emotion: str("emotion"), top: str("top") }} /> : null}
+      {view === "search" ? <SearchView params={{ q, media: str("media"), emotion: str("emotion"), shot: str("shot"), top: str("top") }} /> : null}
       {view === "browse" ? <BrowseView cat={str("cat")} more={str("more") === "1"} /> : null}
       {view === "suggest" ? <BrollSuggester /> : null}
     </div>
   );
 }
 
-async function SearchView({ params }: { params: { q: string; media: string; emotion: string; top: string } }) {
+async function SearchView({ params }: { params: { q: string; media: string; emotion: string; shot: string; top: string } }) {
   const media = params.media === "video" || params.media === "image" ? params.media : "";
   const topPicks = params.top === "1";
   const [shots, facets] = await Promise.all([
-    searchLibraryShots({ q: params.q, media, emotion: params.emotion, topPicks }),
+    searchLibraryShots({ q: params.q, media, emotion: params.emotion, shotType: params.shot, topPicks }),
     libraryFacets(),
   ]);
-  return <VisualsBrowser shots={shots} facets={facets} initial={{ q: params.q, media, emotion: params.emotion, topPicks }} />;
+  return <VisualsBrowser shots={shots} facets={facets} initial={{ q: params.q, media, emotion: params.emotion, shotType: params.shot, topPicks }} />;
 }
 
 async function BrowseView({ cat, more }: { cat: string; more: boolean }) {

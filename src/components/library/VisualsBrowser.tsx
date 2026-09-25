@@ -100,8 +100,8 @@ export function VisualsBrowser({
   initial,
 }: {
   shots: LibraryShot[];
-  facets: { emotions: string[]; categories: string[]; total: number };
-  initial: { q: string; media: "video" | "image" | ""; emotion: string; topPicks: boolean };
+  facets: { emotions: string[]; categories: string[]; shotTypes: string[]; total: number };
+  initial: { q: string; media: "video" | "image" | ""; emotion: string; shotType: string; topPicks: boolean };
 }) {
   const router = useRouter();
   const [q, setQ] = useState(initial.q);
@@ -112,6 +112,7 @@ export function VisualsBrowser({
     if (merged.q) params.set("q", merged.q);
     if (merged.media) params.set("media", merged.media);
     if (merged.emotion) params.set("emotion", merged.emotion);
+    if (merged.shotType) params.set("shot", merged.shotType);
     if (merged.topPicks) params.set("top", "1");
     router.push(`/library/visuals?${params}`);
   }
@@ -155,6 +156,12 @@ export function VisualsBrowser({
           ⭐ Top picks
         </button>
         <span className="mx-1 h-4 w-px bg-line" />
+        {facets.shotTypes.slice(0, 8).map((t) => (
+          <button key={t} className={chip(initial.shotType === t)} onClick={() => apply({ shotType: initial.shotType === t ? "" : t })}>
+            {t.replace(/_/g, " ")}
+          </button>
+        ))}
+        {facets.shotTypes.length ? <span className="mx-1 h-4 w-px bg-line" /> : null}
         {facets.emotions.slice(0, 10).map((e) => (
           <button key={e} className={chip(initial.emotion === e)} onClick={() => apply({ emotion: initial.emotion === e ? "" : e })}>
             {e}

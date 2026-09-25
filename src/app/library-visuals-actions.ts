@@ -3,7 +3,9 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth";
 import type { LibraryShot } from "@/lib/types";
-import { NO_CATEGORY, folderName, splitBeats } from "@/lib/broll";
+import { NO_CATEGORY, folderName } from "@/lib/broll";
+import { CANDIDATES_PER_BEAT, RERANK_SYSTEM, orderCandidates, readRerank, rerankUserPrompt } from "@/lib/broll-match";
+import { aiErrorMessage, chatJSON } from "@/lib/integrations/ai";
 
 // ---------------------------------------------------------------------------
 // Footage index — read side of the B-Roll Librarian mirror (migration 030).
@@ -17,6 +19,7 @@ export interface VisualsFilter {
   media?: "video" | "image" | "";
   emotion?: string;
   category?: string;
+  shotType?: string;
   topPicks?: boolean;
   featured?: boolean;
   limit?: number;
@@ -75,6 +78,7 @@ async function queryLibraryShots(filter: VisualsFilter): Promise<LibraryShot[]> 
   if (filter.emotion) q = q.contains("emotions", [filter.emotion]);
   if (filter.category === NO_CATEGORY) q = q.is("category", null);
   else if (filter.category) q = q.ilike("category", `${filter.category.replace(/[%_\\]/g, (c) => `\\${c}`)}%`);
+  if (filter.shotType) q = q.eq("shot_type", filter.shotType);
   if (filter.topPicks) q = q.eq("top_pick", true);
   if (filter.featured) q = q.eq("featured_person", true);
 
@@ -126,22 +130,25 @@ export async function getLibraryShotsByIds(ids: string[]): Promise<LibraryShot[]
 }
 
 /** Facet values for the filter chips, computed from what's actually indexed. */
-export async function libraryFacets(): Promise<{ emotions: string[]; categories: string[]; total: number }> {
+export async function libraryFacets(): Promise<{ emotions: string[]; categories: string[]; shotTypes: string[]; total: number }> {
   await requireUser();
   const supabase = await supabaseServer();
   const { data, count } = await supabase
     .from("library_shots")
-    .select("emotions, category", { count: "exact" })
+    .select("emotions, category, shot_type", { count: "exact" })
     .limit(1000);
   const emotions = new Map<string, number>();
   const categories = new Set<string>();
-  for (const row of (data ?? []) as { emotions: string[]; category: string | null }[]) {
+  const shotTypes = new Map<string, number>();
+  for (const row of (data ?? []) as { emotions: string[]; category: string | null; shot_type: string | null }[]) {
+    if (row.shot_type) shotTypes.set(row.shot_type, (shotTypes.get(row.shot_type) ?? 0) + 1);
     for (const e of row.emotions ?? []) emotions.set(e, (emotions.get(e) ?? 0) + 1);
     if (row.category) categories.add(row.category.split("/")[0]);
   }
   return {
     emotions: [...emotions.entries()].sort((a, b) => b[1] - a[1]).slice(0, 24).map(([e]) => e),
     categories: [...categories].sort(),
+    shotTypes: [...shotTypes.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t),
     total: count ?? 0,
   };
 }
@@ -212,48 +219,93 @@ export async function libraryTree(): Promise<BrollTree> {
   return { total, sections, uncategorised };
 }
 
-export interface BeatSuggestion {
-  line: string;
-  shots: LibraryShot[];
+export interface RankedShot {
+  shot: LibraryShot;
+  /** Why the model chose it (empty for a plain search-order candidate). */
+  reason: string;
+  confidence: number;
+  /** Already used for an earlier beat in this script. */
+  reused: boolean;
 }
 
-const MAX_BEATS = 30;
-const PER_BEAT = 4;
+export interface BeatResult {
+  index: number;
+  /** Best first: the top three are the suggestions, the rest are swap candidates. */
+  ranked: RankedShot[];
+  noGoodMatch: boolean;
+  missing: string | null;
+}
+
+const MAX_BEATS_PER_CALL = 6;
 
 /**
- * Suggest clips for a script. Each line is searched on its own with the same engine as the Search
- * view. A clip is offered for at most one line where there's a choice, so the suggestions don't
- * repeat one shot all the way down the script; a line with nothing new falls back to its best match.
+ * Find and rank clips for a few beats of a script. Each beat is searched with the same engine as the
+ * Search view (eight candidates), then the workspace's AI model reranks them and can say "no good
+ * match". Without an AI key, or if the model fails, the order is plain search order and the caller
+ * is told. `used` is how many times each clip has been picked so far in this script; it is returned
+ * updated so the next call keeps the variety going. The client sends a script in small chunks.
  */
-export async function suggestBrollAction(
-  text: string,
-  opts: { media?: "video" | "image" | "" } = {}
-): Promise<{ beats: BeatSuggestion[]; truncated: boolean } | { error: string }> {
+export async function matchBeatsAction(
+  beats: { index: number; startS: number; endS: number; text: string }[],
+  opts: { media?: "video" | "image" | ""; used?: Record<string, number> } = {}
+): Promise<{ results: BeatResult[]; used: Record<string, number>; reranked: boolean; note: string | null } | { error: string }> {
   await requireUser();
-  const all = splitBeats(text.slice(0, 20000));
-  if (!all.length) return { error: "Paste a script first — a few lines of what's said." };
-  const lines = all.slice(0, MAX_BEATS);
+  const list = beats.slice(0, MAX_BEATS_PER_CALL).map((b) => ({
+    index: Number(b.index),
+    startS: Number(b.startS) || 0,
+    endS: Number(b.endS) || 0,
+    text: String(b.text ?? "").slice(0, 700),
+  }));
+  if (!list.length || list.some((b) => !Number.isInteger(b.index) || !b.text.trim())) return { error: "Nothing to match." };
+  const media = opts.media === "video" || opts.media === "image" ? opts.media : "";
+  const used = { ...(opts.used ?? {}) };
 
-  const found: LibraryShot[][] = [];
-  for (let i = 0; i < lines.length; i += 6) {
-    const batch = await Promise.all(lines.slice(i, i + 6).map((line) => queryLibraryShots({ q: line, media: opts.media ?? "", limit: 16 })));
-    found.push(...batch);
-  }
+  const rows = await Promise.all(list.map((b) => queryLibraryShots({ q: b.text, media, limit: CANDIDATES_PER_BEAT })));
+  const candidates = rows.map((r) => r.slice(0, CANDIDATES_PER_BEAT));
 
-  const used = new Set<string>();
-  const picked = found.map((rows) => {
-    const fresh = rows.filter((r) => !used.has(r.id));
-    const choice = (fresh.length >= PER_BEAT ? fresh : [...fresh, ...rows.filter((r) => used.has(r.id))]).slice(0, PER_BEAT);
-    for (const r of choice) used.add(r.id);
-    return choice;
+  let aiOk = true;
+  const readings = await Promise.all(
+    list.map(async (b, i) => {
+      if (!candidates[i].length) return null;
+      const asked = candidates[i].map((s) => ({
+        caption: s.caption, shotType: s.shot_type, setting: s.setting, action: s.action,
+        emotions: s.emotions ?? [], media: s.media_kind, durationS: s.duration_s,
+      }));
+      const raw = await chatJSON<unknown>(RERANK_SYSTEM, rerankUserPrompt(b, asked));
+      const reading = readRerank(raw, candidates[i].length);
+      if (!reading) aiOk = false;
+      return reading;
+    })
+  );
+
+  const results: BeatResult[] = [];
+  list.forEach((b, i) => {
+    const cands = candidates[i];
+    if (!cands.length) {
+      results.push({ index: b.index, ranked: [], noGoodMatch: true, missing: "Nothing in the library matched this line at all." });
+      return;
+    }
+    const reading = readings[i];
+    if (reading?.noGoodMatch && !reading.choices.length) {
+      results.push({ index: b.index, ranked: orderCandidates(cands, null, used).map(toRanked), noGoodMatch: true, missing: reading.missing ?? "No candidate suited this line." });
+      return;
+    }
+    const ordered = orderCandidates(cands, reading, used);
+    for (const r of ordered.slice(0, 1)) used[r.item.id] = (used[r.item.id] ?? 0) + 1;
+    results.push({ index: b.index, ranked: ordered.map(toRanked), noGoodMatch: false, missing: null });
   });
 
-  const signed = await signThumbs(picked.flat());
-  const byId = new Map(signed.map((s) => [s.id, s]));
-  return {
-    beats: lines.map((line, i) => ({ line, shots: picked[i].map((s) => byId.get(s.id) ?? s) })),
-    truncated: all.length > MAX_BEATS,
-  };
+  const shown = await signThumbs(results.flatMap((r) => r.ranked.map((x) => x.shot)));
+  const byId = new Map(shown.map((s) => [s.id, s]));
+  for (const r of results) for (const x of r.ranked) x.shot = byId.get(x.shot.id) ?? x.shot;
+
+  const anyCandidates = candidates.some((c) => c.length);
+  const note = !anyCandidates || aiOk ? null : await aiErrorMessage();
+  return { results, used, reranked: anyCandidates && aiOk, note: note ? `${note} Showing search order instead.` : null };
+}
+
+function toRanked(r: { item: LibraryShot; reason: string; confidence: number; reused: boolean }): RankedShot {
+  return { shot: r.item, reason: r.reason, confidence: r.confidence, reused: r.reused };
 }
 
 /** Videos with a script written, for "use this video's script". */
