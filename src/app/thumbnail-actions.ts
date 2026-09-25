@@ -238,6 +238,24 @@ export async function clearThumbnailAction(videoId: string) {
   return { ok: true as const };
 }
 
+const PER_USER_PER_HOUR = 10;
+const PER_WORKSPACE_PER_DAY = 60;
+
+/** Record one design and return its ledger id, or the reason it isn't allowed. */
+async function claimThumbnailDesign(db: ReturnType<typeof supabaseAdmin>, userId: string, videoId: string): Promise<{ error: string } | { id: string | null }> {
+  const now = Date.now();
+  const hourAgo = new Date(now - 3_600_000).toISOString();
+  const dayAgo = new Date(now - 86_400_000).toISOString();
+  const [{ count: mine }, { count: all }] = await Promise.all([
+    db.from("thumbnail_generations").select("id", { count: "exact", head: true }).eq("created_by", userId).gte("created_at", hourAgo),
+    db.from("thumbnail_generations").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
+  ]);
+  if ((mine ?? 0) >= PER_USER_PER_HOUR) return { error: `That's ${PER_USER_PER_HOUR} designs in the last hour. Wait a bit before making another.` };
+  if ((all ?? 0) >= PER_WORKSPACE_PER_DAY) return { error: `The team has made ${PER_WORKSPACE_PER_DAY} thumbnail designs in the last day. Try again tomorrow, or upload a finished one.` };
+  const { data } = await db.from("thumbnail_generations").insert({ video_id: videoId, created_by: userId }).select("id").single();
+  return { id: (data?.id as string | undefined) ?? null };
+}
+
 /**
  * Design the thumbnail with ChatGPT. Everything attached goes in as a reference
  * image, and the prompt says what each is for: the person's own words are the
@@ -247,10 +265,18 @@ export async function generateThumbnailAction(
   videoId: string,
   opts: { orientation?: "landscape" | "portrait"; note?: string } = {}
 ) {
-  await requireRole(...WRITERS);
+  const me = await requireRole(...WRITERS);
   const video = await visibleVideo(videoId);
   if (!video) return { error: "Video not found." };
   const db = supabaseAdmin();
+
+  // Every design spends the owner's OpenAI credits, so cap them: a few per person per hour, more per day overall.
+  const claim = await claimThumbnailDesign(db, me.id, videoId);
+  if ("error" in claim) return { error: claim.error };
+  // A design that never reached OpenAI shouldn't count against the cap.
+  const refund = async () => {
+    if (claim.id) await db.from("thumbnail_generations").delete().eq("id", claim.id);
+  };
 
   const { data: refs } = await db.from("video_thumbnail_refs").select("*").eq("video_id", videoId).order("position").limit(8);
   const references: { data: Buffer; mime: string; name: string }[] = [];
@@ -290,6 +316,7 @@ export async function generateThumbnailAction(
   try {
     png = await generateSlideImage({ prompt, references, size });
   } catch (e) {
+    await refund();
     if (e instanceof NotConfiguredError) return { error: "Add an OpenAI API key in Settings → Integrations to design thumbnails with ChatGPT." };
     return { error: (e as Error).message };
   }

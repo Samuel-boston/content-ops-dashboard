@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { getBriefBundleAction, type BriefBundle } from "@/app/brief-actions";
 import { EditorBriefWorkspace } from "@/components/script/EditorBriefWorkspace";
 import { IconX } from "@/components/ui/icons";
@@ -32,25 +32,79 @@ export function BriefMenuProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 function BriefMenu({ videoId, onClose }: { videoId: string; onClose: () => void }) {
   const [bundle, setBundle] = useState<BriefBundle | null | undefined>(undefined);
+  const root = useRef<HTMLDivElement>(null);
+  const downOnBackdrop = useRef(false);
 
   useEffect(() => {
     let alive = true;
     void getBriefBundleAction(videoId).then((b) => {
       if (alive) setBundle(b);
     });
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
     return () => {
       alive = false;
-      window.removeEventListener("keydown", onKey);
     };
-  }, [videoId, onClose]);
+  }, [videoId]);
+
+  // Keyboard, focus and scroll behave like a real dialog: Escape only closes this one when
+  // nothing is open on top of it (an image picker, the slide designer), Tab stays inside,
+  // the page behind doesn't scroll, and focus goes back to where it was.
+  useEffect(() => {
+    const before = document.activeElement as HTMLElement | null;
+    const scrollY = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    root.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      const box = root.current;
+      if (!box) return;
+      if (e.key === "Escape") {
+        if (e.defaultPrevented) return;
+        const overlays = Array.from(document.querySelectorAll<HTMLElement>("div.fixed.inset-0, [aria-modal='true']"));
+        if (overlays.some((o) => o !== box)) return;
+        onClose();
+      } else if (e.key === "Tab") {
+        const items = Array.from(box.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.offsetParent !== null);
+        if (!items.length) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        const active = document.activeElement;
+        if (e.shiftKey && (active === first || active === box)) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.documentElement.style.overflow = scrollY;
+      before?.focus?.();
+    };
+  }, [onClose]);
 
   return (
-    <div role="dialog" aria-modal aria-label="Editor brief" className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/60 px-3 py-6" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-5xl rounded-2xl border border-line bg-app p-4 shadow-2xl">
+    <div
+      ref={root}
+      role="dialog"
+      aria-modal
+      aria-label="Editor brief"
+      tabIndex={-1}
+      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/60 px-3 py-6 outline-none"
+      onMouseDown={(e) => {
+        downOnBackdrop.current = e.target === e.currentTarget;
+      }}
+      onClick={(e) => {
+        // Only a click that started and ended on the backdrop closes it — not a text selection dragged out of the panel.
+        if (downOnBackdrop.current && e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-5xl rounded-2xl border border-line bg-app p-4 shadow-2xl">
         <div className="mb-3 flex items-center gap-2">
           <h2 className="text-base font-semibold">Editor brief</h2>
           <span className="text-xs text-ink-3">Fill in what the editors need, or skip it — it saves as you go.</span>

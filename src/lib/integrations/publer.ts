@@ -7,6 +7,7 @@ import {
   publishVideo,
   type VideoNetwork,
   uploadMedia,
+  uploadMediaStream,
   PublerError,
   type PublerCreds,
 } from "@/lib/publer-client";
@@ -69,6 +70,9 @@ export async function postVideoViaPubler(input: {
   if (size && size > DIRECT_UPLOAD_LIMIT_BYTES) {
     await res.body.cancel();
     media = await importMediaFromUrl(p.creds, input.videoUrl, name);
+  } else if (size) {
+    // The length is known, so the bytes go straight through without being held in memory.
+    media = await uploadMediaStream(p.creds, res.body, size, name);
   } else {
     const blob = await res.blob();
     media =

@@ -22,6 +22,8 @@ export interface ComposerSubmit {
   channels: PublishChannel[];
   /** ISO instant (already in absolute time), or null for "post now". */
   whenISO: string | null;
+  /** The calendar day (`YYYY-MM-DD`) of that instant in the person's own time zone. */
+  localDate: string | null;
   coverOffsetMs: number;
   shareToFeed: boolean;
 }
@@ -90,6 +92,7 @@ export function PostComposer({
       // datetime-local has no time zone. Converting here, where the browser
       // knows the person's, is what makes "3pm" mean their 3pm.
       whenISO: now || !when ? null : new Date(when).toISOString(),
+      localDate: now || !when ? null : when.slice(0, 10),
       coverOffsetMs: Math.round(coverSeconds * 1000),
       shareToFeed,
     });
@@ -171,7 +174,9 @@ export function PostComposer({
                 seconds in{durationSeconds ? ` (of ${durationSeconds.toFixed(0)}s)` : ""}
               </span>
             </label>
-            ) : null}
+            ) : (
+              <p className="text-[11px] text-ink-3">Publer chooses the cover frame itself, so it can&rsquo;t be set here.</p>
+            )}
             <label className="flex items-center gap-2 text-xs text-ink-2">
               <input
                 type="checkbox"

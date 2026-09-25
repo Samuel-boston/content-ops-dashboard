@@ -5,7 +5,7 @@ import http from "node:http";
 import assert from "node:assert/strict";
 import {
   waitForJob,
-  listWorkspaces, listAccounts, uploadMedia, importMediaFromUrl, publishReel, publishVideo, videoBody, reelBody, findMedia, readFailures, PublerError,
+  listWorkspaces, listAccounts, uploadMedia, uploadMediaStream, importMediaFromUrl, publishReel, publishVideo, videoBody, reelBody, findMedia, readFailures, PublerError,
 } from "../src/lib/publer-client.ts";
 
 type Seen = { method: string; url: string; headers: http.IncomingHttpHeaders; body: string };
@@ -66,6 +66,21 @@ assert.equal(media.id, "m1"); assert.equal(media.reelOk, true);
 const up = seen.find((s) => s.url === "/media")!;
 assert.match(String(up.headers["content-type"]), /multipart\/form-data/);
 assert.match(up.body, /name="file"/);
+
+// streamed upload: no buffering, correct length, body intact across chunks
+{
+  const parts = [new Uint8Array(70_000).fill(65), new Uint8Array(70_000).fill(66), new Uint8Array(5).fill(67)];
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const src = new ReadableStream<Uint8Array>({ start(c) { for (const p of parts) c.enqueue(p); c.close(); } });
+  const m = await uploadMediaStream({ ...good, workspaceId: "w1" }, src, total, 'we"ird\nname.mp4');
+  assert.equal(m.id, "m1");
+  const s2 = seen.filter((x) => x.url === "/media").at(-1)!;
+  assert.match(String(s2.headers["content-type"]), /^multipart\/form-data; boundary=/);
+  assert.equal(Number(s2.headers["content-length"]), Buffer.byteLength(s2.body, "latin1"));
+  assert.match(s2.body, /name="file"; filename="we_ird_name.mp4"/);
+  assert.equal((s2.body.match(/A/g) ?? []).length >= 70_000, true);
+  assert.equal(s2.body.includes("A".repeat(70_000) + "B".repeat(70_000) + "CCCCC\r\n--"), true);
+}
 
 // URL import, including the payload shape variants
 assert.equal((await importMediaFromUrl({ ...good, workspaceId: "w1" }, "https://x/y.mp4", "y.mp4")).id, "m-imp");

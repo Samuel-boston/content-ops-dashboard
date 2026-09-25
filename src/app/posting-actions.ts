@@ -428,6 +428,8 @@ export async function vaPublishAction(
   opts: {
     /** ISO instant to go out at; null/omitted = post now. */
     whenISO?: string | null;
+    /** The calendar day of `whenISO` in the poster's own time zone, for the calendar. */
+    localDate?: string | null;
     /** The caption as edited in the form — saved back onto the variant. */
     caption?: string | null;
     coverOffsetMs?: number;
@@ -518,7 +520,7 @@ export async function vaPublishAction(
     // Goes out by itself at that time; until then it's on the calendar for that day.
     // (posted_at is cleared so "scheduled" reads as scheduled; the runner sets it when it goes live.)
     await db.from("trial_posts").update({ ...stamp, status: "promoted", posted_at: null }).eq("id", trialId);
-    await db.from("videos").update({ post_date: when!.toISOString().slice(0, 10) }).eq("id", t.video_id);
+    await db.from("videos").update({ post_date: /^\d{4}-\d{2}-\d{2}$/.test(opts.localDate ?? "") ? opts.localDate : when!.toISOString().slice(0, 10) }).eq("id", t.video_id);
     revalidatePath("/posting");
     revalidatePath("/calendar");
     return { ok: true as const, scheduled: true };

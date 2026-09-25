@@ -84,14 +84,16 @@ function explain(status: number, body: string): string {
 async function call<T = unknown>(
   c: PublerCreds,
   path: string,
-  init: { method?: string; body?: BodyInit; json?: unknown; withWorkspace?: boolean } = {}
+  init: { method?: string; body?: BodyInit; json?: unknown; withWorkspace?: boolean; extraHeaders?: Record<string, string> } = {}
 ): Promise<T> {
   const isForm = typeof FormData !== "undefined" && init.body instanceof FormData;
+  const isStream = typeof ReadableStream !== "undefined" && init.body instanceof ReadableStream;
   const res = await fetch(`${base(c)}${path}`, {
     method: init.method ?? (init.json !== undefined || init.body ? "POST" : "GET"),
-    headers: headers(c, init.withWorkspace ?? true, !isForm),
+    headers: { ...headers(c, init.withWorkspace ?? true, !isForm && !isStream), ...init.extraHeaders },
     body: init.json !== undefined ? JSON.stringify(init.json) : init.body,
-  }).catch((e) => {
+    ...(isStream ? { duplex: "half" } : {}),
+  } as RequestInit).catch((e) => {
     throw new PublerError(`Couldn't reach Publer: ${(e as Error).message}`);
   });
   const text = await res.text();
@@ -240,6 +242,54 @@ export async function uploadMedia(c: PublerCreds, file: Blob, filename: string):
   form.append("file", file, filename);
   form.append("in_library", "false");
   const raw = await call<unknown>(c, "/media", { body: form });
+  const media = findMedia(raw);
+  if (!media) throw new PublerError(`Publer accepted the upload but didn't return a media id: ${JSON.stringify(raw).slice(0, 200)}`);
+  return media;
+}
+
+/**
+ * Upload a file without holding it in memory: the multipart body is written
+ * straight from the source stream. Needs the byte length up front (the request
+ * has to say how long it is).
+ */
+export async function uploadMediaStream(
+  c: PublerCreds,
+  source: ReadableStream<Uint8Array>,
+  size: number,
+  filename: string,
+  contentType = "video/mp4"
+): Promise<PublerMedia> {
+  const boundary = `----cod${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
+  const enc = new TextEncoder();
+  const safeName = filename.replace(/[\r\n"\\]/g, "_");
+  const head = enc.encode(
+    `--${boundary}\r\nContent-Disposition: form-data; name="in_library"\r\n\r\nfalse\r\n` +
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${safeName}"\r\nContent-Type: ${contentType}\r\n\r\n`
+  );
+  const tail = enc.encode(`\r\n--${boundary}--\r\n`);
+  const reader = source.getReader();
+  let sentHead = false;
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (!sentHead) {
+        sentHead = true;
+        controller.enqueue(head);
+        return;
+      }
+      const { done, value } = await reader.read();
+      if (done) {
+        controller.enqueue(tail);
+        controller.close();
+      } else controller.enqueue(value);
+    },
+    cancel(reason) {
+      return reader.cancel(reason);
+    },
+  });
+  const raw = await call<unknown>(c, "/media", {
+    body,
+    extraHeaders: { "Content-Type": `multipart/form-data; boundary=${boundary}`, "Content-Length": String(head.length + size + tail.length) },
+  });
   const media = findMedia(raw);
   if (!media) throw new PublerError(`Publer accepted the upload but didn't return a media id: ${JSON.stringify(raw).slice(0, 200)}`);
   return media;

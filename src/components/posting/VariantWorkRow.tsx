@@ -92,6 +92,7 @@ export function VariantWorkRow({
     startTransition(async () => {
       const res = await vaPublishAction(trial.id, {
         whenISO: v.whenISO,
+        localDate: v.localDate,
         caption: v.caption,
         coverOffsetMs: v.coverOffsetMs,
         shareToFeed: v.shareToFeed,
