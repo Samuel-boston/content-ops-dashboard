@@ -57,6 +57,12 @@ assert.deepEqual(good.choices.map((c) => c.index), [1, 0]);
 assert.equal(good.choices[0].confidence, 1);
 assert.equal(good.choices[0].reason, "calm");
 assert.equal(good.choices[1].confidence, 0.5);
+assert.equal(good.needsBroll, true);
+const skip = readRerank({ needs_broll: false, no_broll_reason: " Land it on the face ", choices: [] }, 2)!;
+assert.equal(skip.needsBroll, false);
+assert.equal(skip.noBrollReason, "Land it on the face");
+assert.equal(readRerank({ choices: [] }, 2)!.needsBroll, true); // absent means yes
+assert.match(rerankUserPrompt({ index: 0, startS: 0, endS: 1, text: "x" }, []), /CANDIDATES:/);
 assert.equal(readRerank(null, 2), null);
 assert.equal(readRerank("nope", 2), null);
 assert.equal(readRerank({ choices: [], no_good_match: true, missing_footage: " a slow sunrise " }, 3)!.missing, "a slow sunrise");
@@ -89,11 +95,12 @@ const matches: ExportBeat[] = [
   { beat: { index: 1, startS: 8, endS: 20, text: "A long beat needing more than the clip has", estimated: false }, suggestions: [sug(shot("c", { durationS: 5 }))], missing: null },
   { beat: { index: 2, startS: 20, endS: 26, text: "Nothing fits", estimated: false }, suggestions: [], missing: "A slow sunrise over water" },
   { beat: { index: 3, startS: 26, endS: 30, text: "A photo holds", estimated: false }, suggestions: [sug(shot("p", { media: "image", durationS: null, startS: 0 }))], missing: null },
+  { beat: { index: 4, startS: 30, endS: 33, text: "Right, so", estimated: false }, suggestions: [], missing: null, note: "Filler, stay on the speaker" },
 ];
 const cfg = { name: "Test & Cut", fps: 25, width: 1080, height: 1920, mountPath: "/Users/x/My Drive/B-Roll/" };
 const tl = buildTimeline(matches, cfg);
 assert.equal(tl.items.length, 3);
-assert.equal(tl.gaps.length, 1);
+assert.equal(tl.gaps.length, 1); // the skipped line is not a gap
 assert.equal(tl.items[0].startFrame, 0);
 assert.equal(tl.items[0].endFrame, 200);
 assert.equal(tl.items[0].inFrame, 50);
@@ -130,6 +137,7 @@ const c = csv(matches, tl);
 const lines = c.trimEnd().split("\n");
 assert.match(lines[0], /^beat,beat_start/);
 assert.ok(lines.some((l) => l.includes("no good match") && l.includes("A slow sunrise over water")));
+assert.ok(lines.some((l) => l.includes(",no b-roll") && l.includes("Filler, stay on the speaker")));
 assert.ok(c.includes('"She said ""go"" & left"'));
 assert.ok(lines.some((l) => l.includes(",alternative")));
 assert.equal(lines.filter((l) => l.includes(",placed")).length, 3);

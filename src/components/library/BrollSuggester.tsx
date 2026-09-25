@@ -56,7 +56,8 @@ export function BrollSuggester() {
   const [choices, setChoices] = useState<{ id: string; title: string; text: string }[]>([]);
   const [beats, setBeats] = useState<Beat[]>([]);
   const [results, setResults] = useState<Record<number, BeatResult>>({});
-  const [chosen, setChosen] = useState<Record<number, string>>({});
+  /** Per beat: the shot id the person picked, or "none" for no B-roll. Unset means the suggested default. */
+  const [sel, setSel] = useState<Record<number, string>>({});
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -95,7 +96,7 @@ export function BrollSuggester() {
     const id = ++run.current;
     setBeats(found);
     setResults({});
-    setChosen({});
+    setSel({});
     setMore({});
     setProgress({ done: 0, total: found.length });
     let used: Record<string, number> = {};
@@ -120,14 +121,29 @@ export function BrollSuggester() {
     setProgress(null);
   }
 
-  /** What is shown for a beat: the chosen clip first, the model's next picks after it. */
+  /**
+   * One beat as shown and as exported. The options keep the model's order; the selection is separate
+   * so picking one doesn't shuffle the row. By default the best option is selected, unless the model
+   * said the line is best left on the speaker or nothing suited it.
+   */
   function view(b: Beat) {
     const r = results[b.index];
     if (!r) return null;
-    const pick = chosen[b.index];
-    const ranked = pick ? [...r.ranked.filter((x) => x.shot.id === pick), ...r.ranked.filter((x) => x.shot.id !== pick)] : r.ranked;
-    const gap = r.noGoodMatch && !pick;
-    return { ranked, gap, suggestions: gap ? [] : ranked.slice(0, SUGGESTIONS_PER_BEAT), rest: ranked.slice(gap ? 0 : SUGGESTIONS_PER_BEAT), missing: r.missing };
+    const picked = sel[b.index];
+    const fallback = r.noGoodMatch || !r.needsBroll ? null : (r.ranked[0]?.shot.id ?? null);
+    const selectedId = picked === "none" ? null : (picked ?? fallback);
+    const top = r.ranked.slice(0, SUGGESTIONS_PER_BEAT);
+    const shown = selectedId && !top.some((x) => x.shot.id === selectedId) ? [...top, ...r.ranked.filter((x) => x.shot.id === selectedId)] : top;
+    return {
+      r,
+      selectedId,
+      shown,
+      rest: r.ranked.filter((x) => !shown.some((y) => y.shot.id === x.shot.id)),
+      /** Still needs footage shot: nothing suited and the person hasn't settled it. */
+      needsShoot: r.noGoodMatch && picked === undefined,
+      /** Left without B-roll by the model's judgement, not yet overruled. */
+      leftOnSpeaker: !r.noGoodMatch && !r.needsBroll && picked === undefined,
+    };
   }
 
   const exportBeats: ExportBeat[] = useMemo(
@@ -135,19 +151,22 @@ export function BrollSuggester() {
       beats.flatMap((b) => {
         const v = view(b);
         if (!v) return [];
+        const chosenFirst = v.selectedId ? [...v.shown.filter((x) => x.shot.id === v.selectedId), ...v.shown.filter((x) => x.shot.id !== v.selectedId)] : [];
         return [
           {
             beat: b,
-            missing: v.missing,
-            suggestions: v.suggestions.map((s) => ({ shot: toExportShot(s.shot), reason: s.reason, confidence: s.confidence, reused: s.reused })),
+            missing: v.needsShoot ? v.r.missing : null,
+            note: v.leftOnSpeaker ? v.r.noBrollReason : null,
+            suggestions: chosenFirst.map((s) => ({ shot: toExportShot(s.shot), reason: s.reason, confidence: s.confidence, reused: s.reused })),
           },
         ];
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [beats, results, chosen]
+    [beats, results, sel]
   );
 
-  const gaps = exportBeats.filter((m) => !m.suggestions.length);
+  const gaps = exportBeats.filter((m) => !m.suggestions.length && m.missing);
+  const withBroll = exportBeats.filter((m) => m.suggestions.length).length;
   const finished = beats.length > 0 && Object.keys(results).length === beats.length;
 
   function doExport(kind: "xml" | "edl" | "csv") {
@@ -264,45 +283,76 @@ export function BrollSuggester() {
 
           {beats.map((b) => {
             const v = view(b);
+            const setPick = (id: string) => setSel((c) => ({ ...c, [b.index]: id }));
             return (
-              <section key={b.index} className="space-y-2">
-                <h3 className="text-sm">
-                  <span className="mr-2 font-mono text-[11px] text-ink-3">
-                    {b.index + 1} · {clock(b.startS)}–{clock(b.endS)} ({beatDuration(b).toFixed(0)}s)
-                  </span>
-                  {b.text}
-                </h3>
+              <section key={b.index} className={`space-y-2 rounded-xl border p-3 ${v && !v.selectedId ? "border-line bg-card/40" : "border-line"}`}>
+                <div className="flex flex-wrap items-start gap-2">
+                  <h3 className="min-w-0 flex-1 text-sm">
+                    <span className="mr-2 font-mono text-[11px] text-ink-3">
+                      {b.index + 1} · {clock(b.startS)}–{clock(b.endS)} ({beatDuration(b).toFixed(0)}s)
+                    </span>
+                    {b.text}
+                  </h3>
+                  {v ? (
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${
+                        v.selectedId ? "bg-accent/15 text-accent" : v.needsShoot ? "bg-amber-500/15 text-amber-400" : "bg-raised text-ink-3"
+                      }`}
+                    >
+                      {v.selectedId ? "B-roll selected" : v.needsShoot ? "Needs footage" : "No B-roll"}
+                    </span>
+                  ) : null}
+                </div>
+
                 {!v ? (
                   <p className="text-xs text-ink-3">{running ? "Waiting…" : ""}</p>
-                ) : v.gap ? (
-                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2.5 text-xs">
-                    <p className="font-medium text-amber-400">No good match</p>
-                    <p className="mt-0.5 text-ink-2">{v.missing}</p>
-                    {v.rest.length ? (
-                      <button type="button" onClick={() => setMore((m) => ({ ...m, [b.index]: !m[b.index] }))} className="mt-1.5 text-accent hover:underline">
-                        {more[b.index] ? "Hide" : "Show"} the closest clips anyway
-                      </button>
-                    ) : null}
-                  </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                    {v.suggestions.map((s, i) => (
-                      <Pick key={s.shot.id} s={s} i={i} beat={b} onUse={() => setChosen((c) => ({ ...c, [b.index]: s.shot.id }))} />
-                    ))}
-                  </div>
+                  <>
+                    {v.needsShoot ? (
+                      <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs">
+                        <p className="font-medium text-amber-400">No good match in the library</p>
+                        <p className="mt-0.5 text-ink-2">{v.r.missing}</p>
+                      </div>
+                    ) : null}
+                    {v.leftOnSpeaker ? (
+                      <p className="rounded-lg bg-raised px-3 py-2 text-xs text-ink-2">
+                        <span className="font-medium text-ink">No B-roll suggested.</span> {v.r.noBrollReason}
+                      </p>
+                    ) : null}
+
+                    {v.shown.length ? (
+                      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                        {v.shown.map((s) => (
+                          <Pick key={s.shot.id} s={s} beat={b} selected={s.shot.id === v.selectedId} onSelect={() => setPick(s.shot.id)} />
+                        ))}
+                      </div>
+                    ) : null}
+
+                    <div className="flex flex-wrap items-center gap-3 text-[11px]">
+                      {v.selectedId ? (
+                        <button type="button" onClick={() => setPick("none")} className="rounded border border-line px-2 py-1 text-ink-2 hover:border-accent hover:text-ink">
+                          No B-roll on this line
+                        </button>
+                      ) : v.shown.length ? (
+                        <button type="button" onClick={() => setPick(v.shown[0].shot.id)} className="rounded border border-line px-2 py-1 text-ink-2 hover:border-accent hover:text-ink">
+                          Add B-roll anyway
+                        </button>
+                      ) : null}
+                      {v.rest.length ? (
+                        <button type="button" onClick={() => setMore((m) => ({ ...m, [b.index]: !m[b.index] }))} className="text-accent hover:underline">
+                          {more[b.index] ? "Fewer options" : `${v.rest.length} more option${v.rest.length === 1 ? "" : "s"}`}
+                        </button>
+                      ) : null}
+                    </div>
+                    {more[b.index] && v.rest.length ? (
+                      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                        {v.rest.map((s) => (
+                          <Pick key={s.shot.id} s={s} beat={b} selected={false} onSelect={() => setPick(s.shot.id)} />
+                        ))}
+                      </div>
+                    ) : null}
+                  </>
                 )}
-                {v && !v.gap && v.rest.length ? (
-                  <button type="button" onClick={() => setMore((m) => ({ ...m, [b.index]: !m[b.index] }))} className="text-[11px] text-accent hover:underline">
-                    {more[b.index] ? "Fewer options" : `${v.rest.length} more options`}
-                  </button>
-                ) : null}
-                {v && more[b.index] && v.rest.length ? (
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                    {v.rest.map((s) => (
-                      <Pick key={s.shot.id} s={s} i={-1} beat={b} onUse={() => setChosen((c) => ({ ...c, [b.index]: s.shot.id }))} />
-                    ))}
-                  </div>
-                ) : null}
               </section>
             );
           })}
@@ -322,7 +372,12 @@ export function BrollSuggester() {
 
           {finished ? (
             <section className="space-y-3 rounded-xl border border-line bg-card p-3">
-              <h3 className="text-sm font-semibold">Export the timeline</h3>
+              <div>
+                <h3 className="text-sm font-semibold">Export the timeline</h3>
+                <p className="text-[11px] text-ink-3">
+                  {withBroll} of {exportBeats.length} lines have B-roll selected. Only the selected clip on each line goes in the file.
+                </p>
+              </div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-ink-2">
                 <input value={exportName} onChange={(e) => setExportName(e.target.value)} aria-label="Sequence name" className={`${field} w-44`} />
                 <select value={fps} onChange={(e) => setFps(Number(e.target.value))} aria-label="Frame rate" className={field}>
@@ -384,27 +439,27 @@ export function BrollSuggester() {
   );
 }
 
-function Pick({ s, i, beat, onUse }: { s: RankedShot; i: number; beat: Beat; onUse: () => void }) {
+function Pick({ s, beat, selected, onSelect }: { s: RankedShot; beat: Beat; selected: boolean; onSelect: () => void }) {
   const dur = beatDuration(beat);
   const short = s.shot.media_kind === "video" && s.shot.duration_s !== null && s.shot.duration_s < dur - 0.5;
   return (
-    <div className="space-y-1">
+    <div className={`space-y-1 rounded-xl ${selected ? "ring-2 ring-accent ring-offset-2 ring-offset-[var(--color-app)]" : ""}`}>
       <ShotCard
         shot={s.shot}
         action={
-          i === 0 ? (
-            <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent">Best</span>
+          selected ? (
+            <span className="rounded bg-accent px-2 py-0.5 text-[10px] font-semibold text-white">✓ Selected</span>
           ) : (
-            <button type="button" onClick={onUse} className="rounded border border-line px-1.5 py-0.5 text-[10px] text-ink-2 hover:border-accent hover:text-ink">
-              Use this
+            <button type="button" onClick={onSelect} className="rounded border border-line px-2 py-0.5 text-[10px] text-ink-2 hover:border-accent hover:text-ink">
+              Select
             </button>
           )
         }
       />
-      {s.reason ? <p className="text-[11px] leading-snug text-ink-2">{s.reason}</p> : null}
-      <p className="text-[10px] text-ink-3">
+      {s.reason ? <p className="px-1 text-[11px] leading-snug text-ink-2">{s.reason}</p> : null}
+      <p className="px-1 pb-1 text-[10px] text-ink-3">
         {s.reused ? "Already used earlier. " : ""}
-        {short ? `Shorter than the beat (${s.shot.duration_s!.toFixed(0)}s of ${dur.toFixed(0)}s).` : ""}
+        {short ? `Shorter than the line (${s.shot.duration_s!.toFixed(0)}s of ${dur.toFixed(0)}s).` : ""}
       </p>
     </div>
   );

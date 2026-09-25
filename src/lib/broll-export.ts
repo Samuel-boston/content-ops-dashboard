@@ -39,9 +39,12 @@ export interface ExportSuggestion {
 
 export interface ExportBeat {
   beat: Beat;
-  /** Best first. Empty when there is no good match. */
+  /** The clip to place first, then the other options (CSV only). Empty when no B-roll goes on this line. */
   suggestions: ExportSuggestion[];
+  /** Set when the line still needs footage shot for it. */
   missing: string | null;
+  /** Why no B-roll was chosen, when that was deliberate. */
+  note?: string | null;
 }
 
 export interface ExportConfig {
@@ -119,7 +122,8 @@ export function buildTimeline(matches: ExportBeat[], config: ExportConfig): Time
   for (const m of matches) {
     const sug = m.suggestions[0];
     if (!sug) {
-      tl.gaps.push(m);
+      // Only a line that still needs footage is a gap; a line left without B-roll on purpose is just skipped.
+      if (m.missing) tl.gaps.push(m);
       continue;
     }
     const { beat } = m;
@@ -234,7 +238,7 @@ export function csv(matches: ExportBeat[], tl: Timeline): string {
     const b = m.beat;
     const base = { beat: b.index + 1, beat_start: b.startS.toFixed(3), beat_end: b.endS.toFixed(3), beat_duration_s: (b.endS - b.startS).toFixed(3), narration: b.text };
     if (!m.suggestions.length) {
-      row({ ...base, status: "no good match", reason: m.missing ?? "" });
+      row({ ...base, status: m.missing ? "no good match" : "no b-roll", reason: m.missing ?? m.note ?? "" });
       continue;
     }
     const item = placed.get(b.index);

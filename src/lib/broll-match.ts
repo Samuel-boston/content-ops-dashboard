@@ -34,9 +34,10 @@ What matters:
 - Prefer clips long enough to cover the beat, but do not reject a good shot just for being short. A still photograph can hold any length, but it is a static image on screen, so choose one only when it genuinely suits the line.
 - Give one line of reason per choice, addressed to the editor.
 - If none of the candidates genuinely works, set no_good_match and say in missing_footage what should be shot instead. An honest gap is more useful than a forced match.
+- Not every line needs B-roll. Set needs_broll to false when the line is best left on the speaker: a short filler or connective line, a direct address to the viewer, an emotional beat that lands on the face, or a line where a cutaway would only distract. Say why in no_broll_reason. Still list your best choices in case the editor overrules you, unless nothing is close.
 
 Reply with only JSON in this shape:
-{"choices":[{"candidate":1,"reason":"one line","confidence":0.8}],"no_good_match":false,"missing_footage":null}
+{"needs_broll":true,"no_broll_reason":null,"choices":[{"candidate":1,"reason":"one line","confidence":0.8}],"no_good_match":false,"missing_footage":null}
 "candidate" is the 1-based number from the list. "confidence" is between 0 and 1.`;
 
 export function rerankUserPrompt(beat: { index: number; startS: number; endS: number; text: string }, candidates: Candidate[]): string {
@@ -52,6 +53,9 @@ export function rerankUserPrompt(beat: { index: number; startS: number; endS: nu
 }
 
 export interface RerankReading {
+  /** False when the model says this line is best left on the speaker. */
+  needsBroll: boolean;
+  noBrollReason: string | null;
   choices: { index: number; reason: string; confidence: number }[];
   noGoodMatch: boolean;
   missing: string | null;
@@ -60,7 +64,7 @@ export interface RerankReading {
 /** Read the model's JSON defensively: bad numbers are dropped, duplicates ignored, confidence clamped. */
 export function readRerank(raw: unknown, candidateCount: number): RerankReading | null {
   if (!raw || typeof raw !== "object") return null;
-  const o = raw as { choices?: unknown; no_good_match?: unknown; missing_footage?: unknown };
+  const o = raw as { choices?: unknown; no_good_match?: unknown; missing_footage?: unknown; needs_broll?: unknown; no_broll_reason?: unknown };
   const seen = new Set<number>();
   const choices: RerankReading["choices"] = [];
   for (const c of Array.isArray(o.choices) ? o.choices : []) {
@@ -76,6 +80,8 @@ export function readRerank(raw: unknown, candidateCount: number): RerankReading 
     });
   }
   return {
+    needsBroll: o.needs_broll !== false,
+    noBrollReason: typeof o.no_broll_reason === "string" && o.no_broll_reason.trim() ? o.no_broll_reason.trim().slice(0, 240) : null,
     choices: choices.slice(0, SUGGESTIONS_PER_BEAT),
     noGoodMatch: o.no_good_match === true,
     missing: typeof o.missing_footage === "string" && o.missing_footage.trim() ? o.missing_footage.trim().slice(0, 300) : null,

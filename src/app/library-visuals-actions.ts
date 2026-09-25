@@ -234,6 +234,9 @@ export interface BeatResult {
   ranked: RankedShot[];
   noGoodMatch: boolean;
   missing: string | null;
+  /** False when the model says this line is best left on the speaker. */
+  needsBroll: boolean;
+  noBrollReason: string | null;
 }
 
 const MAX_BEATS_PER_CALL = 6;
@@ -282,17 +285,19 @@ export async function matchBeatsAction(
   list.forEach((b, i) => {
     const cands = candidates[i];
     if (!cands.length) {
-      results.push({ index: b.index, ranked: [], noGoodMatch: true, missing: "Nothing in the library matched this line at all." });
+      results.push({ index: b.index, ranked: [], noGoodMatch: true, missing: "Nothing in the library matched this line at all.", needsBroll: true, noBrollReason: null });
       return;
     }
     const reading = readings[i];
     if (reading?.noGoodMatch && !reading.choices.length) {
-      results.push({ index: b.index, ranked: orderCandidates(cands, null, used).map(toRanked), noGoodMatch: true, missing: reading.missing ?? "No candidate suited this line." });
+      results.push({ index: b.index, ranked: orderCandidates(cands, null, used).map(toRanked), noGoodMatch: true, missing: reading.missing ?? "No candidate suited this line.", needsBroll: true, noBrollReason: null });
       return;
     }
     const ordered = orderCandidates(cands, reading, used);
-    for (const r of ordered.slice(0, 1)) used[r.item.id] = (used[r.item.id] ?? 0) + 1;
-    results.push({ index: b.index, ranked: ordered.map(toRanked), noGoodMatch: false, missing: null });
+    const needsBroll = reading?.needsBroll !== false;
+    // A line left on the speaker doesn't use up a clip.
+    if (needsBroll) for (const r of ordered.slice(0, 1)) used[r.item.id] = (used[r.item.id] ?? 0) + 1;
+    results.push({ index: b.index, ranked: ordered.map(toRanked), noGoodMatch: false, missing: null, needsBroll, noBrollReason: needsBroll ? null : (reading?.noBrollReason ?? "Best left on the speaker.") });
   });
 
   const shown = await signThumbs(results.flatMap((r) => r.ranked.map((x) => x.shot)));
