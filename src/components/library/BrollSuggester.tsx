@@ -443,7 +443,13 @@ function Pick({ s, beat, selected, onSelect }: { s: RankedShot; beat: Beat; sele
   const dur = beatDuration(beat);
   const short = s.shot.media_kind === "video" && s.shot.duration_s !== null && s.shot.duration_s < dur - 0.5;
   return (
-    <div className={`space-y-1 rounded-xl ${selected ? "ring-2 ring-accent ring-offset-2 ring-offset-[var(--color-app)]" : ""}`}>
+    <div
+      // The whole card selects it. Its own links and buttons (Open in Drive, Copy link, Select) keep working as themselves.
+      onClick={(e) => {
+        if (!selected && !(e.target as HTMLElement).closest("a, button")) onSelect();
+      }}
+      className={`space-y-1 rounded-xl ${selected ? "ring-2 ring-accent ring-offset-2 ring-offset-[var(--color-app)]" : "cursor-pointer hover:ring-2 hover:ring-accent/40 hover:ring-offset-2 hover:ring-offset-[var(--color-app)]"}`}
+    >
       <ShotCard
         shot={s.shot}
         action={
