@@ -67,15 +67,21 @@ export function ThumbnailPanel({ videoId, defaultOpen = false }: { videoId: stri
 
   function run(fn: () => Promise<{ error?: string } | { ok: true } | { ok: true; added: number }>, done?: string) {
     startTransition(async () => {
-      const res = await fn();
-      if ("error" in res && res.error) return toast.error(res.error);
-      if (done) toast.success(done);
-      await load();
+      try {
+        const res = await fn();
+        if ("error" in res && res.error) return toast.error(res.error);
+        if (done) toast.success(done);
+        await load();
+      } catch {
+        toast.error("That didn't go through. Check the connection and try again.");
+      }
     });
   }
 
   function submitFile(kind: "final" | "refs", files: FileList | null) {
     if (!files?.length) return;
+    const total = Array.from(files).reduce((n, f) => n + f.size, 0);
+    if (total > 4 * 1024 * 1024) return toast.error("Keep the images under 4 MB in total. Add them a few at a time.");
     const fd = new FormData();
     if (kind === "final") fd.append("file", files[0]);
     else Array.from(files).forEach((f) => fd.append("file", f));

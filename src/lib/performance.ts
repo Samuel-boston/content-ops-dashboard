@@ -44,7 +44,7 @@ export async function collectPosts(db: SupabaseClient): Promise<PerfPost[]> {
     db.from("video_metrics").select("video_id, views, likes, comments, shares, saves, permalink, fetched_at"),
     db
       .from("trial_posts")
-      .select("id, video_id, label, views, likes, comments, shares, saves, permalink, posted_at, status")
+      .select("id, video_id, label, views, likes, comments, shares, saves, permalink, posted_at, status, winner")
       .in("status", ["posted", "promoted"])
       .not("posted_at", "is", null)
       .not("views", "is", null),
@@ -71,9 +71,13 @@ export async function collectPosts(db: SupabaseClient): Promise<PerfPost[]> {
       kind: "feed",
     });
   }
+  // A winning trial that went to the feed exists twice: as its trial row and as the feed post's metrics.
+  // The feed post is the real one, so the trial row is skipped for that video.
+  const hasFeed = new Set(out.map((p) => p.videoId));
   for (const t of trials ?? []) {
     const v = byId.get(t.video_id as string);
     if (!v) continue;
+    if (t.winner && hasFeed.has(t.video_id as string)) continue;
     out.push({
       key: `trial:${t.id}`,
       videoId: t.video_id as string,

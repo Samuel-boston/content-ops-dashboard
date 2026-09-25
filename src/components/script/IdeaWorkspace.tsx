@@ -82,7 +82,7 @@ export function IdeaWorkspace({
             current={video.status}
             canEdit
             carousel={isCarouselFormat(video.formats)}
-            lockedStages={canEdit ? [] : ["ready_to_film"]}
+            lockedStages={canEdit ? [] : ["ready_to_film", "ready_to_edit"]}
           />
           {/* The obvious next move, right under the stepper rather than only up in it. */}
           <div className="flex items-center gap-2 rounded-xl border border-line bg-card px-3 py-2">

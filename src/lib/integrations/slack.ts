@@ -31,10 +31,16 @@ export async function slackCall<T = Record<string, unknown>>(
   params: Record<string, unknown> = {}
 ): Promise<SlackResult<T>> {
   try {
+    // Form-encoded, not JSON: Slack's read methods (users.info, conversations.list) only take form fields.
+    const form = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v === undefined || v === null) continue;
+      form.set(k, typeof v === "string" ? v : typeof v === "object" ? JSON.stringify(v) : String(v));
+    }
     const res = await fetch(`${API}/${method}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify(params),
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/x-www-form-urlencoded" },
+      body: form,
     });
     const body = (await res.json()) as { ok: boolean; error?: string } & T;
     return body.ok ? { ok: true, data: body } : { ok: false, error: body.error ?? `HTTP ${res.status}` };

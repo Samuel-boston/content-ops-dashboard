@@ -168,7 +168,7 @@ export function ScriptWorkspace({
             current={video.status}
             canEdit={isClient || viewer.role === "copywriter"}
             carousel={carousel}
-            lockedStages={viewer.role === "copywriter" ? ["ready_to_film"] : []}
+            lockedStages={viewer.role === "copywriter" ? ["ready_to_film", "ready_to_edit"] : []}
           />
           {video.status !== "ideation" ? (
             <div className="flex min-h-[2.75rem] flex-wrap items-center gap-2 rounded-xl border border-line bg-card px-3 py-2">

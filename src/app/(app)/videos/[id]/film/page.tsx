@@ -15,6 +15,9 @@ import { FilmingWorkspace } from "@/components/script/FilmingWorkspace";
  * and the brief (spoken or written) — the assembly step the client described
  * that didn't have a home between Scripting and Ready to Edit.
  */
+// Designing a thumbnail with ChatGPT can take a minute or two.
+export const maxDuration = 300;
+
 export default async function FilmPage({ params }: PageProps<"/videos/[id]/film">) {
   const { id } = await params;
   await requireRole("owner", "admin");

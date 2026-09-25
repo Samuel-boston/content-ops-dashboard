@@ -30,7 +30,17 @@ export function cleanLink(l: string | null | undefined): string | null {
   }
 }
 
-const normLink = (l: string | null | undefined) => (l ? l.trim().replace(/\/+$/, "").toLowerCase() : null);
+/** Two addresses for the same post compare equal: host in lower case, tracking parameters and a trailing slash ignored, the path (which is case-sensitive on YouTube, TikTok and Instagram) left alone. */
+const normLink = (l: string | null | undefined) => {
+  if (!l) return null;
+  try {
+    const u = new URL(l.trim());
+    for (const k of [...u.searchParams.keys()]) if (/^(utm_|igsh|igshid|si$|feature$|fbclid|ref$)/i.test(k)) u.searchParams.delete(k);
+    return `${u.hostname.toLowerCase().replace(/^www\./, "")}${u.pathname.replace(/\/+$/, "")}${u.search}`;
+  } catch {
+    return l.trim();
+  }
+};
 
 /**
  * Add rows to the Top posts list. Anything whose link is already there is skipped

@@ -7,6 +7,9 @@ import { listScriptComments } from "@/app/script-comment-actions";
 import { listCarouselImages } from "@/app/carousel-actions";
 import { ScriptWorkspace } from "@/components/script/ScriptWorkspace";
 
+// Designing a thumbnail with ChatGPT can take a minute or two.
+export const maxDuration = 300;
+
 export default async function ScriptPage({ params }: PageProps<"/videos/[id]/script">) {
   const { id } = await params;
   // The script is the client's — editors read it inside the video, they don't

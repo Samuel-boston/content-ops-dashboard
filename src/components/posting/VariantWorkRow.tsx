@@ -99,6 +99,7 @@ export function VariantWorkRow({
         channels: dest === "trial" ? undefined : v.channels,
       });
       if (res?.error) return toast.error(res.error);
+      setComposing(false);
       toast.success(
         dest === "trial"
           ? "Posted as a trial reel ✓"
@@ -240,6 +241,7 @@ export function VariantWorkRow({
       {composing ? (
         <div className="mt-3 rounded-xl border border-accent/30 bg-accent-ghost/40 p-2.5">
           <PostComposer
+            key={dest}
             caption={draftCaption}
             onCaptionChange={setDraftCaption}
             connected={

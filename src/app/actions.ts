@@ -9,6 +9,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { getCurrentProfile, requireRole, requireUser } from "@/lib/auth";
 import { notify, notifyTelegram } from "@/lib/notify";
 import { STATUS_ORDER } from "@/lib/types";
+import { isCarouselFormat } from "@/lib/taxonomy";
 import { handOffToVa, releaseFromVa } from "@/lib/va-handoff";
 import type {
   Priority,
@@ -370,18 +371,30 @@ export async function setStatusAction(id: string, status: VideoStatus) {
   const supabase = await supabaseServer();
   const { data: before } = await supabase
     .from("videos")
-    .select("assigned_editor_id, title, status")
+    .select("assigned_editor_id, title, status, formats")
     .eq("id", id)
     .single();
-  // Only the client's side hands a video to the VA.
-  if (status === "with_va" && before?.status !== "with_va" && me.role !== "owner" && me.role !== "admin") {
-    return { error: "Only an owner or admin can send a video to the VA." };
+  const manager = me.role === "owner" || me.role === "admin";
+  // Carousels have their own short road (Ideation, Scripting, Creatives, the VA); dropping one into the
+  // filming/editing stages, or a video into Creatives, only strands it there.
+  const isCarousel = isCarouselFormat((before?.formats as string[] | null) ?? []);
+  const VIDEO_ONLY: VideoStatus[] = ["ready_to_film", "ready_to_edit", "in_progress", "in_review", "revisions", "awaiting_variants", "final_review"];
+  if (isCarousel && VIDEO_ONLY.includes(status)) return { error: "A carousel doesn't go through filming or editing." };
+  if (!isCarousel && status === "needs_creatives") return { error: "Creatives is only for carousels." };
+  // Only the client's side hands a video to the VA, or takes it off their desk.
+  if ((status === "with_va" && before?.status !== "with_va" || before?.status === "with_va" && status !== "with_va") && !manager) {
+    return { error: "Only an owner or admin can move a video on or off the VA's desk." };
   }
+  // Approving from Final Review means "done, to the VA": setting `approved` there would have the
+  // routing trigger send it round to Awaiting Variants again.
+  if (status === "approved" && before?.status === "final_review") status = "with_va";
   const { error } = await supabase.from("videos").update({ status }).eq("id", id);
   if (error) return { error: error.message };
-  if (status === "with_va" && before?.status !== "with_va") await handOffToVa(id, me.id);
+  // `approved` is rewritten by a trigger (to the editors for variants, or to the VA): act on where it landed.
+  const { data: landed } = await supabase.from("videos").select("status").eq("id", id).maybeSingle();
+  if (landed?.status === "with_va" && before?.status !== "with_va") await handOffToVa(id, me.id);
   // Leaving the VA's desk for anywhere but Posted clears their side.
-  if (before?.status === "with_va" && status !== "with_va" && status !== "posted") await releaseFromVa(id);
+  if (before?.status === "with_va" && landed?.status !== "with_va" && landed?.status !== "posted") await releaseFromVa(id);
 
   // Sending a video back for revisions pings the editor it's assigned to.
   if (status === "revisions" && before?.assigned_editor_id && before.assigned_editor_id !== me.id) {

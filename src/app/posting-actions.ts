@@ -14,6 +14,7 @@ import { effectiveCaption } from "@/lib/caption";
 import { isOnMainFeed, variantState, type VariantState } from "@/lib/variant-state";
 import { notify } from "@/lib/notify";
 import { isLongFormFormat } from "@/lib/taxonomy";
+import { cleanLink } from "@/lib/top-posts";
 import { ensureVariantRows, releaseFromVa, stageAfterVa } from "@/lib/va-handoff";
 import type { PublishChannel, PublishStatus, TrialPost, TrialStatus } from "@/lib/types";
 
@@ -665,7 +666,8 @@ export async function vaSaveLinkAction(trialId: string, permalink: string) {
   const db = supabaseAdmin();
   const { data: t } = await db.from("trial_posts").select("video_id, status, post_as").eq("id", trialId).maybeSingle();
   if (!t) return { error: "Variant not found." };
-  const link = permalink.trim() || null;
+  const link = permalink.trim() ? cleanLink(permalink) : null;
+  if (permalink.trim() && !link) return { error: "That isn't a web link. Paste the post's address, starting with https://." };
   const { error } = await db.from("trial_posts").update({ permalink: link }).eq("id", trialId);
   if (error) return { error: error.message };
   const linked = isOnMainFeed(t as never) ? await linkMainFeedAnalytics(t.video_id as string, link) : false;
@@ -676,8 +678,8 @@ export async function vaSaveLinkAction(trialId: string, permalink: string) {
 
 /**
  * The VA sends a video back to the client's side because something needs
- * changing before it can go out. The video goes from With the VA back to Ready
- * to Post on the client's board, the variants leave the posting desk with their
+ * changing before it can go out. The video goes from With the VA back to review
+ * on the client's board, the variants leave the posting desk with their
  * captions intact, and anything scheduled for it is taken off the schedule. The
  * reason is posted in the video's chat and the owner/admins are told.
  */

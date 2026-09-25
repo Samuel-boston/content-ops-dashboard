@@ -73,6 +73,7 @@ const SCOPES: Record<
       "in_progress",
       "in_review",
       "revisions",
+      "awaiting_variants",
       "final_review",
       "with_va",
     ],

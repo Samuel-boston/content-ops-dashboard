@@ -21,10 +21,13 @@ export interface PublerCreds {
 
 export class PublerError extends Error {
   status: number;
-  constructor(message: string, status = 0) {
+  /** True when we stopped waiting but Publer may well still finish the job. */
+  pending: boolean;
+  constructor(message: string, status = 0, pending = false) {
     super(message);
     this.name = "PublerError";
     this.status = status;
+    this.pending = pending;
   }
 }
 
@@ -65,7 +68,8 @@ function explain(status: number, body: string): string {
   try {
     const j = JSON.parse(body);
     const errs = j?.errors ?? j?.error ?? j?.message;
-    detail = Array.isArray(errs) ? errs.join("; ") : typeof errs === "string" ? errs : detail;
+    const one = (e: unknown) => (typeof e === "string" ? e : (e as { message?: string })?.message ?? JSON.stringify(e));
+    detail = Array.isArray(errs) ? errs.map(one).join("; ") : typeof errs === "string" ? errs : detail;
   } catch {
     // not JSON — keep the raw text
   }
@@ -182,11 +186,19 @@ export async function waitForJob(
 ): Promise<PublerJobResult> {
   const deadline = Date.now() + (opts.timeoutMs ?? 240_000);
   const interval = opts.intervalMs ?? 3000;
+  let hiccups = 0;
   for (;;) {
-    const r = await jobStatus(c, jobId);
-    if (r.state !== "working") return r;
-    if (Date.now() > deadline) throw new PublerError("Publer is still working on it. Check Publer for the post before trying again.");
-    await sleep(interval);
+    let r: PublerJobResult | null = null;
+    try {
+      r = await jobStatus(c, jobId);
+      hiccups = 0;
+    } catch (e) {
+      // A dropped connection or a rate-limit while polling says nothing about the job itself.
+      if (++hiccups >= 4) throw new PublerError(`Lost touch with Publer while it was working (${(e as Error).message}). Check Publer for the post before trying again.`, 0, true);
+    }
+    if (r && r.state !== "working") return r;
+    if (Date.now() > deadline) throw new PublerError("Publer is still working on it. Check Publer for the post before trying again.", 0, true);
+    await sleep(hiccups ? interval * 2 : interval);
   }
 }
 
@@ -247,7 +259,7 @@ export async function importMediaFromUrl(c: PublerCreds, url: string, name: stri
   const media = findMedia(done.raw);
   if (!media) {
     throw new PublerError(
-      "Publer imported the video but the reply didn't include its media id. The cut is over 200 MB — compress it under that and try again."
+      "Publer imported the video but its reply didn't say where the file went, so the post can't be built. Try again; if it keeps happening, upload a smaller cut."
     );
   }
   return media;
@@ -348,8 +360,12 @@ export function videoBody(p: VideoPost) {
   };
 }
 
-/** Send a video to one network through Publer and wait for Publer to finish. Publishes now unless `scheduledAt` is set. */
-export async function publishVideo(c: PublerCreds, p: VideoPost): Promise<{ jobId: string }> {
+/**
+ * Send a video to one network through Publer and wait for Publer to finish. Publishes now
+ * unless `scheduledAt` is set. `unconfirmed` means Publer took the post but we stopped
+ * waiting for its answer: it is very likely live or going live, so it must not be sent again.
+ */
+export async function publishVideo(c: PublerCreds, p: VideoPost): Promise<{ jobId: string; unconfirmed?: boolean }> {
   if (p.network === "instagram") {
     if (p.media.reelOk === false) {
       throw new PublerError("Publer says this video can't go out as an Instagram Reel. Reels need to be vertical (9:16) and 3 to 90 seconds.");
@@ -359,7 +375,13 @@ export async function publishVideo(c: PublerCreds, p: VideoPost): Promise<{ jobI
   const started = await call<unknown>(c, path, { json: videoBody(p) });
   const jobId = jobIdOf(started);
   if (!jobId) throw new PublerError(`Publer didn't accept the ${p.network} post: ${JSON.stringify(started).slice(0, 200)}`);
-  const done = await waitForJob(c, jobId);
+  let done: PublerJobResult;
+  try {
+    done = await waitForJob(c, jobId);
+  } catch (e) {
+    if (e instanceof PublerError && e.pending) return { jobId, unconfirmed: true };
+    throw e;
+  }
   if (done.state === "failed") {
     throw new PublerError(`Publer couldn't post it to ${p.network}: ${done.failures.join("; ") || "no reason given"}`);
   }

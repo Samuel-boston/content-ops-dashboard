@@ -26,6 +26,9 @@ import { StageChat } from "@/components/pipeline/StageChat";
 import { CarouselPostView } from "@/components/script/CarouselPostView";
 import type { CutComment } from "@/lib/types";
 
+// Designing a thumbnail with ChatGPT can take a minute or two.
+export const maxDuration = 300;
+
 export default async function VideoPage({ params }: PageProps<"/videos/[id]">) {
   const { id } = await params;
   const viewer = await requireUser();

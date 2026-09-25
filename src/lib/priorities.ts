@@ -42,7 +42,8 @@ export function computePriorities(videos: Sliver[], now = Date.now()): PriorityI
   const postingSoon = videos.filter(
     (v) => v.status !== "posted" && v.post_date && v.post_date >= today && v.post_date <= weekEnd
   );
-  const approvedNoDate = videos.filter((v) => v.status === "approved" && !v.post_date);
+  // Approved videos go straight to the VA now, so there is no "approved, waiting for a date" state to flag.
+  const approvedNoDate: typeof videos = [];
   const poolEmpty = videos.filter((v) => v.status === "ready_to_edit").length === 0;
 
   const out: PriorityInsight[] = [];

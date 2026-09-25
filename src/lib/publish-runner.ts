@@ -31,10 +31,21 @@ import { ORIGINAL_COLUMNS, hasOriginal } from "@/lib/cut-files";
  */
 export async function runPublishJob(jobId: string): Promise<{ ok: boolean; error?: string }> {
   const db = supabaseAdmin();
-  const { data: job } = await db.from("publish_jobs").select("*").eq("id", jobId).single();
-  if (!job || job.status === "published" || job.status === "cancelled") return { ok: true };
+  // Take the job atomically. Cron and a person clicking "Post now" can both reach
+  // this; whoever flips it to `publishing` first owns it, and the other walks away.
+  // A job a killed function left `publishing` is fair game again after ten minutes.
+  const staleBefore = new Date(Date.now() - 10 * 60_000).toISOString();
+  const { data: claimed } = await db
+    .from("publish_jobs")
+    .update({ status: "publishing", error: null, claimed_at: new Date().toISOString() })
+    .eq("id", jobId)
+    .or(`status.in.(scheduled,failed),and(status.eq.publishing,claimed_at.lt.${staleBefore})`)
+    .select("*");
+  const job = claimed?.[0];
+  if (!job) return { ok: true }; // published, cancelled, or another runner has it
 
-  await db.from("publish_jobs").update({ status: "publishing", error: null }).eq("id", jobId);
+  // Networks this job has already posted to (a retry after a partial failure).
+  const doneChannels: string[] = [...((job.channels_done as string[] | null) ?? [])];
   const tempFiles: string[] = [];
   try {
     let creationId: string;
@@ -79,21 +90,40 @@ export async function runPublishJob(jobId: string): Promise<{ ok: boolean; error
               : `No ${missing.join(" or ")} account is connected in Publer. Connect it in Settings → Publer.`
           );
         }
+        const remaining = wanted.filter((c) => !doneChannels.includes(c));
+        if (!remaining.length) throw new Error("There is nothing to post: no valid channel is selected.");
         const { data: vid } = await db.from("videos").select("title, formats").eq("id", job.video_id).maybeSingle();
+        const unconfirmed: string[] = [];
         const sent = await postVideoViaPubler({
           videoUrl,
           caption: job.caption ?? "",
           title: (vid?.title as string | undefined) ?? undefined,
           youtubeKind: isLongFormFormat(vid?.formats as string[] | null) ? "video" : "short",
-          networks: [...wanted],
+          networks: [...remaining],
           asTrial: Boolean(job.as_trial),
           shareToFeed: job.share_to_feed ?? true,
+          // Remember each network the moment it takes the post: if a later one fails, a retry must not repeat this one.
+          onPosted: async (network, publerJobId, wasUnconfirmed) => {
+            doneChannels.push(network);
+            if (wasUnconfirmed) unconfirmed.push(network);
+            await db
+              .from("publish_jobs")
+              .update({ channels_done: doneChannels, publer_job_id: [job.publer_job_id, publerJobId].filter(Boolean).join(",") })
+              .eq("id", jobId);
+          },
         });
         await db
           .from("publish_jobs")
-          .update({ status: "published", provider: "publer", publer_job_id: sent.jobId, published_at: new Date().toISOString() })
+          .update({
+            status: "published",
+            provider: "publer",
+            publer_job_id: [job.publer_job_id, sent.jobId].filter(Boolean).join(","),
+            published_at: new Date().toISOString(),
+            error: unconfirmed.length ? `Publer took the ${unconfirmed.join(" and ")} post but hasn't confirmed it yet. Check Publer to be sure it went out.` : null,
+          })
           .eq("id", jobId);
-        await finishPublished(job, null);
+        // The post is live. Tidying up after it must never turn that into a "failed" job.
+        await finishPublished(job, null).catch((e) => console.error("finishPublished failed:", e));
         return { ok: true };
       }
 
@@ -160,13 +190,18 @@ export async function runPublishJob(jobId: string): Promise<{ ok: boolean; error
       .from("publish_jobs")
       .update({ status: "published", provider: "instagram", ig_media_id: mediaId, published_at: new Date().toISOString() })
       .eq("id", jobId);
-    await finishPublished(job, mediaId);
+    await finishPublished(job, mediaId).catch((e) => console.error("finishPublished failed:", e));
     return { ok: true };
   } catch (e) {
     if (tempFiles.length) await db.storage.from("carousels").remove(tempFiles);
     await db
       .from("publish_jobs")
-      .update({ status: "failed", error: (e as Error).message })
+      .update({
+        status: "failed",
+        error: doneChannels.length
+          ? `Already posted to ${doneChannels.join(", ")} — a retry only does the rest. ${(e as Error).message}`
+          : (e as Error).message,
+      })
       .eq("id", jobId);
     // A variant the VA scheduled goes back on their To-post list, so a failed
     // post isn't silently lost — the reason shows beside the failed job.

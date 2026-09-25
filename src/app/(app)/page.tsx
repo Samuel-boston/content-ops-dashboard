@@ -52,7 +52,8 @@ export default async function OverviewPage() {
   // the client's name set in Settings → Branding, so the owner sees "Adam".
   const own = viewer.full_name?.trim().split(/\s+/)[0] ?? "";
   const generic = !own || /^(owner|admin|user|test|client)$/i.test(own);
-  const firstName = generic ? settings.client_name?.trim().split(/\s+/)[0] || "" : own;
+  // Only the owner is the client: an admin (a creative director) is not greeted as them.
+  const firstName = generic ? (viewer.role === "owner" ? settings.client_name?.trim().split(/\s+/)[0] || "" : "") : own;
 
   // Three is roughly a week of work for a small team; below that the client
   // needs to be filming, not waiting to be told the pool hit zero.

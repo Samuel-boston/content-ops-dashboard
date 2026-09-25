@@ -341,7 +341,9 @@ export async function addTopPosts(profile: Profile, args: z.infer<typeof addTopP
   if (!isManager(profile)) return { error: "Only an owner or admin can add to the Top posts list." };
   const { insertTopPosts } = await import("@/lib/top-posts");
   const { parseViews, platformOf } = await import("@/lib/top-posts-parse");
-  const res = await insertTopPosts(
+  let res;
+  try {
+    res = await insertTopPosts(
     args.posts.map((p) => ({
       topic: p.topic,
       hook: p.hook ?? null,
@@ -356,6 +358,9 @@ export async function addTopPosts(profile: Profile, args: z.infer<typeof addTopP
     })),
     profile.id
   );
+  } catch (e) {
+    return { error: `Couldn't save those: ${(e as Error).message}` };
+  }
   return { ok: true, ...res, link: `${APP_URL}/library/top-posts` };
 }
 

@@ -6,6 +6,9 @@ import { listReferences } from "@/app/library-actions";
 import { listCarouselImages } from "@/app/carousel-actions";
 import { IdeaWorkspace } from "@/components/script/IdeaWorkspace";
 
+// Designing a thumbnail with ChatGPT can take a minute or two.
+export const maxDuration = 300;
+
 export default async function IdeaPage({ params }: PageProps<"/videos/[id]/idea">) {
   const { id } = await params;
   // Ideation is the client's private shelf — editors never see this stage.

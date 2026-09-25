@@ -50,7 +50,8 @@ export function DeleteVideoButton({
         confirmLabel={pending ? "Deleting…" : "Delete it"}
         cancelLabel="Keep it"
         onCancel={() => setOpen(false)}
-        onConfirm={() =>
+        onConfirm={() => {
+          if (pending) return;
           startTransition(async () => {
             const res = await deleteVideoAction(videoId);
             setOpen(false);
@@ -58,8 +59,8 @@ export function DeleteVideoButton({
             toast.success("Deleted.");
             router.push(goTo);
             router.refresh();
-          })
-        }
+          });
+        }}
       />
     </>
   );

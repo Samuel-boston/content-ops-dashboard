@@ -45,6 +45,8 @@ export async function postVideoViaPubler(input: {
   asTrial: boolean;
   shareToFeed?: boolean;
   scheduledAt?: string;
+  /** Called as soon as a network has taken the post, so a later failure can be told apart from what already went out. */
+  onPosted?: (network: VideoNetwork, jobId: string, unconfirmed: boolean) => Promise<void>;
 }): Promise<{ jobId: string }> {
   const p = await publerSettings();
   if (!p) throw new NotConfiguredError("Publer");
@@ -56,6 +58,11 @@ export async function postVideoViaPubler(input: {
 
   const res = await fetch(input.videoUrl);
   if (!res.ok || !res.body) throw new PublerError(`The video couldn't be fetched to send to Publer (${res.status}).`);
+  const type = res.headers.get("content-type") ?? "";
+  if (/^text\/|html/i.test(type)) {
+    await res.body.cancel();
+    throw new PublerError("The link for this video gave a web page, not the video file. Re-upload the cut so a real file is available.");
+  }
   const size = Number(res.headers.get("content-length") ?? 0);
 
   let media;
@@ -84,6 +91,7 @@ export async function postVideoViaPubler(input: {
       scheduledAt: input.scheduledAt,
     });
     ids.push(sent.jobId);
+    await input.onPosted?.(network, sent.jobId, Boolean(sent.unconfirmed));
   }
   return { jobId: ids.join(",") };
 }

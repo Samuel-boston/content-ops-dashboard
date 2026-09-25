@@ -4,6 +4,7 @@
 import http from "node:http";
 import assert from "node:assert/strict";
 import {
+  waitForJob,
   listWorkspaces, listAccounts, uploadMedia, importMediaFromUrl, publishReel, publishVideo, videoBody, reelBody, findMedia, readFailures, PublerError,
 } from "../src/lib/publer-client.ts";
 
@@ -11,6 +12,8 @@ type Seen = { method: string; url: string; headers: http.IncomingHttpHeaders; bo
 const seen: Seen[] = [];
 let jobPolls = 0;
 let failPost = false;
+let stuck = false;
+let broken = false;
 let importPayload: unknown = { media: [{ id: "m-imp", path: "https://cdn/x.mp4", type: "video" }] };
 
 const server = http.createServer((req, res) => {
@@ -34,6 +37,8 @@ const server = http.createServer((req, res) => {
     if (u === "/posts/schedule/publish" || u === "/posts/schedule") return send(200, { success: true, data: { job_id: "j-post" } });
     if (u.startsWith("/job_status/")) {
       const id = u.split("/").pop();
+      if (broken) return send(500, { errors: ["boom"] });
+      if (stuck) return send(200, { success: true, data: { status: "working" } });
       if (id === "j-media") return send(200, { success: true, data: { status: "complete", result: { status: "complete", payload: importPayload } } });
       jobPolls++;
       if (jobPolls < 2) return send(200, { success: true, data: { status: "working" } });
@@ -67,7 +72,7 @@ assert.equal((await importMediaFromUrl({ ...good, workspaceId: "w1" }, "https://
 importPayload = [{ id: "m-arr", path: "p", type: "video" }];
 assert.equal((await importMediaFromUrl({ ...good, workspaceId: "w1" }, "https://x/y.mp4", "y.mp4")).id, "m-arr");
 importPayload = { failures: {} };
-await assert.rejects(() => importMediaFromUrl({ ...good, workspaceId: "w1" }, "https://x/y.mp4", "y.mp4"), /over 200 MB/);
+await assert.rejects(() => importMediaFromUrl({ ...good, workspaceId: "w1" }, "https://x/y.mp4", "y.mp4"), /didn't say where the file went/);
 
 // posting: a trial reel, then a normal feed reel, then a failure
 jobPolls = 0;
@@ -111,6 +116,14 @@ assert.ok(ytSent.bulk.posts[0].networks.youtube);
 // instagram through videoBody is the reel shape, with the trial flag
 const igt = videoBody({ network: "instagram", accountId: "a1", media, caption: "c", trial: "MANUAL" }).bulk.posts[0].networks as Record<string, any>;
 assert.equal(igt.instagram.details.trial_reel, "MANUAL");
+
+// a job that never finishes is "pending" (unknown), not failed: it must not be sent again
+stuck = true;
+await assert.rejects(() => waitForJob(good, "j-any", { timeoutMs: 150, intervalMs: 20 }), (e: PublerError) => e.pending === true);
+// polling that keeps erroring is also unknown, not a failure of the post
+stuck = false; broken = true;
+await assert.rejects(() => waitForJob(good, "j-any", { timeoutMs: 5000, intervalMs: 5 }), (e: PublerError) => e.pending === true && /Lost touch/.test(e.message));
+broken = false;
 
 server.close();
 console.log("publer client: all checks passed");

@@ -87,7 +87,7 @@ export function ParkButton({
         onChange={(e) => setReason(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Escape") setOpen(false);
-          if (e.key === "Enter") {
+          if (e.key === "Enter" && !pending) {
             startTransition(async () => {
               const res = await parkVideoAction(videoId, reason);
               if (res?.error) toast.error(res.error);

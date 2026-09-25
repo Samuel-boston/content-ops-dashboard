@@ -20,11 +20,20 @@ export interface TopPostInput {
   source?: "own" | "inspiration";
 }
 
-/** "1.2M", "350k", "12,400", "1 200 000 views" -> a number. */
+/**
+ * "1.2M", "350k", "12,400", "1,2M" (European decimal), "2.5 million", "~1.2M", "1M+",
+ * "1.234.567 views" -> a number. Anything that isn't clearly a count is null, never a guess.
+ */
 export function parseViews(raw: unknown): number | null {
-  if (typeof raw === "number") return Number.isFinite(raw) ? Math.round(raw) : null;
+  if (typeof raw === "number") return Number.isFinite(raw) && raw >= 0 ? Math.round(raw) : null;
   if (typeof raw !== "string") return null;
-  const m = raw.trim().toLowerCase().replace(/views?/g, "").replace(/[, ]/g, "").match(/^(\d+(?:\.\d+)?)([kmb])?$/);
+  let t = raw.trim().toLowerCase().replace(/views?|plays?/g, "").replace(/[~≈+\s]/g, "");
+  t = t.replace(/billion/g, "b").replace(/million/g, "m").replace(/thousand/g, "k");
+  // "1,2m" / "12,4k": a comma followed by one or two digits then a suffix is a decimal comma.
+  if (/^\d+,\d{1,2}[kmb]$/.test(t)) t = t.replace(",", ".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, ""); // 1.234.567
+  else t = t.replace(/,/g, "");
+  const m = t.match(/^(\d+(?:\.\d+)?)([kmb])?$/);
   if (!m) return null;
   const mult = m[2] === "k" ? 1e3 : m[2] === "m" ? 1e6 : m[2] === "b" ? 1e9 : 1;
   return Math.round(parseFloat(m[1]) * mult);
@@ -62,7 +71,27 @@ const HEADER_KEYS: Record<string, keyof TopPostInput> = {
 
 function splitLine(line: string): string[] {
   const sep = line.includes("\t") ? "\t" : line.includes("|") ? "|" : ",";
-  return line.split(sep).map((c) => c.trim().replace(/^"|"$/g, ""));
+  if (sep !== ",") return line.split(sep).map((c) => c.trim().replace(/^"|"$/g, ""));
+  // CSV: a comma inside quotes is part of the cell.
+  const cells: string[] = [];
+  let cur = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (quoted && line[i + 1] === '"') { cur += '"'; i++; } else quoted = !quoted;
+    } else if (ch === "," && !quoted) { cells.push(cur.trim()); cur = ""; } else cur += ch;
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+
+/** A real calendar date (YYYY-MM-DD) or nothing: "2025-02-30" would make the database reject the whole paste. */
+function validDate(v: string | null | undefined): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v ?? "");
+  if (!m) return null;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3] ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
 
 function clean(row: TopPostInput): TopPostInput | null {
@@ -77,14 +106,15 @@ function clean(row: TopPostInput): TopPostInput | null {
     platform: (row.platform?.trim().toLowerCase() || platformOf(link)) ?? null,
     creator: row.creator?.trim() || null,
     format: row.format?.trim() || null,
-    posted_on: /^\d{4}-\d{2}-\d{2}/.test(row.posted_on ?? "") ? (row.posted_on as string).slice(0, 10) : null,
+    posted_on: validDate(row.posted_on),
     notes: row.notes?.trim() || null,
     source: row.source === "own" ? "own" : "inspiration",
   };
 }
 
 export function parsePastedPosts(text: string): TopPostInput[] {
-  const t = text.trim();
+  // Chat tools wrap code in fences; the fence lines are not data.
+  const t = text.trim().replace(/^```[a-z]*\s*\n?/i, "").replace(/\n?```\s*$/i, "").trim();
   if (!t) return [];
 
   // JSON, e.g. straight from an AI: [{"topic": "...", "views": 120000, ...}]
@@ -93,6 +123,7 @@ export function parsePastedPosts(text: string): TopPostInput[] {
       const parsed = JSON.parse(t) as unknown;
       const list = Array.isArray(parsed) ? parsed : [parsed];
       return list
+        .filter((o) => o && typeof o === "object")
         .map((o) => {
           const r = o as Record<string, unknown>;
           return clean({

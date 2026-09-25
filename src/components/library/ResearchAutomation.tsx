@@ -100,10 +100,10 @@ export function ResearchAutomation() {
 
       <label className="block text-xs text-ink-2">
         The prompt
-        <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={10} className={`${cls} mt-1 font-mono text-xs leading-relaxed`} />
+        <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} readOnly={!s.isOwner} rows={10} className={`${cls} mt-1 font-mono text-xs leading-relaxed`} />
       </label>
       <label className="flex items-start gap-2 text-sm text-ink-2">
-        <input type="checkbox" checked={autoAdd} onChange={(e) => setAutoAdd(e.target.checked)} className="mt-1 accent-accent" />
+        <input type="checkbox" checked={autoAdd} disabled={!s.isOwner} onChange={(e) => setAutoAdd(e.target.checked)} className="mt-1 accent-accent" />
         <span>
           Let the AI add its best finds without asking first
           <span className="block text-[11px] text-ink-3">Off: it shows you the list and waits. Only applies to the default prompt.</span>

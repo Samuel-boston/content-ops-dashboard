@@ -206,7 +206,7 @@ export async function bulkSetStatusAction(ids: string[], status: VideoStatus) {
     for (const id of ids.filter((i) => !already.has(i))) await handOffToVa(id, null);
   }
   // Anything pulled out of the VA's hands (other than to Posted) clears their side.
-  if (status !== "posted") for (const v of leaving ?? []) await releaseFromVa(v.id as string);
+  if (status !== "posted" && status !== "with_va") for (const v of leaving ?? []) await releaseFromVa(v.id as string);
   revalidatePath("/board");
   revalidatePath("/");
   return { ok: true, moved: ids.length };

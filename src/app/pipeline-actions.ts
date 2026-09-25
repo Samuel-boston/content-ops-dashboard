@@ -250,6 +250,8 @@ export async function approveAction(videoId: string, needsVariants?: boolean | n
 
   const { data: before } = await supabase.from("videos").select("status").eq("id", videoId).maybeSingle();
   if (!before) return { error: "Not found." };
+  // A double-click or a stale tab: it's already done, so don't notify the VAs a second time.
+  if (before.status === "with_va" || before.status === "posted") return { ok: true, status: before.status as VideoStatus };
 
   if (needsVariants !== undefined) {
     const { error: oErr } = await supabase
@@ -387,6 +389,8 @@ export async function approveCarouselCreativeAction(videoId: string) {
   const me = await requireRole("owner", "admin");
   if (!(await requireCarousel(videoId))) return { error: "Not a carousel." };
   const supabase = await supabaseServer();
+  const { data: cur } = await supabase.from("videos").select("status").eq("id", videoId).maybeSingle();
+  if (cur?.status === "with_va" || cur?.status === "posted") return { ok: true };
   const { error } = await supabase
     .from("videos")
     .update({ status: "with_va" })
@@ -437,6 +441,7 @@ export async function returnToBayAction(videoId: string, reason?: string) {
   if (!mine && !manager) return { error: "That isn't yours to hand back." };
 
   if (before.status === "posted") return { error: "That one's already gone out." };
+  if (before.status === "with_va") return { error: "It's with the VA. The owner takes it back from there first." };
 
   const { error } = await supabase
     .from("videos")

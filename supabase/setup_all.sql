@@ -3673,3 +3673,61 @@ alter table public.workspace_settings
   add column if not exists research_prompt       text,
   add column if not exists research_webhook_url  text,
   add column if not exists research_auto_add     boolean not null default true;
+
+-- ----- migration_052_restore_copywriter_visibility.sql -----
+-- Migration 052 — fix a regression from migration 045.
+--
+-- 045 redefined can_see_video() to add "anyone mentioned on the video" but started
+-- from the original 002 definition, which dropped the copywriter branch added in
+-- 027/031. Copywriters lost read access (and chat/comment inserts) on the planning
+-- stages' child tables. This restores it, keeping the mention rule.
+-- Safe to re-run.
+
+create or replace function public.can_see_video(v_id uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.videos v
+    where v.id = v_id
+      and (
+        public.is_owner_or_admin()
+        or (public.current_app_role() = 'editor'
+            and (v.assigned_editor_id = auth.uid() or v.status = 'ready_to_edit'))
+        or (public.current_app_role() = 'copywriter'
+            and v.status in ('ideation', 'scripting', 'ready_to_film'))
+        or public.is_mentioned_on_video(v.id)
+      )
+  )
+$$;
+
+-- ----- migration_053_publish_job_safety.sql -----
+-- Migration 053 — make publishing safe to retry and safe to run twice.
+--
+--  * channels_done: networks a job has already posted to, so a retry after a
+--    partial failure only does the rest instead of posting everywhere again.
+--  * claimed_at: when a runner took the job, so two runners (cron and a click)
+--    can't post the same job, and a job left "publishing" by a killed function
+--    can be picked up again after ten minutes.
+-- Safe to re-run.
+
+alter table public.publish_jobs
+  add column if not exists channels_done text[] not null default '{}'::text[],
+  add column if not exists claimed_at    timestamptz;
+
+-- ----- migration_054_variant_destinations.sql -----
+-- Migration 054 — tidy the variant destinations 046 left behind.
+--
+-- 046 marked existing Ready-to-Post variants as sent but didn't settle their
+-- destination: a carousel row (or any row left on "none") would have shown to
+-- the VA as a trial reel, and a long video (YouTube) is always a main post.
+-- Safe to re-run.
+
+update public.trial_posts t
+   set post_as = case when t.cut_id is null then 'main' else 'trial' end
+  from public.videos v
+ where v.id = t.video_id and v.status = 'with_va' and t.status = 'planned' and t.post_as = 'none';
+
+update public.trial_posts t
+   set post_as = 'main'
+  from public.videos v
+ where v.id = t.video_id and v.status = 'with_va' and t.status = 'planned' and t.post_as = 'trial'
+   and 'Long video' = any (v.formats);

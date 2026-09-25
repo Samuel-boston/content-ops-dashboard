@@ -23,10 +23,11 @@ export const useBriefMenu = () => useContext(Ctx);
 export function BriefMenuProvider({ children }: { children: React.ReactNode }) {
   const [videoId, setVideoId] = useState<string | null>(null);
   const open = useCallback((id: string) => setVideoId(id), []);
+  const close = useCallback(() => setVideoId(null), []);
   return (
     <Ctx.Provider value={{ open }}>
       {children}
-      {videoId ? <BriefMenu key={videoId} videoId={videoId} onClose={() => setVideoId(null)} /> : null}
+      {videoId ? <BriefMenu key={videoId} videoId={videoId} onClose={close} /> : null}
     </Ctx.Provider>
   );
 }

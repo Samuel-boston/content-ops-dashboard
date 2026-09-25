@@ -14,7 +14,14 @@ assert.deepEqual(k("add this to ideas - talk about nervous system reset"), { kin
 assert.deepEqual(k("add why sleep matters to ideas"), { kind: "add_idea", text: "why sleep matters" });
 assert.deepEqual(k("new idea a video about airport anxiety"), { kind: "add_idea", text: "a video about airport anxiety" });
 assert.equal(k("how many ideas do we have").kind, "count");
-assert.equal(k("add idea").kind, "help");
+assert.deepEqual(k("add idea"), { kind: "add_idea", text: "" }, "no idea given: the bot asks for it");
+// ordinary chat is not an idea
+for (const chatter of ["add this to ideas", "ideas?", "ideas please", "ideas for next week", "the idea is good", "idea boards look good", "ideas!", "put this in ideas", "save it as ideas", "we should talk about ideas later"]) {
+  const r = k(chatter);
+  assert.ok(r.kind !== "add_idea" || r.text === "", `"${chatter}" must not file an idea, got ${JSON.stringify(r)}`);
+}
+assert.deepEqual(k("add idea: burnout"), { kind: "add_idea", text: "burnout" });
+assert.equal(k("<!channel> how many in scripting").kind, "count");
 
 // counts
 assert.deepEqual(k("how many videos we got in scripting?"), { kind: "count", stage: "scripting" });

@@ -148,9 +148,14 @@ export async function uploadThumbnailRefAction(videoId: string, formData: FormDa
   if ((existing?.length ?? 0) + files.length > 8) return { error: "A thumbnail can have up to 8 images. Remove one first." };
   let pos = Math.max(-1, ...(existing ?? []).map((r) => r.position as number)) + 1;
   let added = 0;
-  for (const file of files.slice(0, 8)) {
+  const batch = files.slice(0, 8);
+  // Check every file first so a bad third one doesn't leave the first two half-saved.
+  if (batch.reduce((n, f) => n + f.size, 0) > MAX_BYTES) return { error: "Keep the images under 4 MB in total. Add them a few at a time." };
+  for (const file of batch) {
     const bad = checkImage(file) ?? ((await sniffsAsImage(file)) ? null : "That doesn't look like a real image.");
     if (bad) return { error: `${file.name}: ${bad}` };
+  }
+  for (const file of batch) {
     const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
     const path = `${videoId}/refs/${crypto.randomUUID()}.${ext}`;
     const { error: upErr } = await db.storage.from(BUCKET).upload(path, Buffer.from(await file.arrayBuffer()), { contentType: file.type });
@@ -269,7 +274,7 @@ export async function generateThumbnailAction(
   const size: ImageSize = landscape ? "1536x1024" : "1024x1536";
 
   const prompt = [
-    `Design a ${landscape ? "landscape 16:9 (YouTube-style)" : "vertical 9:16"} video thumbnail for a video titled "${video.title}".`,
+    `Design a ${landscape ? "landscape, wide (YouTube-style)" : "vertical 9:16"} video thumbnail for a video titled "${video.title}".`,
     hook ? `The video opens with: "${hook}"` : null,
     brief ? `The creator's brief, which comes first:\n${brief}` : null,
     references.length

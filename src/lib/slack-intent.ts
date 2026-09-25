@@ -73,6 +73,8 @@ export function stageIn(text: string): StageKey | null {
 export function cleanSlackText(raw: string): string {
   return raw
     .replace(/<@[A-Z0-9]+(\|[^>]*)?>/g, "") // @mentions of the bot (and people)
+    .replace(/<![a-z]+(\^[A-Z0-9]+)?(\|[^>]*)?>/gi, "") // <!channel>, <!here>, <!everyone>
+    .replace(/<mailto:[^|>]+\|([^>]+)>/g, "$1")
     .replace(/<#[A-Z0-9]+\|([^>]+)>/g, "#$1")
     .replace(/<(https?:[^>|]+)\|([^>]+)>/g, "$1")
     .replace(/<(https?:[^>]+)>/g, "$1")
@@ -92,15 +94,28 @@ export function parseIntent(raw: string): SlackIntent {
 
   if (!text || /^(help|\?|commands|what can you do\??|hi|hello|hey)$/i.test(text)) return { kind: "help" };
 
-  // "add this to ideas: <text>" / "idea: <text>" / "add idea <text>" / "<text> to ideas"
+  // Saving an idea takes an explicit verb ("add idea", "new idea", "log this to ideas…") or a
+  // colon after the word ("idea: …"). The bare word "ideas" in chat is just chat.
+  const VERB = /^(?:(?:yo|hey|please|pls)[,!]?\s+)?(?:add|new|log|save|create|put|park|drop)\b/i;
+  const COLON = /\bideas?\s*[:\-–—]\s*\S/i;
+  const PRONOUN_ONLY = /^(?:this|that|it|these|those|them|one|something|stuff|things?)\b[\s.!?]*$/i;
+  const FILLER = /^(?:please|pls|thanks|thank you|now|later|ok|okay|yes|no|lol|haha)$/i;
+  const worthy = (body: string) => {
+    const words = body.replace(/[^a-z0-9\s]/gi, " ").trim().split(/\s+/).filter(Boolean);
+    if (!words.length || words.every((w) => FILLER.test(w))) return false;
+    return words.length >= 2 || words[0].length >= 5;
+  };
   const tail = ADD_THIS.exec(text);
-  if (tail && tail[1].trim()) return { kind: "add_idea", text: tail[1].trim() };
+  if (tail && VERB.test(text)) {
+    const body = tail[1].trim();
+    return PRONOUN_ONLY.test(body) || !worthy(body) ? { kind: "add_idea", text: "" } : { kind: "add_idea", text: body };
+  }
   const head = ADD_IDEA.exec(text);
-  if (head && /^(?:.*?)ideas?\b/i.test(text)) {
+  if (head && (VERB.test(text) || COLON.test(text)) && /^(?:.*?)ideas?\b/i.test(text)) {
     const body = head[1].trim();
-    // "ideas" on its own is a question about the stage, not an idea to add.
-    if (body && !/^(?:in|are|do|how|what|list|show)\b/i.test(body)) return { kind: "add_idea", text: body };
-    if (!body && /^(?:add|new|log|save|create)\b/i.test(text)) return { kind: "help" };
+    if (!/^(?:in|are|do|how|what|list|show)\b/i.test(body)) {
+      return PRONOUN_ONLY.test(body) || !worthy(body) ? { kind: "add_idea", text: "" } : { kind: "add_idea", text: body };
+    }
   }
 
   if (/\b(top|best)\s+(performing\s+|posts?|videos?|content)/i.test(lower) || /\bwhat(?:'s| is)\s+(?:working|performing)\b/.test(lower)) return { kind: "top" };

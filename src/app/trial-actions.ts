@@ -79,7 +79,7 @@ export async function sendToVaAction(input: {
   const supabase = await supabaseServer();
   const { data: video } = await supabase
     .from("videos")
-    .select("cover_path, status, formats")
+    .select("cover_path, status, formats, va_sent_at")
     .eq("id", input.videoId)
     .single();
   if (!video) return { error: "Video not found." };
@@ -113,7 +113,7 @@ export async function sendToVaAction(input: {
       status: "with_va",
       va_notes: input.notes === undefined ? undefined : input.notes?.trim() || null,
       cover_path: input.coverPath ?? video.cover_path ?? null,
-      va_sent_at: now,
+      va_sent_at: (video as { va_sent_at?: string | null }).va_sent_at ?? now,
     })
     .eq("id", input.videoId);
   if (vErr) return { error: vErr.message };
@@ -404,6 +404,8 @@ export async function savePostCaptionAction(videoId: string, caption: string) {
 export async function takeBackFromVaAction(videoId: string) {
   await requireRole("owner", "admin");
   const supabase = await supabaseServer();
+  const { data: cur } = await supabase.from("videos").select("status").eq("id", videoId).maybeSingle();
+  if (cur?.status !== "with_va") return { error: "It isn't with the VA any more." };
   await releaseFromVa(videoId);
   const { error } = await supabase.from("videos").update({ status: await stageAfterVa(videoId) }).eq("id", videoId).eq("status", "with_va");
   if (error) return { error: error.message };

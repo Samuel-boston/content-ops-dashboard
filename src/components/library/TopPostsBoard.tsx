@@ -51,15 +51,16 @@ export function TopPostsBoard({
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState({ topic: "", hook: "", views: "", link: "", creator: "", notes: "", source: "inspiration" as "own" | "inspiration" });
 
+  const activePlatform = platform && posts.some((p) => p.platform === platform) ? platform : "";
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return posts.filter(
       (p) =>
         (source === "all" || p.source === source) &&
-        (!platform || p.platform === platform) &&
+        (!activePlatform || p.platform === activePlatform) &&
         (!needle || [p.topic, p.hook, p.creator, p.notes].some((f) => f?.toLowerCase().includes(needle)))
     );
-  }, [posts, q, source, platform]);
+  }, [posts, q, source, activePlatform]);
   const platforms = useMemo(() => [...new Set(posts.map((p) => p.platform).filter(Boolean))] as string[], [posts]);
 
   const cls = "w-full rounded-lg border border-line bg-raised px-2.5 py-1.5 text-sm placeholder:text-ink-3 focus:border-accent focus:outline-none";
@@ -102,10 +103,12 @@ export function TopPostsBoard({
                 addTopPostsAction([
                   { topic: form.topic, hook: form.hook || null, views: parseViews(form.views), link: form.link || null, creator: form.creator || null, notes: form.notes || null, source: form.source },
                 ]),
-              () => "Added."
+              () => {
+                setForm({ topic: "", hook: "", views: "", link: "", creator: "", notes: "", source: "inspiration" });
+                setAdding(false);
+                return "Added.";
+              }
             );
-            setForm({ topic: "", hook: "", views: "", link: "", creator: "", notes: "", source: "inspiration" });
-            setAdding(false);
           }}
         >
           <input required value={form.topic} onChange={(e) => setForm({ ...form, topic: e.target.value })} placeholder="Topic — what it was about" className={`${cls} sm:col-span-2`} />
@@ -163,7 +166,12 @@ export function TopPostsBoard({
                 onClick={() =>
                   run(
                     () => addTopPostsAction(preview),
-                    (r) => `Added ${r.added}${r.skipped ? `, skipped ${r.skipped} already on the list` : ""}.`
+                    (r) => {
+                      setPasted("");
+                      setPreview(null);
+                      setPasteOpen(false);
+                      return `Added ${r.added}${r.skipped ? `, skipped ${r.skipped} already on the list` : ""}.`;
+                    }
                   )
                 }
                 className="rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-white hover:bg-accent-hi"
@@ -312,7 +320,7 @@ export function TopPostsBoard({
                   </td>
                   {canEdit ? (
                     <td className="px-3 py-2.5 text-right">
-                      <button type="button" disabled={pending} onClick={() => run(() => deleteTopPostAction(p.id), () => "Removed.")} title="Remove" aria-label="Remove" className="rounded p-1 text-ink-3 hover:text-danger">
+                      <button type="button" disabled={pending} onClick={() => { if (window.confirm("Remove this post from the list?")) run(() => deleteTopPostAction(p.id), () => "Removed."); }} title="Remove" aria-label="Remove" className="rounded p-1 text-ink-3 hover:text-danger">
                         <IconTrash size={13} />
                       </button>
                     </td>

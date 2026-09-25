@@ -112,6 +112,7 @@ async function run(intent: SlackIntent, actor: Actor): Promise<string> {
       if (!["owner", "admin", "copywriter"].includes(actor.role)) {
         return "Ideas are added by the owner, admins and copywriter. Ask one of them to add it.";
       }
+      if (!intent.text.trim()) return "What's the idea? Say it after the words, like `add idea: five mistakes new coaches make`.";
       return addIdea(intent.text, actor);
 
     case "count": {
@@ -213,7 +214,12 @@ async function run(intent: SlackIntent, actor: Actor): Promise<string> {
 
 /** Everything a Slack message can do, from raw text and the Slack user who sent it. */
 export async function handleSlackText(rawText: string, slackUserId: string): Promise<string> {
-  const actor = await actorForSlackUser(slackUserId);
+  let actor: Actor | null = null;
+  try {
+    actor = await actorForSlackUser(slackUserId);
+  } catch {
+    return "I couldn't check who you are just now. Try again in a moment.";
+  }
   if (!actor) {
     return "I don't recognise you yet. Ask the owner to add the email on your Slack profile as a seat in the dashboard (Team → Seats), then try again.";
   }

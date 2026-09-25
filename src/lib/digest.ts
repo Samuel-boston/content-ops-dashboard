@@ -143,11 +143,16 @@ function list(items: string[]): string {
     .join("");
 }
 
+/** A saved link is only ever put in an href or a Slack link when it is a plain http(s) address. */
+const safeHref = (u: string | null | undefined): string | null => (u && /^https?:\/\/[^\s<>"'|]+$/i.test(u) ? u : null);
+const escTg = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
 const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
 
 function postLine(p: PerfPost, extra = ""): string {
-  const name = p.link
-    ? `<a href="${esc(p.link)}" style="color:#5b3fd6;text-decoration:none">${esc(p.title)}</a>`
+  const href = safeHref(p.link);
+  const name = href
+    ? `<a href="${esc(href)}" style="color:#5b3fd6;text-decoration:none">${esc(p.title)}</a>`
     : esc(p.title);
   const hook = p.hook ? `<br><span style="color:#8a8598">“${esc(p.hook.length > 90 ? p.hook.slice(0, 89) + "…" : p.hook)}”</span>` : "";
   return `${name} <strong style="color:#17141f">${fmtViews(p.views)} views</strong>${extra}${hook}`;
@@ -161,7 +166,7 @@ function researchHtml(r: ResearchBlock | null, appUrl: string): string {
     ? list(
         r.finds.map(
           (f) =>
-            `${f.link ? `<a href="${esc(f.link)}" style="color:#5b3fd6;text-decoration:none">${esc(f.topic)}</a>` : esc(f.topic)} <strong style="color:#17141f">${fmtViews(f.views)} views</strong>${
+            `${safeHref(f.link) ? `<a href="${esc(safeHref(f.link)!)}" style="color:#5b3fd6;text-decoration:none">${esc(f.topic)}</a>` : esc(f.topic)} <strong style="color:#17141f">${fmtViews(f.views)} views</strong>${
               f.hook ? `<br><span style="color:#8a8598">“${esc(f.hook.length > 90 ? f.hook.slice(0, 89) + "…" : f.hook)}”</span>` : ""
             }`
         )
@@ -407,7 +412,8 @@ export function digestSlack(d: DigestData): string {
       `Last 7 days: ${perf.week.posts} posts · ${fmtViews(perf.week.views)} views${c === null ? "" : ` (${c >= 0 ? "▲" : "▼"} ${Math.abs(c)}%)`}`,
       `Last 30 days: ${perf.month.posts} posts · ${fmtViews(perf.month.views)} views`,
       ...perf.outliers.slice(0, 4).map((o) => {
-        const t = o.link ? `<${o.link}|${clean(o.title)}>` : clean(o.title);
+        const l = safeHref(o.link);
+        const t = l ? `<${l}|${clean(o.title)}>` : clean(o.title);
         return `${o.direction === "high" ? "🔥" : "⚠️"} ${t} — ${fmtViews(o.views)} views (${o.multiple >= 1 ? o.multiple.toFixed(1) + "×" : Math.round(o.multiple * 100) + "%"} your usual)`;
       })
     );
@@ -429,7 +435,7 @@ export function digestTelegram(d: DigestData): string {
     "",
     `<b>Waiting on you (${d.waitingOnYou.length})</b>`,
     ...(d.waitingOnYou.length
-      ? d.waitingOnYou.slice(0, 6).map((w) => `→ ${w.title} — ${w.why}`)
+      ? d.waitingOnYou.slice(0, 6).map((w) => `→ ${escTg(w.title)} — ${escTg(w.why)}`)
       : ["→ nothing"]),
     "",
     `<b>Went out</b>: ${d.posted.length} · <b>Posting next 7 days</b>: ${d.postingNext.length}`,

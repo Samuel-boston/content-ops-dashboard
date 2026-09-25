@@ -135,7 +135,7 @@ async function sendWeeklyReport(db: ReturnType<typeof supabaseAdmin>, managerIds
     "in_progress",
     "in_review",
     "revisions",
-    "approved",
+    "with_va",
   ];
   const counts: Record<string, number> = {};
   for (const s of stages) counts[s] = all.filter((v) => v.status === s).length;
@@ -223,6 +223,11 @@ async function sendClientDigest(db: ReturnType<typeof supabaseAdmin>) {
 
   const people = recipients ?? [];
   if (!people.length) return { sent: 0, reason: "nobody to send to" };
+
+  // Two cron hits on the same Monday must not send two digests.
+  const since = new Date(Date.now() - 20 * 3600_000).toISOString();
+  const { data: recent } = await db.from("automation_events").select("id").eq("kind", "client_digest").gte("created_at", since).limit(1);
+  if (recent?.length) return { sent: 0, reason: "already sent today" };
 
   const data = await buildDigest(db);
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://adam-content-ops.vercel.app";

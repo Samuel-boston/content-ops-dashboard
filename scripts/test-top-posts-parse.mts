@@ -36,6 +36,20 @@ assert.equal(loose[1].views, 40_000); assert.equal(loose[1].topic, "Grounding tr
 const j = parsePastedPosts(`[{"topic":"Grief and work","hook":"You don't get bereavement leave for this","views":"820K","link":"https://youtu.be/a","creator":"@coach","source":"own"}]`);
 assert.equal(j[0].views, 820_000); assert.equal(j[0].source, "own"); assert.equal(j[0].creator, "@coach");
 
+// European decimals and wordier counts
+assert.equal(parseViews("1,2M"), 1_200_000); assert.equal(parseViews("12,4k"), 12_400);
+assert.equal(parseViews("1.234.567"), 1_234_567); assert.equal(parseViews("~1.2M"), 1_200_000);
+assert.equal(parseViews("1M+"), 1_000_000); assert.equal(parseViews("2.5 million"), 2_500_000);
+// ChatGPT wraps JSON in code fences; null elements are skipped
+const fenced = parsePastedPosts("```json\n[{\"topic\":\"Fenced one\",\"views\":1000,\"link\":\"https://youtu.be/a\"}, null]\n```");
+assert.equal(fenced.length, 1); assert.equal(fenced[0].topic, "Fenced one");
+// CSV with a quoted comma
+const q = parsePastedPosts('topic,views,link\n"Hello, world",1200,https://a.com/x')[0];
+assert.equal(q.topic, "Hello, world"); assert.equal(q.views, 1200); assert.equal(q.link, "https://a.com/x");
+// impossible dates are dropped, not passed to the database
+assert.equal(parsePastedPosts('[{"topic":"x","date":"2025-02-30"}]')[0].posted_on, null);
+assert.equal(parsePastedPosts('[{"topic":"x","date":"2025-02-28"}]')[0].posted_on, "2025-02-28");
+
 // empty / junk
 assert.deepEqual(parsePastedPosts("   "), []);
 assert.equal(parsePastedPosts("Just a topic with no numbers")[0].topic, "Just a topic with no numbers");

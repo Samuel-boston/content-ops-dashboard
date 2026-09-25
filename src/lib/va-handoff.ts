@@ -118,6 +118,10 @@ export async function handOffToVa(videoId: string, byUserId: string | null): Pro
  */
 export async function stageAfterVa(videoId: string): Promise<VideoStatus> {
   const db = supabaseAdmin();
-  const { data } = await db.from("videos").select("formats").eq("id", videoId).maybeSingle();
-  return data && isCarouselFormat(data.formats as string[]) ? "needs_creatives" : "in_review";
+  const { data } = await db.from("videos").select("formats, script_hooks, variants_override").eq("id", videoId).maybeSingle();
+  if (data && isCarouselFormat(data.formats as string[])) return "needs_creatives";
+  // Variants that were already made and approved go back to Final Review; sending them to
+  // In Review would have the next approval ask the editor for the same variants again.
+  const needsVariants = (data?.variants_override as boolean | null) ?? (((data?.script_hooks as string[] | null)?.length ?? 0) > 1);
+  return needsVariants ? "final_review" : "in_review";
 }
