@@ -3,6 +3,7 @@
 import { supabaseServer } from "@/lib/supabase/server";
 import { requireUser } from "@/lib/auth";
 import type { LibraryShot } from "@/lib/types";
+import { NO_CATEGORY, folderName, splitBeats } from "@/lib/broll";
 
 // ---------------------------------------------------------------------------
 // Footage index — read side of the B-Roll Librarian mirror (migration 030).
@@ -63,8 +64,7 @@ function orQuery(text: string): string {
   return words.map((w) => `${w}:*`).join(" | ");
 }
 
-export async function searchLibraryShots(filter: VisualsFilter): Promise<LibraryShot[]> {
-  await requireUser();
+async function queryLibraryShots(filter: VisualsFilter): Promise<LibraryShot[]> {
   const supabase = await supabaseServer();
 
   let q = supabase.from("library_shots").select("*");
@@ -73,7 +73,8 @@ export async function searchLibraryShots(filter: VisualsFilter): Promise<Library
   if (words) q = q.textSearch("tsv", words);
   if (filter.media) q = q.eq("media_kind", filter.media);
   if (filter.emotion) q = q.contains("emotions", [filter.emotion]);
-  if (filter.category) q = q.ilike("category", `${filter.category}%`);
+  if (filter.category === NO_CATEGORY) q = q.is("category", null);
+  else if (filter.category) q = q.ilike("category", `${filter.category.replace(/[%_\\]/g, (c) => `\\${c}`)}%`);
   if (filter.topPicks) q = q.eq("top_pick", true);
   if (filter.featured) q = q.eq("featured_person", true);
 
@@ -101,7 +102,12 @@ export async function searchLibraryShots(filter: VisualsFilter): Promise<Library
       .slice(0, limit);
   }
 
-  return signThumbs(rows);
+  return rows;
+}
+
+export async function searchLibraryShots(filter: VisualsFilter): Promise<LibraryShot[]> {
+  await requireUser();
+  return signThumbs(await queryLibraryShots(filter));
 }
 
 /**
@@ -157,4 +163,114 @@ export async function suggestSlideVisualsAction(text: string): Promise<LibrarySh
   // Websearch found nothing (captions rarely match slide copy word-for-word):
   // fall back to the strongest material so the picker is never a dead end.
   return searchLibraryShots({ topPicks: true, media: "image", limit: 8 });
+}
+
+// ---------------------------------------------------------------------------
+// The B-roll section: browse by the library's own folders, and suggest clips
+// for a script.
+// ---------------------------------------------------------------------------
+
+export interface BrollTree {
+  total: number;
+  sections: {
+    /** The section as stored, e.g. "04_Daily Rituals" — what the filter matches on. */
+    key: string;
+    name: string;
+    count: number;
+    subs: { key: string; name: string; count: number }[];
+  }[];
+  uncategorised: number;
+}
+
+/** The library's folder structure with a count on every folder, built from the shots themselves. */
+export async function libraryTree(): Promise<BrollTree> {
+  await requireUser();
+  const supabase = await supabaseServer();
+  const counts = new Map<string, number>();
+  let uncategorised = 0;
+  let total = 0;
+  for (let from = 0; from < 20000; from += 1000) {
+    const { data } = await supabase.from("library_shots").select("category").range(from, from + 999);
+    const rows = (data ?? []) as { category: string | null }[];
+    for (const r of rows) {
+      total++;
+      if (!r.category) uncategorised++;
+      else counts.set(r.category, (counts.get(r.category) ?? 0) + 1);
+    }
+    if (rows.length < 1000) break;
+  }
+  const bySection = new Map<string, BrollTree["sections"][number]>();
+  for (const [cat, n] of counts) {
+    const [section, ...rest] = cat.split("/");
+    const sec = bySection.get(section) ?? { key: section, name: folderName(section), count: 0, subs: [] };
+    sec.count += n;
+    if (rest.length) sec.subs.push({ key: cat, name: rest.join(" / "), count: n });
+    bySection.set(section, sec);
+  }
+  const sections = [...bySection.values()].sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }));
+  for (const s of sections) s.subs.sort((a, b) => a.name.localeCompare(b.name));
+  return { total, sections, uncategorised };
+}
+
+export interface BeatSuggestion {
+  line: string;
+  shots: LibraryShot[];
+}
+
+const MAX_BEATS = 30;
+const PER_BEAT = 4;
+
+/**
+ * Suggest clips for a script. Each line is searched on its own with the same engine as the Search
+ * view. A clip is offered for at most one line where there's a choice, so the suggestions don't
+ * repeat one shot all the way down the script; a line with nothing new falls back to its best match.
+ */
+export async function suggestBrollAction(
+  text: string,
+  opts: { media?: "video" | "image" | "" } = {}
+): Promise<{ beats: BeatSuggestion[]; truncated: boolean } | { error: string }> {
+  await requireUser();
+  const all = splitBeats(text.slice(0, 20000));
+  if (!all.length) return { error: "Paste a script first — a few lines of what's said." };
+  const lines = all.slice(0, MAX_BEATS);
+
+  const found: LibraryShot[][] = [];
+  for (let i = 0; i < lines.length; i += 6) {
+    const batch = await Promise.all(lines.slice(i, i + 6).map((line) => queryLibraryShots({ q: line, media: opts.media ?? "", limit: 16 })));
+    found.push(...batch);
+  }
+
+  const used = new Set<string>();
+  const picked = found.map((rows) => {
+    const fresh = rows.filter((r) => !used.has(r.id));
+    const choice = (fresh.length >= PER_BEAT ? fresh : [...fresh, ...rows.filter((r) => used.has(r.id))]).slice(0, PER_BEAT);
+    for (const r of choice) used.add(r.id);
+    return choice;
+  });
+
+  const signed = await signThumbs(picked.flat());
+  const byId = new Map(signed.map((s) => [s.id, s]));
+  return {
+    beats: lines.map((line, i) => ({ line, shots: picked[i].map((s) => byId.get(s.id) ?? s) })),
+    truncated: all.length > MAX_BEATS,
+  };
+}
+
+/** Videos with a script written, for "use this video's script". */
+export async function scriptChoicesAction(): Promise<{ id: string; title: string; text: string }[]> {
+  await requireUser();
+  const supabase = await supabaseServer();
+  const { data } = await supabase
+    .from("videos")
+    .select("id, title, script_hooks, script_body, script_cta")
+    .not("script_body", "is", null)
+    .order("updated_at", { ascending: false })
+    .limit(40);
+  return ((data ?? []) as { id: string; title: string; script_hooks: string[] | null; script_body: string | null; script_cta: string | null }[])
+    .map((v) => ({
+      id: v.id,
+      title: v.title,
+      text: [v.script_hooks?.find((h) => h?.trim()), v.script_body, v.script_cta].filter((x) => x && x.trim()).join("\n"),
+    }))
+    .filter((v) => v.text.trim());
 }

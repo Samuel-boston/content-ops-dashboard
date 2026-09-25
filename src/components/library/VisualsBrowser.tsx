@@ -108,12 +108,12 @@ export function VisualsBrowser({
 
   function apply(next: Partial<typeof initial>) {
     const merged = { ...initial, q, ...next };
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ view: "search" });
     if (merged.q) params.set("q", merged.q);
     if (merged.media) params.set("media", merged.media);
     if (merged.emotion) params.set("emotion", merged.emotion);
     if (merged.topPicks) params.set("top", "1");
-    router.push(`/library/visuals${params.size ? `?${params}` : ""}`);
+    router.push(`/library/visuals?${params}`);
   }
 
   const chip = (active: boolean) =>
